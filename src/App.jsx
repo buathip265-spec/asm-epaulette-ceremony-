@@ -5,7 +5,7 @@ import {
   RotateCcw, Smartphone, Mic2, CheckCheck, Filter, Loader2, Sparkles, 
   FileSpreadsheet, Upload, Download, Check, AlertCircle, FileText,
   DownloadCloud, Share2, Layers, SmartphoneCharging, QrCode, Copy, 
-  ExternalLink, Globe, Edit3, WifiOff
+  ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, WifiOff
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -57,7 +57,26 @@ const DEFAULT_INITIAL_GUESTS = [
   { id: 'h19', year: 'ปี 4', studentId: '65103113', name: 'นางสาวรัตนาวลี โอชาพงศ์ (พลอย)', status: 'pending', checkInTime: null, note: 'พี่บัณฑิต', called: false },
 ];
 
-// จัดเรียง ก-ฮ ภาษาไทยตามพจนานุกรม
+// น้ำหนักชั้นปีสำหรับเรียงลำดับ (ปี 1 -> 4)
+const YEAR_WEIGHTS = {
+  'ปี 1': 1,
+  'ปี 2': 2,
+  'ปี 3': 3,
+  'ปี 4': 4,
+  'บัณฑิต': 5,
+  'อาจารย์': 6,
+  'แขกผู้มีเกียรติ': 7
+};
+
+const getYearOrderWeight = (yearStr) => {
+  if (!yearStr) return 99;
+  for (const [key, weight] of Object.entries(YEAR_WEIGHTS)) {
+    if (yearStr.includes(key)) return weight;
+  }
+  return 50;
+};
+
+// ตัดคำนำหน้าเพื่อเรียง ก-ฮ
 const getSortableName = (fullName) => {
   if (!fullName) return '';
   return fullName.replace(/^(นาย|นางสาว|นาง|ด\.ช\.|ด\.ญ\.|ผศ\.|รศ\.|ดร\.)\s*/, '').trim();
@@ -65,10 +84,10 @@ const getSortableName = (fullName) => {
 
 const sortAndAssignBadges = (guestList) => {
   const sorted = [...guestList].sort((a, b) => {
-    const yearA = a.year || '';
-    const yearB = b.year || '';
-    if (yearA !== yearB) return yearA.localeCompare(yearB, 'th');
-    
+    const weightA = getYearOrderWeight(a.year);
+    const weightB = getYearOrderWeight(b.year);
+    if (weightA !== weightB) return weightA - weightB;
+
     const nameA = getSortableName(a.name);
     const nameB = getSortableName(b.name);
     return nameA.localeCompare(nameB, 'th');
@@ -96,6 +115,10 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [newArrivalAlert, setNewArrivalAlert] = useState(null);
   const [selectedYearFilter, setSelectedYearFilter] = useState('all');
+
+  // แท็บแยกชั้นปีในหน้าเช็คชื่อและรับป้าย
+  const [kioskYearTab, setKioskYearTab] = useState('all');
+  const [staffYearTab, setStaffYearTab] = useState('all');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [mcFilter, setMcFilter] = useState('arrived');
@@ -248,7 +271,7 @@ export default function App() {
     }
   };
 
-  // Firestore Real-time Listener (เชื่อมต่อคอลเลกชัน guests โดยตรง)
+  // Firestore Real-time Listener
   useEffect(() => {
     signInAnonymously(auth).catch(() => {});
 
@@ -597,8 +620,36 @@ export default function App() {
   }, [filteredGuests]);
 
   const queueGuests = useMemo(() => {
-    return filteredGuests.filter((g) => g.status === 'checked_in');
-  }, [filteredGuests]);
+    let list = guests.filter((g) => g.status === 'checked_in');
+    if (staffYearTab !== 'all') {
+      list = list.filter((g) => g.year === staffYearTab);
+    }
+    return list;
+  }, [guests, staffYearTab]);
+
+  const yearStats = useMemo(() => {
+    const calcForYear = (yr) => {
+      const inYr = guests.filter((g) => g.year === yr);
+      const arrived = inYr.filter((g) => g.status === 'checked_in' || g.status === 'completed').length;
+      return { total: inYr.length, arrived };
+    };
+    return {
+      'ปี 1': calcForYear('ปี 1'),
+      'ปี 2': calcForYear('ปี 2'),
+      'ปี 3': calcForYear('ปี 3'),
+      'ปี 4': calcForYear('ปี 4'),
+    };
+  }, [guests]);
+
+  const groupedYearList = useMemo(() => {
+    const groups = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
+    guests.forEach((g) => {
+      if (g.year && !groups.includes(g.year)) {
+        groups.push(g.year);
+      }
+    });
+    return groups;
+  }, [guests]);
 
   const availableYears = useMemo(() => {
     const unique = new Set(guests.map((g) => g.year).filter(Boolean));
@@ -625,7 +676,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800 font-sans select-none pb-20 md:pb-0">
       
-      {/* Toast แจ้งเตือนคัดลอกลิงก์ */}
+      {/* Toast แจ้งเตือนเมื่อคัดลอกลิงก์สำเร็จ */}
       {copyToast && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4 duration-200">
           <div className="bg-emerald-600 text-white px-4 py-2 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold">
@@ -806,20 +857,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <div className="md:hidden flex items-center bg-slate-950 rounded-lg px-2 py-0.5 border border-slate-800">
-              <select
-                value={selectedYearFilter}
-                onChange={(e) => setSelectedYearFilter(e.target.value)}
-                className="bg-transparent text-sky-300 text-[11px] font-bold focus:outline-none cursor-pointer"
-              >
-                <option value="all" className="bg-slate-950 text-white">ทุกปี ({guests.length})</option>
-                {availableYears.map((year) => (
-                  <option key={year} value={year} className="bg-slate-950 text-white">
-                    {year}
-                  </option>
-                ))}
-              </select>
-            </div>
             <button
               onClick={() => setIsExcelModalOpen(true)}
               className="px-2.5 py-1 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors"
@@ -863,101 +900,175 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5">
         
         {/* ========================================================
-            SCREEN 1: 1. เช็คชื่อ (KIOSK)
+            SCREEN 1: 1. เช็คชื่อ (KIOSK - แยก ปี 1 ถึง ปี 4)
         ======================================================== */}
         {activeTab === 'kiosk' && (
           <div className="max-w-3xl mx-auto space-y-4">
-            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white rounded-3xl p-5 sm:p-8 text-center border-2 border-sky-500/40 shadow-xl relative overflow-hidden">
+            
+            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white rounded-3xl p-5 sm:p-7 text-center border-2 border-sky-500/40 shadow-xl relative overflow-hidden">
               <div className="absolute -top-16 -right-16 w-44 h-44 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
               
-              <div className="inline-flex items-center gap-2 bg-sky-400/20 text-sky-300 px-3.5 py-1 rounded-full font-bold text-xs border border-sky-500/30 mb-2.5">
+              <div className="inline-flex items-center gap-2 bg-sky-400/20 text-sky-300 px-3.5 py-1 rounded-full font-bold text-xs border border-sky-500/30 mb-2">
                 <Award className="w-3.5 h-3.5" /> พิธีวันเกียรติยศ • ประดับบ่า
               </div>
               <h2 className="text-xl sm:text-3xl font-black text-sky-300 tracking-tight">
-                จุดเช็คชื่อ (ลงทะเบียนอัตโนมัติ)
+                จุดเช็คชื่อ (แยกชั้นปี 1 - 4)
               </h2>
-              <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-md mx-auto">
-                ค้นหาชื่อ แตะยืนยันตัวตน จากนั้นเดินไปรับป้ายชื่อตามลำดับที่โต๊ะรับป้ายชื่อ
+              <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto">
+                เลือกชั้นปีของท่าน แตะชื่อเพื่อยืนยันตัวตน จากนั้นเดินไปรับป้ายชื่อตามลำดับ
               </p>
             </div>
 
+            {/* แถบเลือกชั้นปี */}
+            <div className="bg-white p-1.5 rounded-2xl border-2 border-sky-200 shadow-sm flex items-center gap-1.5 overflow-x-auto">
+              <button
+                onClick={() => { triggerHaptic(); setKioskYearTab('all'); }}
+                className={`flex-1 min-w-[85px] py-2 px-2.5 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center ${
+                  kioskYearTab === 'all'
+                    ? 'bg-sky-500 text-slate-950 shadow-md scale-102'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <span>ทุกชั้นปี</span>
+                <span className="text-[10px] font-normal opacity-80">({guests.length} คน)</span>
+              </button>
+
+              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].map((yearName) => {
+                const s = yearStats[yearName] || { total: 0, arrived: 0 };
+                const isSelected = kioskYearTab === yearName;
+                return (
+                  <button
+                    key={yearName}
+                    onClick={() => { triggerHaptic(); setKioskYearTab(yearName); }}
+                    className={`flex-1 min-w-[85px] py-2 px-2.5 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center ${
+                      isSelected
+                        ? 'bg-blue-600 text-white shadow-md scale-102'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      {yearName}
+                    </span>
+                    <span className={`text-[10px] font-mono ${isSelected ? 'text-sky-200' : 'text-slate-400'}`}>
+                      {s.arrived}/{s.total} คน
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* ช่องค้นหา */}
             <div className="relative shadow-sm">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="พิมพ์ชื่อ นามสกุล หรือ รหัสนักศึกษา เพื่อเช็คชื่อ..."
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl border-2 border-slate-200 bg-white text-sm sm:text-base focus:ring-4 focus:ring-sky-500/20 focus:border-sky-400 transition-all shadow-sm outline-none"
+                placeholder={kioskYearTab === 'all' ? "ค้นหาชื่อ หรือรหัสนักศึกษา..." : `ค้นหาชื่อ หรือรหัสนักศึกษา (${kioskYearTab})...`}
+                className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-sm focus:ring-4 focus:ring-sky-500/20 focus:border-sky-400 transition-all shadow-sm outline-none"
               />
             </div>
 
-            <div className="space-y-3">
-              {filteredGuests
-                .filter((g) => {
-                  const q = searchQuery.toLowerCase();
-                  return g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.includes(q));
-                })
-                .map((guest) => {
-                  const isCheckedIn = guest.status === 'checked_in';
-                  const isCompleted = guest.status === 'completed';
+            {/* รายชื่อแยกตามชั้นปี */}
+            <div className="space-y-4">
+              {groupedYearList
+                .filter((yearGroup) => kioskYearTab === 'all' || kioskYearTab === yearGroup)
+                .map((yearGroup) => {
+                  const groupItems = guests.filter((g) => {
+                    const matchYear = g.year === yearGroup;
+                    const q = searchQuery.toLowerCase().trim();
+                    const matchSearch = !q || g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.includes(q));
+                    return matchYear && matchSearch;
+                  });
+
+                  if (groupItems.length === 0) return null;
+
+                  const arrivedInGroup = groupItems.filter((g) => g.status === 'checked_in' || g.status === 'completed').length;
 
                   return (
-                    <div
-                      key={guest.id}
-                      onClick={() => {
-                        triggerHaptic();
-                        if (guest.status === 'pending') setSelectedGuest(guest);
-                      }}
-                      className={`p-3.5 sm:p-4 rounded-3xl border-2 flex items-center justify-between gap-3 transition-all ${
-                        isCompleted
-                          ? 'bg-slate-50 border-slate-200 opacity-60'
-                          : isCheckedIn
-                          ? 'bg-sky-50/90 border-sky-400 shadow-md'
-                          : 'bg-white hover:border-sky-400 border-slate-200 cursor-pointer shadow-sm hover:shadow-md active:scale-98'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl font-black flex flex-col items-center justify-center shadow-inner shrink-0 ${
-                            isCompleted
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : isCheckedIn
-                              ? 'bg-sky-500 text-slate-950'
-                              : 'bg-slate-900 text-sky-300'
-                          }`}
-                        >
-                          <span className="text-[8px] sm:text-[9px] uppercase font-bold opacity-70">ลำดับ</span>
-                          <span className="text-lg sm:text-xl font-extrabold leading-tight">#{guest.badgeNumber}</span>
+                    <div key={yearGroup} className="space-y-2">
+                      <div className="flex items-center justify-between px-2 pt-1">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                          <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                            <GraduationCap className="w-4 h-4 text-blue-600" />
+                            {yearGroup}
+                          </h3>
+                          <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border">
+                            ป้าย #{groupItems[0]?.badgeNumber} - #{groupItems[groupItems.length - 1]?.badgeNumber}
+                          </span>
                         </div>
-                        <div className="min-w-0">
-                          <div className="font-extrabold text-slate-900 text-sm sm:text-base truncate">{guest.name}</div>
-                          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                            <span className="text-[11px] sm:text-xs font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded-md border border-blue-100">
-                              {guest.studentId || '-'}
-                            </span>
-                            <span className="text-[11px] sm:text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded-md">
-                              {guest.year}
-                            </span>
-                          </div>
-                        </div>
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                          มาแล้ว {arrivedInGroup}/{groupItems.length}
+                        </span>
                       </div>
 
-                      <div className="shrink-0">
-                        {isCompleted ? (
-                          <span className="text-emerald-700 font-bold text-[11px] sm:text-xs bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1">
-                            <CheckCheck className="w-3.5 h-3.5" /> รับป้ายแล้ว
-                          </span>
-                        ) : isCheckedIn ? (
-                          <span className="text-blue-950 font-black text-[11px] sm:text-xs bg-sky-200 px-3 py-1.5 rounded-xl border border-sky-400 flex items-center gap-1 animate-pulse shadow-sm">
-                            <Clock className="w-3.5 h-3.5 text-blue-700" /> รอรับป้าย...
-                          </span>
-                        ) : (
-                          <button className="bg-slate-900 hover:bg-sky-500 hover:text-slate-950 text-sky-300 px-4 py-2 sm:px-5 sm:py-2.5 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-colors flex items-center gap-1">
-                            <span>เช็คชื่อ</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                      <div className="space-y-2.5">
+                        {groupItems.map((guest) => {
+                          const isCheckedIn = guest.status === 'checked_in';
+                          const isCompleted = guest.status === 'completed';
+
+                          return (
+                            <div
+                              key={guest.id}
+                              onClick={() => {
+                                triggerHaptic();
+                                if (guest.status === 'pending') setSelectedGuest(guest);
+                              }}
+                              className={`p-3 sm:p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all ${
+                                isCompleted
+                                  ? 'bg-slate-50 border-slate-200 opacity-60'
+                                  : isCheckedIn
+                                  ? 'bg-sky-50/90 border-sky-400 shadow-md'
+                                  : 'bg-white hover:border-sky-400 border-slate-200 cursor-pointer shadow-sm hover:shadow-md active:scale-98'
+                              }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div
+                                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl font-black flex flex-col items-center justify-center shadow-inner shrink-0 ${
+                                    isCompleted
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : isCheckedIn
+                                      ? 'bg-sky-500 text-slate-950'
+                                      : 'bg-slate-900 text-sky-300'
+                                  }`}
+                                >
+                                  <span className="text-[7px] uppercase font-bold opacity-70">ลำดับ</span>
+                                  <span className="text-base sm:text-lg font-extrabold leading-tight">#{guest.badgeNumber}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">{guest.name}</div>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                    <span className="text-[11px] sm:text-xs font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
+                                      {guest.studentId || '-'}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
+                                      {guest.year}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="shrink-0">
+                                {isCompleted ? (
+                                  <span className="text-emerald-700 font-bold text-[11px] bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1">
+                                    <CheckCheck className="w-3.5 h-3.5" /> รับป้ายแล้ว
+                                  </span>
+                                ) : isCheckedIn ? (
+                                  <span className="text-blue-950 font-black text-[11px] bg-sky-200 px-3 py-1.5 rounded-xl border border-sky-400 flex items-center gap-1 animate-pulse shadow-sm">
+                                    <Clock className="w-3.5 h-3.5 text-blue-700" /> รอรับป้าย...
+                                  </span>
+                                ) : (
+                                  <button className="bg-slate-900 hover:bg-sky-500 hover:text-slate-950 text-sky-300 px-4 py-2 rounded-xl font-black text-xs shadow-md transition-colors flex items-center gap-1">
+                                    <span>เช็คชื่อ</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -973,24 +1084,37 @@ export default function App() {
           <div className="space-y-4">
             <div className="bg-white rounded-3xl p-5 sm:p-6 border-2 border-sky-400 shadow-xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-sky-400"></div>
+              
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-                    <Bell className="w-6 h-6 text-sky-500" /> คิวรับป้ายชื่อ
+                    <Bell className="w-6 h-6 text-sky-500" /> คิวรับป้ายชื่อ (โต๊ะสตาฟ)
                   </h2>
                   <p className="text-xs text-slate-500 mt-1">
-                    เมื่อผู้ร่วมงานกดเช็คชื่อ รายชื่อจะเด้งขึ้นที่นี่พร้อมเสียงเตือนทันที
+                    ลำดับป้ายชื่อเรียงตามชั้นปี <strong>(ปี 1 → ปี 2 → ปี 3 → ปี 4)</strong>
                   </p>
                 </div>
 
-                <div className="bg-sky-100 border-2 border-sky-300 text-sky-950 font-black px-4 py-2 rounded-2xl text-base sm:text-lg flex items-center gap-2 shadow-sm">
-                  กำลังรอรับป้าย {queueGuests.length} คิว
-                  {queueGuests.length > 0 && (
-                    <span className="flex h-3 w-3 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-600"></span>
-                    </span>
-                  )}
+                <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border">
+                  <button
+                    onClick={() => { triggerHaptic(); setStaffYearTab('all'); }}
+                    className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                      staffYearTab === 'all' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-600'
+                    }`}
+                  >
+                    ทุกปี
+                  </button>
+                  {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].map((yr) => (
+                    <button
+                      key={yr}
+                      onClick={() => { triggerHaptic(); setStaffYearTab(yr); }}
+                      className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-all ${
+                        staffYearTab === yr ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600'
+                      }`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1020,7 +1144,7 @@ export default function App() {
                             <span className="text-xl sm:text-2xl font-black leading-none">#{guest.badgeNumber}</span>
                           </div>
                           <div className="min-w-0 flex-1">
-                            <span className="inline-block px-2 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 text-[10px] font-bold rounded mb-1">
+                            <span className="inline-block px-2 py-0.5 bg-sky-50 text-sky-800 border border-sky-200 text-[10px] font-black rounded mb-1">
                               {guest.year}
                             </span>
                             <div className="font-black text-slate-900 text-sm sm:text-base leading-snug truncate">
@@ -1060,10 +1184,10 @@ export default function App() {
             <div className="bg-slate-950 text-white rounded-3xl p-5 sm:p-6 border-2 border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-sky-300 flex items-center gap-2">
-                  <Mic2 className="w-6 h-6 text-sky-400" /> ลำดับขึ้นเวที (สำหรับขานชื่อ)
+                  <Mic2 className="w-6 h-6 text-sky-400" /> ลำดับขึ้นเวที (เรียงตามชั้นปี 1 → 4)
                 </h2>
                 <p className="text-xs text-slate-400 mt-1">
-                  แสดงสถานะผู้มารายงานตัวตามลำดับป้ายชื่อ พร้อมปุ่มบันทึกการขานชื่อขึ้นเวที
+                  รายชื่อเรียงตามลำดับป้ายอย่างถูกต้อง เพื่อความต่อเนื่องในการขานชื่อขึ้นเวที
                 </p>
               </div>
 
@@ -1155,7 +1279,7 @@ export default function App() {
                   <Settings className="w-5 h-5 text-blue-600" /> จัดการฐานข้อมูลรายชื่อ
                 </h2>
                 <p className="text-xs text-slate-500 mt-1">
-                  สามารถอัปโหลดไฟล์ Excel เข้าสู่ระบบ หรือกดเพิ่มและแก้ไขรายชื่อได้โดยตรง
+                  ระบบจัดเรียงป้ายชื่อตามชั้นปี (ปี 1 → ปี 2 → ปี 3 → ปี 4) ให้อัตโนมัติ
                 </p>
               </div>
 
@@ -1211,7 +1335,7 @@ export default function App() {
                           #{g.badgeNumber}
                         </td>
                         <td className="p-4 font-bold text-slate-600">
-                          <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-xs">{g.year}</span>
+                          <span className="bg-slate-100 px-2.5 py-1 rounded-lg text-xs font-black">{g.year}</span>
                         </td>
                         <td className="p-4 font-bold text-slate-900">
                           {g.name}
@@ -1279,9 +1403,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ========================================================
-            MODAL: QR CODE HUB สำหรับแชร์และเปิดบนเครื่องอื่น
-        ======================================================== */}
+        {/* Modal QR Code */}
         {isQrModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
             <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border flex flex-col animate-in fade-in zoom-in duration-150">
@@ -1293,7 +1415,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-900">QR Code เข้าใช้งานระบบ</h3>
-                    <p className="text-[11px] text-slate-500">สแกนด้วยมือถือเพื่อเปิดใช้งานทันที</p>
+                    <p className="text-[11px] text-slate-500">สแกนเพื่อเปิดใช้งานบนมือถือเครื่องอื่น</p>
                   </div>
                 </div>
                 <button onClick={() => setIsQrModalOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
@@ -1301,11 +1423,10 @@ export default function App() {
                 </button>
               </div>
 
-              {/* เลือกว่าจะให้ QR Code เปิดเข้าหน้าไหน */}
               <div className="space-y-3.5 text-xs">
                 <div>
                   <label className="font-bold text-slate-700 block mb-1.5">
-                    เลือกหน้าที่ต้องการให้มือถือเปิด:
+                    เลือกหน้าที่ต้องการให้เปิด:
                   </label>
                   <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl">
                     <button
@@ -1343,7 +1464,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* ภาพ QR Code จาก URL ปัจจุบัน */}
                 <div className="bg-slate-50 p-4 rounded-3xl border text-center flex flex-col items-center justify-center">
                   <div className="bg-white p-3 rounded-2xl border-2 border-sky-300 shadow-md mb-2">
                     <img
@@ -1353,14 +1473,13 @@ export default function App() {
                     />
                   </div>
                   <p className="font-bold text-slate-800 text-xs">
-                    เปิดกล้องมือถือส่องเพื่อเข้าหน้า: <span className="text-sky-600 font-extrabold">{qrTargetTab === 'kiosk' ? 'เช็คชื่อ' : qrTargetTab === 'staff' ? 'รับป้ายชื่อ' : qrTargetTab === 'mc' ? 'ลำดับขึ้นเวที' : 'หน้าหลัก'}</span>
+                    สแกนเพื่อเข้า: <span className="text-sky-600 font-extrabold">{qrTargetTab === 'kiosk' ? '1. เช็คชื่อ' : qrTargetTab === 'staff' ? '2. รับป้ายชื่อ' : qrTargetTab === 'mc' ? '3. ลำดับขึ้นเวที' : 'หน้าหลัก'}</span>
                   </p>
                 </div>
 
-                {/* กล่องคัดลอกลิงก์ & แก้ไข URL */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="font-bold text-slate-700">ลิงก์เว็บไซต์สำหรับแชร์:</label>
+                    <label className="font-bold text-slate-700">ลิงก์เว็บไซต์:</label>
                     <button
                       type="button"
                       onClick={() => setIsEditingUrl(!isEditingUrl)}
@@ -1374,13 +1493,13 @@ export default function App() {
                   {isEditingUrl && (
                     <div className="mb-2 p-2.5 bg-sky-50 rounded-xl border border-sky-200">
                       <p className="text-[10px] text-sky-900 font-medium mb-1">
-                        วาง URL ของเว็บ Vercel ของคุณที่นี่ (เพื่อให้ QR Code เปลี่ยนตามอัตโนมัติ):
+                        วาง URL เว็บไซต์จริงของคุณ (เช่น ลิงก์จาก Vercel):
                       </p>
                       <input
                         type="text"
                         value={customBaseUrl}
                         onChange={(e) => setCustomBaseUrl(e.target.value)}
-                        placeholder="เช่น https://asm-epaulette-ceremony.vercel.app"
+                        placeholder="เช่น https://ceremony-app.vercel.app"
                         className="w-full px-2.5 py-1.5 bg-white rounded-lg border border-sky-300 text-xs font-mono outline-none"
                       />
                     </div>
@@ -1409,7 +1528,7 @@ export default function App() {
                   onClick={() => setIsQrModalOpen(false)}
                   className="w-full py-2.5 bg-slate-950 hover:bg-slate-800 text-sky-300 font-bold rounded-xl text-xs transition-colors"
                 >
-                  ปิดหน้าต่าง QR Code
+                  ปิดหน้าต่าง
                 </button>
               </div>
             </div>
