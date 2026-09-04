@@ -109,7 +109,7 @@ const sortAndAssignBadges = (guestList) => {
   return sorted.map((guest, index) => ({
     ...guest,
     badgeNumber: index + 1,
-    qrToken: guest.qrToken || ('tok_' + Math.random().toString(36).substring(2, 9))
+    qrToken: guest.qrToken || guest.studentId || ('tok_' + Math.random().toString(36).substring(2, 9))
   }));
 };
 
@@ -195,7 +195,7 @@ export default function App() {
         const tokenParam = urlParams.get('token');
 
         if (tokenParam && guests.length > 0) {
-          const found = guests.find(g => g.qrToken === tokenParam);
+          const found = guests.find(g => g.qrToken === tokenParam || g.studentId === tokenParam);
           if (found) {
             setTicketModalGuest(found);
           }
