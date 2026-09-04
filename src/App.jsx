@@ -8,7 +8,7 @@ import {
   ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, Lock, Unlock,
   MonitorPlay, Maximize2, SkipForward, Printer, BarChart3,
   SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff,
-  ScanLine, Undo2, ImageDown, Camera, CameraOff
+  ScanLine, Undo2, ImageDown
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -155,13 +155,11 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // Print & QR Scanner
+  // Print & Scanner
   const [badgePrintGuest, setBadgePrintGuest] = useState(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerInputCode, setScannerInputCode] = useState('');
   const [ticketModalGuest, setTicketModalGuest] = useState(null);
-  const html5QrCodeRef = useRef(null);
-  const [isCameraActive, setIsCameraActive] = useState(false);
 
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
@@ -225,59 +223,6 @@ export default function App() {
     script.async = true;
     document.body.appendChild(script);
   }, []);
-
-  useEffect(() => {
-    if (window.Html5Qrcode) return;
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
-    script.async = true;
-    document.body.appendChild(script);
-  }, []);
-
-  useEffect(() => {
-    if (isScannerOpen) {
-      const timer = setTimeout(() => {
-        if (window.Html5Qrcode && document.getElementById('qr-reader-container')) {
-          try {
-            const qrCode = new window.Html5Qrcode("qr-reader-container");
-            html5QrCodeRef.current = qrCode;
-            qrCode.start(
-              { facingMode: "environment" },
-              { fps: 10, qrbox: { width: 250, height: 250 } },
-              (decodedText) => {
-                qrCode.stop().then(() => {
-                  setIsCameraActive(false);
-                  setIsScannerOpen(false);
-                  handleScanCheckIn(decodedText);
-                }).catch(() => {
-                  setIsScannerOpen(false);
-                  handleScanCheckIn(decodedText);
-                });
-              },
-              (errorMessage) => {}
-            ).then(() => {
-              setIsCameraActive(true);
-            }).catch(err => {
-              console.warn("Camera start failed:", err);
-            });
-          } catch (e) {
-            console.warn("Camera initialization error:", e);
-          }
-        }
-      }, 400);
-      return () => clearTimeout(timer);
-    } else {
-      if (html5QrCodeRef.current && isCameraActive) {
-        try {
-          html5QrCodeRef.current.stop().then(() => {
-            html5QrCodeRef.current.clear();
-          }).catch(() => {});
-        } catch (e) {}
-        html5QrCodeRef.current = null;
-        setIsCameraActive(false);
-      }
-    }
-  }, [isScannerOpen]);
 
   const currentQrUrl = useMemo(() => {
     const base = customBaseUrl.trim() || (typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '');
