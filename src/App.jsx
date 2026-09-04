@@ -237,7 +237,7 @@ export default function App() {
     document.body.appendChild(script);
   }, []);
 
-  // เปิดกล้องสแกนแบบต่อเนื่อง (ไม่ปิดโมเดลเมื่อสแกนเสร็จ)
+  // เปิดกล้องสแกนแบบต่อเนื่อง
   useEffect(() => {
     if (isScannerOpen) {
       const timer = setTimeout(() => {
@@ -485,6 +485,7 @@ export default function App() {
     }
   };
 
+  // ตรวจสอบและบล็อกการสแกนซ้ำอย่างแม่นยำ
   const handleScanCheckIn = (scannedText) => {
     const cleanText = scannedText.trim();
     if (!cleanText) return;
@@ -509,12 +510,12 @@ export default function App() {
         setScannerInputCode('');
         alert(`✅ เช็คชื่อสำเร็จ: ${matched.name} (ป้าย #${matched.badgeNumber})`);
       } else {
-        triggerHaptic(80);
-        alert(`⚠️ แจ้งเตือน: ${matched.name} เคยสแกนเช็คชื่อไปแล้วเมื่อเวลา ${matched.checkInTime || 'ก่อนหน้า'} ไม่อนุญาตให้สแกนซ้ำ!`);
+        triggerHaptic([100, 50, 100]);
+        alert(`⚠️ แจ้งเตือน: ${matched.name} (ป้าย #${matched.badgeNumber}) เคยสแกนเช็คชื่อไปแล้วเมื่อเวลา ${matched.checkInTime || 'ก่อนหน้า'} ไม่อนุญาตให้สแกนซ้ำ!`);
         setScannerInputCode('');
       }
     } else {
-      triggerHaptic(120);
+      triggerHaptic(150);
       alert('❌ ไม่พบข้อมูลตั๋ว QR Code หรือรหัสนักศึกษานี้ในระบบ');
     }
   };
@@ -2155,7 +2156,7 @@ export default function App() {
         )}
 
         {/* ========================================================
-            MODAL: พนักงานสแกน QR Code (กล้องจริง + พิมพ์รหัส)
+            MODAL: พนักงานสแกน QR Code (สแกนต่อเนื่อง + บล็อกซ้ำ)
         ======================================================== */}
         {isScannerOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
