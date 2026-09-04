@@ -8,7 +8,7 @@ import {
   ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, Lock, Unlock,
   MonitorPlay, Maximize2, SkipForward, Printer, BarChart3,
   SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff,
-  ScanLine, Undo2, ImageDown
+  ScanLine, Undo2, ImageDown, Camera, CameraOff
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -49,27 +49,27 @@ const detectYearFromStudentId = (studentId) => {
 };
 
 const DEFAULT_INITIAL_GUESTS = [
-  { id: 'h01', qrToken: 'qr_tok_01', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี (กิต)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h02', qrToken: 'qr_tok_02', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์ (จิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h03', qrToken: 'qr_tok_03', year: 'ปี 1', studentId: '69038190', name: 'นางสาวพัชราภรณ์ วงศ์สว่าง (มิ้นท์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h04', qrToken: 'qr_tok_04', year: 'ปี 1', studentId: '69043688', name: 'นายภัทรพล ทิพย์ประเสริฐ (พีท)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h05', qrToken: 'qr_tok_05', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี (เจอาร์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h06', qrToken: 'qr_tok_06', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส (อชิ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h07', qrToken: 'qr_tok_07', year: 'ปี 2', studentId: '68038117', name: 'นางสาวอารีรัตน์ อ่อนสกุล (เอริ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h08', qrToken: 'qr_tok_08', year: 'ปี 2', studentId: '68043630', name: 'นางสาววริศรา สืบนาค (บิว)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h09', qrToken: 'qr_tok_09', year: 'ปี 2', studentId: '68061001', name: 'นางสาวธันย์นรีย์ พรเจริญ (เชอร์ลิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h10', qrToken: 'qr_tok_10', year: 'ปี 2', studentId: '68062486', name: 'นางสาวณัฐกาญน์ ไชโย (เจเน่)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h11', qrToken: 'qr_tok_11', year: 'ปี 2', studentId: '68055083', name: 'นางสาวนฤพร เผือกจอก (ปีกุล)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h12', qrToken: 'qr_tok_12', year: 'ปี 2', studentId: '68024517', name: 'นางสาวเบญจรัตน์ ธรรมะ (เค้ก)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h13', qrToken: 'qr_tok_13', year: 'ปี 2', studentId: '68086484', name: 'นายวสุธร รอดคำ (โอม)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h14', qrToken: 'qr_tok_14', year: 'ปี 2', studentId: '68003052', name: 'นายอรรถกรณ์ บุฐน้อย (เเทน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h15', qrToken: 'qr_tok_15', year: 'ปี 2', studentId: '68016575', name: 'นายธีทัต นามวงค์ (ฮาบี๊บ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h16', qrToken: 'qr_tok_16', year: 'ปี 2', studentId: '68014424', name: 'นายณัฐพล ฤทธิไกร (บอส)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h17', qrToken: 'qr_tok_17', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู (คิบิ)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
-  { id: 'h18', qrToken: 'qr_tok_18', year: 'ปี 3', studentId: '67076031', name: 'นายพิชิตไชย อ่ำถึก (ไกด์)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
-  { id: 'h19', qrToken: 'qr_tok_19', year: 'ปี 4', studentId: '66045914', name: 'นางสาวบัวทิพย์ วัฒนเกษมสกุล (ทิพย์)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
-  { id: 'h20', qrToken: 'qr_tok_20', year: 'ปี 4', studentId: '66037876', name: 'นางสาวชญาน์ทิพย์ โคประโคน (ขนมจีบ)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
-  { id: 'h21', qrToken: 'qr_tok_21', year: 'บัณฑิต', studentId: '65103113', name: 'นางสาวรัตนาวลี โอชาพงศ์ (พลอย)', status: 'pending', checkInTime: null, note: 'พี่บัณฑิตเกียรตินิยม', called: false, skipped: false },
+  { id: 'h01', qrToken: '69014522', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี (กิต)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h02', qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์ (จิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h03', qrToken: '69038190', year: 'ปี 1', studentId: '69038190', name: 'นางสาวพัชราภรณ์ วงศ์สว่าง (มิ้นท์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h04', qrToken: '69043688', year: 'ปี 1', studentId: '69043688', name: 'นายภัทรพล ทิพย์ประเสริฐ (พีท)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h05', qrToken: '68023567', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี (เจอาร์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h06', qrToken: '68091147', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส (อชิ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h07', qrToken: '68038117', year: 'ปี 2', studentId: '68038117', name: 'นางสาวอารีรัตน์ อ่อนสกุล (เอริ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h08', qrToken: '68043630', year: 'ปี 2', studentId: '68043630', name: 'นางสาววริศรา สืบนาค (บิว)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h09', qrToken: '68061001', year: 'ปี 2', studentId: '68061001', name: 'นางสาวธันย์นรีย์ พรเจริญ (เชอร์ลิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h10', qrToken: '68062486', year: 'ปี 2', studentId: '68062486', name: 'นางสาวณัฐกาญน์ ไชโย (เจเน่)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h11', qrToken: '68055083', year: 'ปี 2', studentId: '68055083', name: 'นางสาวนฤพร เผือกจอก (ปีกุล)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h12', qrToken: '68024517', year: 'ปี 2', studentId: '68024517', name: 'นางสาวเบญจรัตน์ ธรรมะ (เค้ก)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h13', qrToken: '68086484', year: 'ปี 2', studentId: '68086484', name: 'นายวสุธร รอดคำ (โอม)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h14', qrToken: '68003052', year: 'ปี 2', studentId: '68003052', name: 'นายอรรถกรณ์ บุฐน้อย (เเทน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h15', qrToken: '68016575', year: 'ปี 2', studentId: '68016575', name: 'นายธีทัต นามวงค์ (ฮาบี๊บ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h16', qrToken: '68014424', year: 'ปี 2', studentId: '68014424', name: 'นายณัฐพล ฤทธิไกร (บอส)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h17', qrToken: '67037256', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู (คิบิ)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
+  { id: 'h18', qrToken: '67076031', year: 'ปี 3', studentId: '67076031', name: 'นายพิชิตไชย อ่ำถึก (ไกด์)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
+  { id: 'h19', qrToken: '66045914', year: 'ปี 4', studentId: '66045914', name: 'นางสาวบัวทิพย์ วัฒนเกษมสกุล (ทิพย์)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
+  { id: 'h20', qrToken: '66037876', year: 'ปี 4', studentId: '66037876', name: 'นางสาวชญาน์ทิพย์ โคประโคน (ขนมจีบ)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
+  { id: 'h21', qrToken: '65103113', year: 'บัณฑิต', studentId: '65103113', name: 'นางสาวรัตนาวลี โอชาพงศ์ (พลอย)', status: 'pending', checkInTime: null, note: 'พี่บัณฑิตเกียรตินิยม', called: false, skipped: false },
 ];
 
 const YEAR_WEIGHTS = {
@@ -109,7 +109,7 @@ const sortAndAssignBadges = (guestList) => {
   return sorted.map((guest, index) => ({
     ...guest,
     badgeNumber: index + 1,
-    qrToken: guest.qrToken || ('tok_' + Math.random().toString(36).substring(2, 9))
+    qrToken: guest.qrToken || guest.studentId || ('tok_' + Math.random().toString(36).substring(2, 9))
   }));
 };
 
@@ -160,6 +160,8 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerInputCode, setScannerInputCode] = useState('');
   const [ticketModalGuest, setTicketModalGuest] = useState(null);
+  const html5QrCodeRef = useRef(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
 
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
@@ -190,7 +192,7 @@ export default function App() {
         const tokenParam = urlParams.get('token');
 
         if (tokenParam && guests.length > 0) {
-          const found = guests.find(g => g.qrToken === tokenParam);
+          const found = guests.find(g => g.qrToken === tokenParam || g.studentId === tokenParam);
           if (found) {
             setTicketModalGuest(found);
           }
@@ -223,6 +225,59 @@ export default function App() {
     script.async = true;
     document.body.appendChild(script);
   }, []);
+
+  useEffect(() => {
+    if (window.Html5Qrcode) return;
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+    script.async = true;
+    document.body.appendChild(script);
+  }, []);
+
+  useEffect(() => {
+    if (isScannerOpen) {
+      const timer = setTimeout(() => {
+        if (window.Html5Qrcode && document.getElementById('qr-reader-container')) {
+          try {
+            const qrCode = new window.Html5Qrcode("qr-reader-container");
+            html5QrCodeRef.current = qrCode;
+            qrCode.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: 250, height: 250 } },
+              (decodedText) => {
+                qrCode.stop().then(() => {
+                  setIsCameraActive(false);
+                  setIsScannerOpen(false);
+                  handleScanCheckIn(decodedText);
+                }).catch(() => {
+                  setIsScannerOpen(false);
+                  handleScanCheckIn(decodedText);
+                });
+              },
+              (errorMessage) => {}
+            ).then(() => {
+              setIsCameraActive(true);
+            }).catch(err => {
+              console.warn("Camera start failed:", err);
+            });
+          } catch (e) {
+            console.warn("Camera initialization error:", e);
+          }
+        }
+      }, 400);
+      return () => clearTimeout(timer);
+    } else {
+      if (html5QrCodeRef.current && isCameraActive) {
+        try {
+          html5QrCodeRef.current.stop().then(() => {
+            html5QrCodeRef.current.clear();
+          }).catch(() => {});
+        } catch (e) {}
+        html5QrCodeRef.current = null;
+        setIsCameraActive(false);
+      }
+    }
+  }, [isScannerOpen]);
 
   const currentQrUrl = useMemo(() => {
     const base = customBaseUrl.trim() || (typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '');
@@ -446,6 +501,7 @@ export default function App() {
     const matched = guests.find((g) => 
       g.qrToken === targetToken || 
       g.qrToken === cleanText ||
+      g.studentId === targetToken ||
       (g.studentId && g.studentId.toLowerCase() === cleanText.toLowerCase()) ||
       String(g.badgeNumber) === cleanText.replace('#', '')
     );
@@ -529,7 +585,7 @@ export default function App() {
     if (!formData.name.trim()) return;
     triggerHaptic(40);
 
-    const generatedToken = 'tok_' + Math.random().toString(36).substring(2, 9);
+    const generatedToken = formData.studentId.trim() || ('tok_' + Math.random().toString(36).substring(2, 9));
 
     if (editingGuest) {
       const payload = {
@@ -697,7 +753,7 @@ export default function App() {
 
           const autoYear = detectYearFromStudentId(studentId);
           const resolvedYear = rawYear || autoYear || 'ปี 1';
-          const generatedToken = 'tok_' + Math.random().toString(36).substring(2, 9);
+          const generatedToken = studentId || ('tok_' + Math.random().toString(36).substring(2, 9));
 
           return {
             id: 'imp_' + Date.now() + '_' + index,
@@ -813,7 +869,9 @@ export default function App() {
 
     const qrImg = new Image();
     qrImg.crossOrigin = 'anonymous';
-    const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(currentQrUrl + '&token=' + guest.qrToken)}&color=0f172a&bgcolor=ffffff`;
+    // ฝังค่ารหัสหรือ Token โดยตรงใน QR เพื่อให้สแกนแล้วอ่านเจอข้อมูลได้ทันที
+    const qrPayload = guest.qrToken || guest.studentId;
+    const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}&color=0f172a&bgcolor=ffffff`;
     
     qrImg.onload = () => {
       ctx.drawImage(qrImg, 100, 90, 200, 200);
@@ -1206,7 +1264,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5">
         
         {/* ========================================================
-            SCREEN 1: 1. เช็คชื่อ (KIOSK)
+            SCREEN 1: 1. จุดเช็คชื่อ (KIOSK)
         ======================================================== */}
         {activeTab === 'kiosk' && (
           <div className="max-w-3xl mx-auto space-y-4">
@@ -2056,7 +2114,7 @@ export default function App() {
               <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-sky-300 my-3 flex flex-col items-center justify-center space-y-2">
                 <div className="bg-white p-3 rounded-xl shadow-md">
                   <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(currentQrUrl + '&token=' + ticketModalGuest.qrToken)}&color=0f172a&bgcolor=ffffff`}
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(ticketModalGuest.qrToken || ticketModalGuest.studentId)}&color=0f172a&bgcolor=ffffff`}
                     alt="Ticket QR Pass"
                     className="w-40 h-40 object-contain"
                   />
