@@ -1,0 +1,47 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "arrived", "order": "ASCENDING" },
+        { "fieldPath": "called", "order": "ASCENDING" },
+        { "fieldPath": "skipped", "order": "ASCENDING" },
+        { "fieldPath": "badgeNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "badgeNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "called", "order": "ASCENDING" },
+        { "fieldPath": "badgeNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "skipped", "order": "ASCENDING" },
+        { "fieldPath": "badgeNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "year", "order": "ASCENDING" },
+        { "fieldPath": "badgeNumber", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

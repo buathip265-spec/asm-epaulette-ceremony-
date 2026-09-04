@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f1f5f9;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Badge print: only the element marked data-print-badge is shown when printing. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-badge], [data-print-badge] * {
+    visibility: visible;
+  }
+  [data-print-badge] {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}
