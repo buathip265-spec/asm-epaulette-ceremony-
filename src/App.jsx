@@ -8,7 +8,7 @@ import {
   ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, Lock, Unlock,
   MonitorPlay, Maximize2, SkipForward, Printer, BarChart3,
   SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff,
-  ScanLine, Undo2, ImageDown, Camera, CameraOff
+  ScanLine, Undo2, ImageDown, Camera, CameraOff, Archive
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -109,7 +109,7 @@ const sortAndAssignBadges = (guestList) => {
   return sorted.map((guest, index) => ({
     ...guest,
     badgeNumber: index + 1,
-    qrToken: guest.qrToken || guest.studentId || ('tok_' + Math.random().toString(36).substring(2, 9))
+    qrToken: guest.qrToken || ('tok_' + Math.random().toString(36).substring(2, 9))
   }));
 };
 
@@ -132,6 +132,8 @@ export default function App() {
   const [staffYearTab, setStaffYearTab] = useState('all');
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [mcSearchQuery, setMcSearchQuery] = useState('');
   const [mcFilter, setMcFilter] = useState('calling');
 
   const [selectedGuest, setSelectedGuest] = useState(null);
@@ -162,6 +164,7 @@ export default function App() {
   const [ticketModalGuest, setTicketModalGuest] = useState(null);
   const html5QrCodeRef = useRef(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isGeneratingBatchQr, setIsGeneratingBatchQr] = useState(false);
 
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
@@ -192,7 +195,7 @@ export default function App() {
         const tokenParam = urlParams.get('token');
 
         if (tokenParam && guests.length > 0) {
-          const found = guests.find(g => g.qrToken === tokenParam || g.studentId === tokenParam);
+          const found = guests.find(g => g.qrToken === tokenParam);
           if (found) {
             setTicketModalGuest(found);
           }
@@ -869,7 +872,6 @@ export default function App() {
 
     const qrImg = new Image();
     qrImg.crossOrigin = 'anonymous';
-    // ฝังค่ารหัสหรือ Token โดยตรงใน QR เพื่อให้สแกนแล้วอ่านเจอข้อมูลได้ทันที
     const qrPayload = guest.qrToken || guest.studentId;
     const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrPayload)}&color=0f172a&bgcolor=ffffff`;
     
@@ -901,6 +903,68 @@ export default function App() {
     qrImg.src = qrDataUrl;
   };
 
+  const handleDownloadAllQrsBatch = () => {
+    triggerRequirePin('ดาวน์โหลด QR Code รวมทุกคน', () => {
+      setIsGeneratingBatchQr(true);
+      try {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) {
+          alert('กรุณาอนุญาต Pop-up บนเบราว์เซอร์เพื่อใช้งานฟังก์ชันนี้');
+          setIsGeneratingBatchQr(false);
+          return;
+        }
+
+        let htmlContent = `
+          <html>
+            <head>
+              <title>รวม QR Code ผู้เข้าร่วมงานทั้งหมด</title>
+              <style>
+                body { font-family: sans-serif; padding: 20px; background: #f8fafc; }
+                h1 { text-align: center; color: #0f172a; margin-bottom: 30px; }
+                .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+                .card { background: #fff; border: 2px solid #cbd5e1; border-radius: 16px; padding: 20px; text-align: center; page-break-inside: avoid; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+                .card img { width: 140px; height: 140px; margin-bottom: 10px; }
+                .name { font-weight: bold; font-size: 16px; color: #1e293b; margin-bottom: 4px; }
+                .info { font-size: 12px; color: #64748b; font-family: monospace; }
+                .badge { display: inline-block; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 8px; }
+              </style>
+            </head>
+            <body>
+              <h1>รายชื่อและ QR Code ผู้เข้าร่วมพิธีวันเกียรติยศ (${guests.length} คน)</h1>
+              <div class="grid">
+        `;
+
+        guests.forEach((g) => {
+          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(g.qrToken || g.studentId)}&color=0f172a&bgcolor=ffffff`;
+          htmlContent += `
+            <div class="card">
+              <div class="badge">ป้าย #${g.badgeNumber} • ${g.year}</div>
+              <div><img src="${qrUrl}" alt="QR" /></div>
+              <div class="name">${g.name}</div>
+              <div class="info">รหัส: ${g.studentId || '-'}</div>
+            </div>
+          `;
+        });
+
+        htmlContent += `
+              </div>
+              <script>
+                window.onload = function() { window.print(); }
+              </script>
+            </body>
+          </html>
+        `;
+
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+      } catch (err) {
+        console.error("Batch QR error:", err);
+      } finally {
+        setIsGeneratingBatchQr(false);
+      }
+    });
+  };
+
   const filteredGuests = useMemo(() => {
     if (selectedYearFilter === 'all') return guests;
     return guests.filter((g) => g.year === selectedYearFilter);
@@ -922,8 +986,28 @@ export default function App() {
     if (staffYearTab !== 'all') {
       list = list.filter((g) => g.year === staffYearTab);
     }
+    if (staffSearchQuery.trim()) {
+      const q = staffSearchQuery.toLowerCase().trim();
+      list = list.filter((g) => g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.includes(q)) || String(g.badgeNumber) === q.replace('#', ''));
+    }
     return list;
-  }, [guests, staffYearTab]);
+  }, [guests, staffYearTab, staffSearchQuery]);
+
+  const mcFilteredQueue = useMemo(() => {
+    let list = guests.filter((g) => {
+      const isArrived = g.status === 'checked_in' || g.status === 'completed';
+      if (mcFilter === 'calling') return isArrived && !g.called && !g.skipped;
+      if (mcFilter === 'skipped') return g.skipped;
+      if (mcFilter === 'called') return g.called;
+      return true;
+    });
+
+    if (mcSearchQuery.trim()) {
+      const q = mcSearchQuery.toLowerCase().trim();
+      list = list.filter((g) => g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.includes(q)) || String(g.badgeNumber) === q.replace('#', ''));
+    }
+    return list;
+  }, [guests, mcFilter, mcSearchQuery]);
 
   const currentOnStageGuest = useMemo(() => {
     const calledList = guests.filter((g) => g.called);
@@ -1461,7 +1545,7 @@ export default function App() {
         )}
 
         {/* ========================================================
-            SCREEN 2: 2. รับป้ายชื่อ (STAFF - PIN 1509)
+            SCREEN 2: 2. รับป้ายชื่อ (STAFF - PIN 1509) พร้อมช่องค้นหา
         ======================================================== */}
         {activeTab === 'staff' && (
           <div className="space-y-4">
@@ -1509,6 +1593,18 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* ช่องค้นหาในหน้าสตาฟ */}
+              <div className="relative mt-4">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={staffSearchQuery}
+                  onChange={(e) => setStaffSearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่อ, รหัสนักศึกษา หรือเลขป้ายในคิวรับป้าย..."
+                  className="w-full pl-11 pr-4 py-2.5 rounded-2xl border-2 border-slate-200 bg-slate-50 text-xs font-bold outline-none focus:border-sky-500"
+                />
               </div>
 
               {queueGuests.length === 0 ? (
@@ -1585,142 +1681,148 @@ export default function App() {
         )}
 
         {/* ========================================================
-            SCREEN 3: 3. ลำดับขึ้นเวที (MC - PIN 1509)
+            SCREEN 3: 3. ลำดับขึ้นเวที (MC - PIN 1509) พร้อมช่องค้นหา
         ======================================================== */}
         {activeTab === 'mc' && (
           <div className="space-y-4 max-w-4xl mx-auto">
-            <div className="bg-slate-950 text-white rounded-3xl p-5 sm:p-6 border-2 border-slate-800 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl sm:text-2xl font-black text-sky-300 flex items-center gap-2">
-                    <Mic2 className="w-6 h-6 text-sky-400" /> ลำดับขึ้นเวที (สำหรับพิธีกร)
-                  </h2>
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-md flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" /> พิธีกร
-                  </span>
+            <div className="bg-slate-950 text-white rounded-3xl p-5 sm:p-6 border-2 border-slate-800 shadow-xl flex flex-col gap-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl sm:text-2xl font-black text-sky-300 flex items-center gap-2">
+                      <Mic2 className="w-6 h-6 text-sky-400" /> ลำดับขึ้นเวที (สำหรับพิธีกร)
+                    </h2>
+                    <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-md flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5" /> พิธีกร
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    เรียงตาม: <strong>ปี 1 (69) → ปี 2 (68) → ปี 3 (67) → ปี 4 (66)</strong> สามารถกดขานชื่อหรือข้ามคิวได้
+                  </p>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  เรียงตาม: <strong>ปี 1 (69) → ปี 2 (68) → ปี 3 (67) → ปี 4 (66)</strong> สามารถกดขานชื่อหรือข้ามคิวได้
-                </p>
+
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-2xl border border-slate-800 text-xs">
+                  <button
+                    onClick={() => { triggerHaptic(); setMcFilter('calling'); }}
+                    className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
+                      mcFilter === 'calling' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    กำลังเรียก ({guests.filter((g) => (g.status === 'completed' || g.status === 'checked_in') && !g.called && !g.skipped).length})
+                  </button>
+                  <button
+                    onClick={() => { triggerHaptic(); setMcFilter('skipped'); }}
+                    className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
+                      mcFilter === 'skipped' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    ข้ามคิว ({stats.skippedCount})
+                  </button>
+                  <button
+                    onClick={() => { triggerHaptic(); setMcFilter('called'); }}
+                    className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
+                      mcFilter === 'called' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    ขานแล้ว ({stats.calledCount})
+                  </button>
+                  <button
+                    onClick={() => { triggerHaptic(); setMcFilter('all'); }}
+                    className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
+                      mcFilter === 'all' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    ทั้งหมด
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-2xl border border-slate-800 text-xs">
-                <button
-                  onClick={() => { triggerHaptic(); setMcFilter('calling'); }}
-                  className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
-                    mcFilter === 'calling' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  กำลังเรียก ({guests.filter((g) => (g.status === 'completed' || g.status === 'checked_in') && !g.called && !g.skipped).length})
-                </button>
-                <button
-                  onClick={() => { triggerHaptic(); setMcFilter('skipped'); }}
-                  className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
-                    mcFilter === 'skipped' ? 'bg-amber-400 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  ข้ามคิว ({stats.skippedCount})
-                </button>
-                <button
-                  onClick={() => { triggerHaptic(); setMcFilter('called'); }}
-                  className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
-                    mcFilter === 'called' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  ขานแล้ว ({stats.calledCount})
-                </button>
-                <button
-                  onClick={() => { triggerHaptic(); setMcFilter('all'); }}
-                  className={`px-2.5 py-1.5 rounded-xl font-bold transition-all ${
-                    mcFilter === 'all' ? 'bg-sky-500 text-slate-950 shadow-sm' : 'text-slate-300 hover:text-white'
-                  }`}
-                >
-                  ทั้งหมด
-                </button>
+              {/* ช่องค้นหาในหน้าพิธีกร */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                <input
+                  type="text"
+                  value={mcSearchQuery}
+                  onChange={(e) => setMcSearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่อ, รหัสนักศึกษา หรือเลขป้ายในลำดับเวที..."
+                  className="w-full pl-11 pr-4 py-2.5 rounded-2xl border border-slate-800 bg-slate-900 text-xs font-bold text-white outline-none focus:border-sky-400"
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {filteredGuests
-                .filter((g) => {
-                  const isArrived = g.status === 'checked_in' || g.status === 'completed';
-                  if (mcFilter === 'calling') return isArrived && !g.called && !g.skipped;
-                  if (mcFilter === 'skipped') return g.skipped;
-                  if (mcFilter === 'called') return g.called;
-                  return true;
-                })
-                .map((guest) => {
-                  const isArrived = guest.status === 'checked_in' || guest.status === 'completed';
-                  return (
-                    <div
-                      key={guest.id}
-                      className={`p-3.5 sm:p-4 rounded-3xl border-2 flex items-center justify-between gap-3 transition-all ${
-                        guest.called
-                          ? 'bg-slate-100 border-slate-200 opacity-60'
-                          : guest.skipped
-                          ? 'bg-amber-50 border-amber-300 shadow-sm'
-                          : isArrived
-                          ? 'bg-sky-50/90 border-sky-300 shadow-sm'
-                          : 'bg-white opacity-70 border-slate-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl font-black flex flex-col items-center justify-center shrink-0 shadow-inner ${
-                          guest.skipped ? 'bg-amber-400 text-slate-950' : 'bg-slate-900 text-sky-300'
-                        }`}>
-                          <span className="text-[7px] sm:text-[8px] leading-none opacity-80">ลำดับ</span>
-                          <span className="text-sm sm:text-base font-extrabold leading-tight">#{guest.badgeNumber}</span>
-                        </div>
-                        <div className="min-w-0">
-                          <div className={`font-black text-xs sm:text-sm truncate ${guest.called ? 'line-through text-slate-400' : 'text-slate-900'}`}>
-                            {guest.name}
-                          </div>
-                          <div className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                            <span className="bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded text-[10px] font-bold">
-                              {guest.year}
-                            </span>
-                            <span className="font-mono text-blue-700 font-bold">{guest.studentId}</span>
-                            {guest.skipped && (
-                              <span className="text-amber-800 bg-amber-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
-                                ถูกข้ามคิว
-                              </span>
-                            )}
-                          </div>
-                        </div>
+              {mcFilteredQueue.map((guest) => {
+                const isArrived = guest.status === 'checked_in' || guest.status === 'completed';
+                return (
+                  <div
+                    key={guest.id}
+                    className={`p-3.5 sm:p-4 rounded-3xl border-2 flex items-center justify-between gap-3 transition-all ${
+                      guest.called
+                        ? 'bg-slate-100 border-slate-200 opacity-60'
+                        : guest.skipped
+                        ? 'bg-amber-50 border-amber-300 shadow-sm'
+                        : isArrived
+                        ? 'bg-sky-50/90 border-sky-300 shadow-sm'
+                        : 'bg-white opacity-70 border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl font-black flex flex-col items-center justify-center shrink-0 shadow-inner ${
+                        guest.skipped ? 'bg-amber-400 text-slate-950' : 'bg-slate-900 text-sky-300'
+                      }`}>
+                        <span className="text-[7px] sm:text-[8px] leading-none opacity-80">ลำดับ</span>
+                        <span className="text-sm sm:text-base font-extrabold leading-tight">#{guest.badgeNumber}</span>
                       </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {isArrived && !guest.called && (
-                          <button
-                            onClick={() => handleToggleSkipGuest(guest.id, guest.skipped)}
-                            className={`p-2 rounded-xl text-xs font-bold transition-colors ${
-                              guest.skipped
-                                ? 'bg-amber-200 hover:bg-amber-300 text-amber-900'
-                                : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                            }`}
-                            title={guest.skipped ? 'นำกลับมาในคิวเรียก' : 'ข้ามคิวคนนี้ไปก่อน'}
-                          >
-                            <SkipForward className="w-4 h-4" />
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() => handleToggleCalled(guest.id, guest.called)}
-                          disabled={!isArrived}
-                          className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl text-xs font-black shrink-0 transition-colors shadow-sm ${
-                            guest.called
-                              ? 'bg-slate-300 text-slate-700 hover:bg-slate-400'
-                              : isArrived
-                              ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md'
-                              : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                          }`}
-                        >
-                          {guest.called ? '✓ ขานแล้ว' : isArrived ? '🎙️ ขานชื่อ' : 'ยังไม่มา'}
-                        </button>
+                      <div className="min-w-0">
+                        <div className={`font-black text-xs sm:text-sm truncate ${guest.called ? 'line-through text-slate-400' : 'text-slate-900'}`}>
+                          {guest.name}
+                        </div>
+                        <div className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
+                          <span className="bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                            {guest.year}
+                          </span>
+                          <span className="font-mono text-blue-700 font-bold">{guest.studentId}</span>
+                          {guest.skipped && (
+                            <span className="text-amber-800 bg-amber-200 px-1.5 py-0.2 rounded text-[10px] font-bold">
+                              ถูกข้ามคิว
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isArrived && !guest.called && (
+                        <button
+                          onClick={() => handleToggleSkipGuest(guest.id, guest.skipped)}
+                          className={`p-2 rounded-xl text-xs font-bold transition-colors ${
+                            guest.skipped
+                              ? 'bg-amber-200 hover:bg-amber-300 text-amber-900'
+                              : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                          }`}
+                          title={guest.skipped ? 'นำกลับมาในคิวเรียก' : 'ข้ามคิวคนนี้ไปก่อน'}
+                        >
+                          <SkipForward className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => handleToggleCalled(guest.id, guest.called)}
+                        disabled={!isArrived}
+                        className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl text-xs font-black shrink-0 transition-colors shadow-sm ${
+                          guest.called
+                            ? 'bg-slate-300 text-slate-700 hover:bg-slate-400'
+                            : isArrived
+                            ? 'bg-sky-500 hover:bg-sky-400 text-slate-950 shadow-md'
+                            : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {guest.called ? '✓ ขานแล้ว' : isArrived ? '🎙️ ขานชื่อ' : 'ยังไม่มา'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -1928,6 +2030,14 @@ export default function App() {
                   className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-2xl flex items-center gap-2 shadow-sm transition-colors"
                 >
                   <FileSpreadsheet className="w-4 h-4" /> นำเข้ารายชื่อจาก Excel
+                </button>
+                <button
+                  onClick={handleDownloadAllQrsBatch}
+                  disabled={isGeneratingBatchQr}
+                  className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-2xl flex items-center gap-2 shadow-sm transition-colors"
+                >
+                  {isGeneratingBatchQr ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                  <span>โหลด QR Code รวมทุกคน</span>
                 </button>
                 <button
                   onClick={() => {
