@@ -237,6 +237,7 @@ export default function App() {
     document.body.appendChild(script);
   }, []);
 
+  // เปิดกล้องสแกนแบบต่อเนื่อง (ไม่ปิดโมเดลเมื่อสแกนเสร็จ)
   useEffect(() => {
     if (isScannerOpen) {
       const timer = setTimeout(() => {
@@ -248,14 +249,7 @@ export default function App() {
               { facingMode: "environment" },
               { fps: 10, qrbox: { width: 250, height: 250 } },
               (decodedText) => {
-                qrCode.stop().then(() => {
-                  setIsCameraActive(false);
-                  setIsScannerOpen(false);
-                  handleScanCheckIn(decodedText);
-                }).catch(() => {
-                  setIsScannerOpen(false);
-                  handleScanCheckIn(decodedText);
-                });
+                handleScanCheckIn(decodedText);
               },
               (errorMessage) => {}
             ).then(() => {
@@ -513,7 +507,6 @@ export default function App() {
       if (matched.status === 'pending') {
         handleCheckInGuest(matched);
         setScannerInputCode('');
-        setIsScannerOpen(false);
         alert(`✅ เช็คชื่อสำเร็จ: ${matched.name} (ป้าย #${matched.badgeNumber})`);
       } else {
         triggerHaptic(80);
@@ -903,7 +896,6 @@ export default function App() {
     qrImg.src = qrDataUrl;
   };
 
-  // ฟังก์ชันดาวน์โหลด QR โค้ดรวมทุกคนแบบป้องกันการตัดขาดหน้ากระดาษ (Page Break Fix)
   const handleDownloadAllQrsBatch = () => {
     triggerRequirePin('ดาวน์โหลด QR Code รวมทุกคน', () => {
       setIsGeneratingBatchQr(true);
@@ -2266,7 +2258,7 @@ export default function App() {
           </div>
         )}
 
-        {/* MODAL: PIN 1509 KEYPAD */}
+        {/* MODAL: PIN 1509 KEYPAD (ซ่อนรหัสพินไม่ให้เฉลย) */}
         {isPinModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xs w-full shadow-2xl border text-center animate-in fade-in zoom-in duration-150">
@@ -2293,7 +2285,7 @@ export default function App() {
 
               {pinError && (
                 <p className="text-xs font-bold text-red-600 mb-3 animate-bounce">
-                  รหัส PIN ไม่ถูกต้อง (รหัสตั้งต้นคือ 1509)
+                  รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง
                 </p>
               )}
 
