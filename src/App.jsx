@@ -903,6 +903,7 @@ export default function App() {
     qrImg.src = qrDataUrl;
   };
 
+  // ฟังก์ชันดาวน์โหลด QR โค้ดรวมทุกคนแบบป้องกันการตัดขาดหน้ากระดาษ (Page Break Fix)
   const handleDownloadAllQrsBatch = () => {
     triggerRequirePin('ดาวน์โหลด QR Code รวมทุกคน', () => {
       setIsGeneratingBatchQr(true);
@@ -919,14 +920,25 @@ export default function App() {
             <head>
               <title>รวม QR Code ผู้เข้าร่วมงานทั้งหมด</title>
               <style>
-                body { font-family: sans-serif; padding: 20px; background: #f8fafc; }
-                h1 { text-align: center; color: #0f172a; margin-bottom: 30px; }
-                .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-                .card { background: #fff; border: 2px solid #cbd5e1; border-radius: 16px; padding: 20px; text-align: center; page-break-inside: avoid; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-                .card img { width: 140px; height: 140px; margin-bottom: 10px; }
-                .name { font-weight: bold; font-size: 16px; color: #1e293b; margin-bottom: 4px; }
-                .info { font-size: 12px; color: #64748b; font-family: monospace; }
-                .badge { display: inline-block; background: #0284c7; color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 11px; margin-bottom: 8px; }
+                @page { size: A4; margin: 15mm; }
+                body { font-family: sans-serif; padding: 0; margin: 0; background: #ffffff; color: #0f172a; }
+                h1 { text-align: center; color: #0f172a; margin-bottom: 25px; font-size: 22px; }
+                .grid { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+                .card { 
+                  background: #fff; 
+                  border: 2px solid #cbd5e1; 
+                  border-radius: 12px; 
+                  padding: 14px; 
+                  text-align: center; 
+                  width: 170px; 
+                  box-sizing: border-box;
+                  page-break-inside: avoid; 
+                  break-inside: avoid;
+                }
+                .card img { width: 110px; height: 110px; margin-bottom: 8px; }
+                .name { font-weight: bold; font-size: 13px; color: #1e293b; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                .info { font-size: 11px; color: #64748b; font-family: monospace; }
+                .badge { display: inline-block; background: #0284c7; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 6px; font-weight: bold; }
               </style>
             </head>
             <body>
@@ -940,7 +952,7 @@ export default function App() {
             <div class="card">
               <div class="badge">ป้าย #${g.badgeNumber} • ${g.year}</div>
               <div><img src="${qrUrl}" alt="QR" /></div>
-              <div class="name">${g.name}</div>
+              <div class="name" title="${g.name}">${g.name}</div>
               <div class="info">รหัส: ${g.studentId || '-'}</div>
             </div>
           `;
@@ -949,7 +961,7 @@ export default function App() {
         htmlContent += `
               </div>
               <script>
-                window.onload = function() { window.print(); }
+                window.onload = function() { setTimeout(() => { window.print(); }, 500); }
               </script>
             </body>
           </html>
