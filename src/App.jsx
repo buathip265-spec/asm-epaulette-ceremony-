@@ -6,8 +6,9 @@ import {
   FileSpreadsheet, Upload, Download, Check, AlertCircle, FileText,
   DownloadCloud, Share2, Layers, SmartphoneCharging, QrCode, Copy, 
   ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, Lock, Unlock,
-  MonitorPlay, Maximize2, SkipForward, Printer, Camera, BarChart3,
-  SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff
+  MonitorPlay, Maximize2, SkipForward, Printer, BarChart3,
+  SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff,
+  ScanLine, Undo2
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -38,7 +39,6 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// ฟังก์ชันแปลงรหัสนักศึกษาเป็นชั้นปีอัตโนมัติ (69=ปี1, 68=ปี2, 67=ปี3, 66=ปี4)
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || studentId.trim().length < 2) return '';
   const prefix = studentId.trim().substring(0, 2);
@@ -51,29 +51,28 @@ const detectYearFromStudentId = (studentId) => {
   return '';
 };
 
-// ข้อมูลเริ่มต้นสำหรับทดสอบระบบ
 const DEFAULT_INITIAL_GUESTS = [
-  { id: 'h01', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี (กิต)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h02', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์ (จิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h03', year: 'ปี 1', studentId: '69038190', name: 'นางสาวพัชราภรณ์ วงศ์สว่าง (มิ้นท์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h04', year: 'ปี 1', studentId: '69043688', name: 'นายภัทรพล ทิพย์ประเสริฐ (พีท)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h05', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี (เจอาร์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h06', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส (อชิ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h07', year: 'ปี 2', studentId: '68038117', name: 'นางสาวอารีรัตน์ อ่อนสกุล (เอริ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h08', year: 'ปี 2', studentId: '68043630', name: 'นางสาววริศรา สืบนาค (บิว)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h09', year: 'ปี 2', studentId: '68061001', name: 'นางสาวธันย์นรีย์ พรเจริญ (เชอร์ลิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h10', year: 'ปี 2', studentId: '68062486', name: 'นางสาวณัฐกาญน์ ไชโย (เจเน่)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h11', year: 'ปี 2', studentId: '68055083', name: 'นางสาวนฤพร เผือกจอก (ปีกุล)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h12', year: 'ปี 2', studentId: '68024517', name: 'นางสาวเบญจรัตน์ ธรรมะ (เค้ก)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h13', year: 'ปี 2', studentId: '68086484', name: 'นายวสุธร รอดคำ (โอม)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h14', year: 'ปี 2', studentId: '68003052', name: 'นายอรรถกรณ์ บุฐน้อย (เเทน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h15', year: 'ปี 2', studentId: '68016575', name: 'นายธีทัต นามวงค์ (ฮาบี๊บ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h16', year: 'ปี 2', studentId: '68014424', name: 'นายณัฐพล ฤทธิไกร (บอส)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
-  { id: 'h17', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู (คิบิ)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
-  { id: 'h18', year: 'ปี 3', studentId: '67076031', name: 'นายพิชิตไชย อ่ำถึก (ไกด์)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
-  { id: 'h19', year: 'ปี 4', studentId: '66045914', name: 'นางสาวบัวทิพย์ วัฒนเกษมสกุล (ทิพย์)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
-  { id: 'h20', year: 'ปี 4', studentId: '66037876', name: 'นางสาวชญาน์ทิพย์ โคประโคน (ขนมจีบ)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
-  { id: 'h21', year: 'บัณฑิต', studentId: '65103113', name: 'นางสาวรัตนาวลี โอชาพงศ์ (พลอย)', status: 'pending', checkInTime: null, note: 'พี่บัณฑิตเกียรตินิยม', called: false, skipped: false },
+  { id: 'h01', qrToken: 'qr_tok_01', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี (กิต)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h02', qrToken: 'qr_tok_02', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์ (จิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h03', qrToken: 'qr_tok_03', year: 'ปี 1', studentId: '69038190', name: 'นางสาวพัชราภรณ์ วงศ์สว่าง (มิ้นท์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h04', qrToken: 'qr_tok_04', year: 'ปี 1', studentId: '69043688', name: 'นายภัทรพล ทิพย์ประเสริฐ (พีท)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h05', qrToken: 'qr_tok_05', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี (เจอาร์)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h06', qrToken: 'qr_tok_06', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส (อชิ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h07', qrToken: 'qr_tok_07', year: 'ปี 2', studentId: '68038117', name: 'นางสาวอารีรัตน์ อ่อนสกุล (เอริ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h08', qrToken: 'qr_tok_08', year: 'ปี 2', studentId: '68043630', name: 'นางสาววริศรา สืบนาค (บิว)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h09', qrToken: 'qr_tok_09', year: 'ปี 2', studentId: '68061001', name: 'นางสาวธันย์นรีย์ พรเจริญ (เชอร์ลิน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h10', qrToken: 'qr_tok_10', year: 'ปี 2', studentId: '68062486', name: 'นางสาวณัฐกาญน์ ไชโย (เจเน่)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h11', qrToken: 'qr_tok_11', year: 'ปี 2', studentId: '68055083', name: 'นางสาวนฤพร เผือกจอก (ปีกุล)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h12', qrToken: 'qr_tok_12', year: 'ปี 2', studentId: '68024517', name: 'นางสาวเบญจรัตน์ ธรรมะ (เค้ก)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h13', qrToken: 'qr_tok_13', year: 'ปี 2', studentId: '68086484', name: 'นายวสุธร รอดคำ (โอม)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h14', qrToken: 'qr_tok_14', year: 'ปี 2', studentId: '68003052', name: 'นายอรรถกรณ์ บุฐน้อย (เเทน)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h15', qrToken: 'qr_tok_15', year: 'ปี 2', studentId: '68016575', name: 'นายธีทัต นามวงค์ (ฮาบี๊บ)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h16', qrToken: 'qr_tok_16', year: 'ปี 2', studentId: '68014424', name: 'นายณัฐพล ฤทธิไกร (บอส)', status: 'pending', checkInTime: null, note: '', called: false, skipped: false },
+  { id: 'h17', qrToken: 'qr_tok_17', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู (คิบิ)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
+  { id: 'h18', qrToken: 'qr_tok_18', year: 'ปี 3', studentId: '67076031', name: 'นายพิชิตไชย อ่ำถึก (ไกด์)', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', called: false, skipped: false },
+  { id: 'h19', qrToken: 'qr_tok_19', year: 'ปี 4', studentId: '66045914', name: 'นางสาวบัวทิพย์ วัฒนเกษมสกุล (ทิพย์)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
+  { id: 'h20', qrToken: 'qr_tok_20', year: 'ปี 4', studentId: '66037876', name: 'นางสาวชญาน์ทิพย์ โคประโคน (ขนมจีบ)', status: 'pending', checkInTime: null, note: 'สตาฟฝ่ายพิธีการ', called: false, skipped: false },
+  { id: 'h21', qrToken: 'qr_tok_21', year: 'บัณฑิต', studentId: '65103113', name: 'นางสาวรัตนาวลี โอชาพงศ์ (พลอย)', status: 'pending', checkInTime: null, note: 'พี่บัณฑิตเกียรตินิยม', called: false, skipped: false },
 ];
 
 const YEAR_WEIGHTS = {
@@ -112,7 +111,8 @@ const sortAndAssignBadges = (guestList) => {
 
   return sorted.map((guest, index) => ({
     ...guest,
-    badgeNumber: index + 1
+    badgeNumber: index + 1,
+    qrToken: guest.qrToken || ('tok_' + Math.random().toString(36).substring(2, 9))
   }));
 };
 
@@ -158,16 +158,15 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // Print & Camera
+  // Print & QR Scanner
   const [badgePrintGuest, setBadgePrintGuest] = useState(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerManualInput, setScannerManualInput] = useState('');
-  const [isScanningActive, setIsScanningActive] = useState(false);
-  const videoRef = useRef(null);
+  const [scannerInputCode, setScannerInputCode] = useState('');
+  const [ticketModalGuest, setTicketModalGuest] = useState(null);
 
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
-  // QR Code
+  // QR Code Hub
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [qrTargetTab, setQrTargetTab] = useState('kiosk');
   const [customBaseUrl, setCustomBaseUrl] = useState('');
@@ -191,7 +190,16 @@ export default function App() {
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
         const tabParam = urlParams.get('tab');
-        if (tabParam && ['kiosk', 'staff', 'mc', 'stage', 'dashboard', 'admin'].includes(tabParam)) {
+        const tokenParam = urlParams.get('token');
+
+        if (tokenParam && guests.length > 0) {
+          const found = guests.find(g => g.qrToken === tokenParam);
+          if (found) {
+            setTicketModalGuest(found);
+          }
+        }
+
+        if (tabParam && ['kiosk', 'staff', 'mc', 'stage', 'dashboard', 'admin', 'scanner'].includes(tabParam)) {
           if (['staff', 'mc', 'admin'].includes(tabParam)) {
             const labelMap = {
               staff: '2. รับป้ายชื่อ (โต๊ะสตาฟ)',
@@ -209,7 +217,7 @@ export default function App() {
     } catch (e) {
       console.warn("URL detection error:", e);
     }
-  }, []);
+  }, [guests]);
 
   useEffect(() => {
     if (window.XLSX) return;
@@ -287,7 +295,6 @@ export default function App() {
     }
   };
 
-  // Firestore Listener
   useEffect(() => {
     signInAnonymously(auth).catch(() => {});
 
@@ -361,7 +368,6 @@ export default function App() {
     return doc(db, 'guests', guestId);
   };
 
-  // PIN 1509 Verification
   const triggerRequirePin = (title, callbackAction) => {
     if (isStaffUnlocked) {
       callbackAction();
@@ -430,6 +436,60 @@ export default function App() {
     }
   };
 
+  const handleScanCheckIn = (tokenOrId) => {
+    const clean = tokenOrId.trim();
+    if (!clean) return;
+
+    const matched = guests.find((g) => 
+      g.qrToken === clean || 
+      (g.studentId && g.studentId.toLowerCase() === clean.toLowerCase()) ||
+      String(g.badgeNumber) === clean.replace('#', '')
+    );
+
+    if (matched) {
+      if (matched.status === 'pending') {
+        handleCheckInGuest(matched);
+        setScannerInputCode('');
+        setIsScannerOpen(false);
+        alert(`เช็คชื่อสำเร็จ: ${matched.name} (ป้าย #${matched.badgeNumber})`);
+      } else {
+        triggerHaptic(80);
+        alert(`⚠️ แจ้งเตือน: ${matched.name} เคยสแกนเช็คชื่อไปแล้วเมื่อเวลา ${matched.checkInTime || 'ก่อนหน้า'} ไม่อนุญาตให้สแกนซ้ำ!`);
+        setScannerInputCode('');
+      }
+    } else {
+      triggerHaptic(120);
+      alert('❌ ไม่พบข้อมูล QR Code หรือรหัสนักศึกษานี้ในระบบ');
+    }
+  };
+
+  const handleResetSingleGuestStatus = async (guest) => {
+    triggerRequirePin('ยกเลิกการเช็คชื่อผู้เข้าร่วมงาน', () => {
+      triggerHaptic(50);
+      setConfirmModal({
+        isOpen: true,
+        title: 'ยกเลิกการเช็คชื่อ',
+        message: `ต้องการยกเลิกสถานะการเช็คชื่อของ "${guest.name}" ให้กลับเป็น "ยังไม่มา" ใช่หรือไม่?`,
+        confirmText: 'ยืนยันยกเลิกสถานะ',
+        confirmColor: 'bg-amber-600 hover:bg-amber-700',
+        onConfirm: async () => {
+          try {
+            await updateDoc(getGuestDocRef(guest.id), {
+              status: 'pending',
+              checkInTime: null,
+              called: false,
+              skipped: false
+            });
+          } catch (err) {
+            console.error("Reset status error:", err);
+            setGuests((prev) => prev.map((g) => (g.id === guest.id ? { ...g, status: 'pending', checkInTime: null, called: false, skipped: false } : g)));
+          }
+          setConfirmModal((d) => ({ ...d, isOpen: false }));
+        }
+      });
+    });
+  };
+
   const handleBadgeHandedOver = async (guestId) => {
     triggerHaptic(40);
     try {
@@ -465,6 +525,8 @@ export default function App() {
     if (!formData.name.trim()) return;
     triggerHaptic(40);
 
+    const generatedToken = 'tok_' + Math.random().toString(36).substring(2, 9);
+
     if (editingGuest) {
       const payload = {
         year: formData.year,
@@ -481,6 +543,7 @@ export default function App() {
     } else {
       const newGuest = {
         id: 'guest_' + Date.now(),
+        qrToken: generatedToken,
         year: formData.year,
         name: formData.name.trim(),
         studentId: formData.studentId.trim(),
@@ -576,6 +639,7 @@ export default function App() {
         'ชั้นปี': g.year,
         'รหัสนักศึกษา': g.studentId || '-',
         'ชื่อ-นามสกุล': g.name,
+        'QR Token': g.qrToken || '-',
         'สถานะการเช็คชื่อ': regStatus,
         'เวลาที่เช็คชื่อ': g.checkInTime || '-',
         'สถานะบนเวที': stageStatus,
@@ -629,9 +693,11 @@ export default function App() {
 
           const autoYear = detectYearFromStudentId(studentId);
           const resolvedYear = rawYear || autoYear || 'ปี 1';
+          const generatedToken = 'tok_' + Math.random().toString(36).substring(2, 9);
 
           return {
             id: 'imp_' + Date.now() + '_' + index,
+            qrToken: generatedToken,
             year: resolvedYear,
             studentId: studentId || '',
             name: name || '',
@@ -716,57 +782,6 @@ export default function App() {
     window.XLSX.utils.book_append_sheet(workbook, worksheet, "รายชื่อผู้เข้าร่วม");
     window.XLSX.writeFile(workbook, "ตัวอย่างไฟล์รายชื่อ_พิธีวันเกียรติยศ_69-66.xlsx");
   };
-
-  const handleSearchAndCheckInByCode = (code) => {
-    const cleanCode = code.trim().toLowerCase();
-    if (!cleanCode) return;
-
-    const matched = guests.find((g) => 
-      (g.studentId && g.studentId.toLowerCase() === cleanCode) || 
-      String(g.badgeNumber) === cleanCode ||
-      g.name.toLowerCase().includes(cleanCode)
-    );
-
-    if (matched) {
-      triggerHaptic([50, 40, 50]);
-      setSelectedGuest(matched);
-      setIsScannerOpen(false);
-      setScannerManualInput('');
-    } else {
-      triggerHaptic(100);
-      alert('ไม่พบข้อมูลรหัสนักศึกษาหรือหมายเลขป้ายนี้ในระบบ');
-    }
-  };
-
-  const startCameraScan = async () => {
-    setIsScanningActive(true);
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }
-    } catch (e) {
-      console.warn("Camera access denied or unavailable", e);
-    }
-  };
-
-  const stopCameraScan = () => {
-    setIsScanningActive(false);
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject;
-      const tracks = stream.getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  useEffect(() => {
-    if (!isScannerOpen) {
-      stopCameraScan();
-    }
-  }, [isScannerOpen]);
 
   const triggerPrintBadge = () => {
     window.print();
@@ -965,6 +980,17 @@ export default function App() {
               <button
                 onClick={() => {
                   triggerHaptic();
+                  triggerRequirePin('สแกน QR ตั๋วเช็คชื่อ', () => setIsScannerOpen(true));
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+              >
+                <ScanLine className="w-3.5 h-3.5" />
+                <span>สแกนตั๋ว QR</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  triggerHaptic();
                   triggerRequirePin('2. รับป้ายชื่อ (โต๊ะสตาฟ)', () => setActiveTab('staff'));
                 }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 relative ${
@@ -1080,11 +1106,6 @@ export default function App() {
             <span className="text-indigo-300 font-semibold">
               ขานชื่อ: <strong>{stats.calledCount}</strong>/{stats.arrived}
             </span>
-            {stats.skippedCount > 0 && (
-              <span className="text-amber-400 font-bold">
-                (ข้ามคิว: {stats.skippedCount})
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1129,7 +1150,7 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-5">
         
         {/* ========================================================
-            SCREEN 1: 1. เช็คชื่อ (KIOSK - แยก 69, 68, 67, 66)
+            SCREEN 1: 1. เช็คชื่อ (KIOSK)
         ======================================================== */}
         {activeTab === 'kiosk' && (
           <div className="max-w-3xl mx-auto space-y-4">
@@ -1138,13 +1159,13 @@ export default function App() {
               <div className="absolute -top-16 -right-16 w-44 h-44 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
               
               <div className="inline-flex items-center gap-2 bg-sky-400/20 text-sky-300 px-3.5 py-1 rounded-full font-bold text-xs border border-sky-500/30 mb-2">
-                <Award className="w-3.5 h-3.5" /> พิธีวันเกียรติยศ • ประดับบ่า
+                <Award className="w-3.5 h-3.5" /> พิธีวันเกียรติยศ • ระบบตั๋ว QR ส่วนตัว
               </div>
               <h2 className="text-xl sm:text-3xl font-black text-sky-300 tracking-tight">
-                จุดเช็คชื่อ (แยกตามรุ่นและชั้นปี)
+                จุดเช็คชื่อและบัตรเข้างานดิจิทัล
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto">
-                เลือกชั้นปีของท่าน หรือพิมพ์รหัสนักศึกษาเพื่อค้นหาและยืนยันตัวตน
+                แตะที่รายชื่อเพื่อเช็คชื่อ หรือกดปุ่ม <strong>"ดูตั๋ว QR ส่วนตัว"</strong> เพื่อแสดง QR Pass ประจำตัว
               </p>
             </div>
 
@@ -1191,28 +1212,15 @@ export default function App() {
               })}
             </div>
 
-            <div className="flex gap-2">
-              <div className="relative flex-1 shadow-sm">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={kioskYearTab === 'all' ? "พิมพ์ชื่อ หรือรหัสนักศึกษา (เช่น 69..., 68...)..." : `ค้นหารหัสนักศึกษา หรือชื่อ (${kioskYearTab})...`}
-                  className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-sm focus:ring-4 focus:ring-sky-500/20 focus:border-sky-400 transition-all shadow-sm outline-none"
-                />
-              </div>
-              <button
-                onClick={() => {
-                  triggerHaptic();
-                  setIsScannerOpen(true);
-                  startCameraScan();
-                }}
-                className="px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl text-xs flex items-center gap-1.5 shadow-md shrink-0 transition-colors"
-              >
-                <Camera className="w-4 h-4" />
-                <span className="hidden sm:inline">สแกนบัตร</span>
-              </button>
+            <div className="relative shadow-sm">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="ค้นหาชื่อ หรือรหัสนักศึกษา..."
+                className="w-full pl-12 pr-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-sm focus:ring-4 focus:ring-sky-500/20 focus:border-sky-400 transition-all shadow-sm outline-none"
+              />
             </div>
 
             <div className="space-y-4">
@@ -1229,7 +1237,6 @@ export default function App() {
                   if (groupItems.length === 0) return null;
 
                   const arrivedInGroup = groupItems.filter((g) => g.status === 'checked_in' || g.status === 'completed').length;
-                  const yearCodeLabel = yearGroup === 'ปี 1' ? 'รหัส 69' : yearGroup === 'ปี 2' ? 'รหัส 68' : yearGroup === 'ปี 3' ? 'รหัส 67' : yearGroup === 'ปี 4' ? 'รหัส 66' : '';
 
                   return (
                     <div key={yearGroup} className="space-y-2">
@@ -1238,7 +1245,7 @@ export default function App() {
                           <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
                           <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                             <GraduationCap className="w-4 h-4 text-blue-600" />
-                            {yearGroup} {yearCodeLabel && <span className="text-blue-700 text-xs font-mono font-bold">({yearCodeLabel})</span>}
+                            {yearGroup}
                           </h3>
                           <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-lg border">
                             ป้าย #{groupItems[0]?.badgeNumber} - #{groupItems[groupItems.length - 1]?.badgeNumber}
@@ -1257,16 +1264,12 @@ export default function App() {
                           return (
                             <div
                               key={guest.id}
-                              onClick={() => {
-                                triggerHaptic();
-                                if (guest.status === 'pending') setSelectedGuest(guest);
-                              }}
                               className={`p-3 sm:p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all ${
                                 isCompleted
                                   ? 'bg-slate-50 border-slate-200 opacity-60'
                                   : isCheckedIn
                                   ? 'bg-sky-50/90 border-sky-400 shadow-md'
-                                  : 'bg-white hover:border-sky-400 border-slate-200 cursor-pointer shadow-sm hover:shadow-md active:scale-98'
+                                  : 'bg-white border-slate-200 shadow-sm'
                               }`}
                             >
                               <div className="flex items-center gap-3 min-w-0">
@@ -1285,7 +1288,7 @@ export default function App() {
                                 <div className="min-w-0">
                                   <div className="font-extrabold text-slate-900 text-xs sm:text-sm truncate">{guest.name}</div>
                                   <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                    <span className="text-[11px] sm:text-xs font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
+                                    <span className="text-[11px] font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-100">
                                       รหัส {guest.studentId || '-'}
                                     </span>
                                     <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded">
@@ -1295,17 +1298,38 @@ export default function App() {
                                 </div>
                               </div>
 
-                              <div className="shrink-0">
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => { triggerHaptic(); setTicketModalGuest(guest); }}
+                                  className="px-2.5 py-2 bg-slate-100 hover:bg-sky-100 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-1 transition-colors"
+                                  title="ดูตั๋ว QR Pass ประจำตัว"
+                                >
+                                  <QrCode className="w-4 h-4 text-sky-600" />
+                                  <span className="hidden sm:inline">ตั๋ว QR</span>
+                                </button>
+
                                 {isCompleted ? (
                                   <span className="text-emerald-700 font-bold text-[11px] bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1">
                                     <CheckCheck className="w-3.5 h-3.5" /> รับป้ายแล้ว
                                   </span>
                                 ) : isCheckedIn ? (
-                                  <span className="text-blue-950 font-black text-[11px] bg-sky-200 px-3 py-1.5 rounded-xl border border-sky-400 flex items-center gap-1 animate-pulse shadow-sm">
-                                    <Clock className="w-3.5 h-3.5 text-blue-700" /> รอรับป้าย...
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-blue-950 font-black text-[11px] bg-sky-200 px-3 py-1.5 rounded-xl border border-sky-400 flex items-center gap-1 animate-pulse shadow-sm">
+                                      <Clock className="w-3.5 h-3.5 text-blue-700" /> รอรับป้าย...
+                                    </span>
+                                    <button
+                                      onClick={() => handleResetSingleGuestStatus(guest)}
+                                      className="p-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-xl transition-colors"
+                                      title="ยกเลิกการเช็คชื่อ"
+                                    >
+                                      <Undo2 className="w-4 h-4" />
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <button className="bg-slate-900 hover:bg-sky-500 hover:text-slate-950 text-sky-300 px-4 py-2 rounded-xl font-black text-xs shadow-md transition-colors flex items-center gap-1">
+                                  <button
+                                    onClick={() => { triggerHaptic(); setSelectedGuest(guest); }}
+                                    className="bg-slate-900 hover:bg-sky-500 hover:text-slate-950 text-sky-300 px-3.5 py-2 rounded-xl font-black text-xs shadow-md transition-colors flex items-center gap-1"
+                                  >
                                     <span>เช็คชื่อ</span>
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </button>
@@ -1341,7 +1365,7 @@ export default function App() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
-                    ลำดับป้ายชื่อเรียงตาม: <strong>ปี 1 (69) → ปี 2 (68) → ปี 3 (67) → ปี 4 (66)</strong> หยิบป้ายตามหมายเลขได้ทันที
+                    ลำดับป้ายชื่อเรียงตาม: <strong>ปี 1 (69) → ปี 2 (68) → ปี 3 (67) → ปี 4 (66)</strong>
                   </p>
                 </div>
 
@@ -1379,9 +1403,7 @@ export default function App() {
                     <UserCheck className="w-8 h-8" />
                   </div>
                   <h3 className="text-lg font-bold text-slate-700">ไม่มีคิวค้างในขณะนี้</h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {staffYearTab === 'all' ? 'เมื่อมีคนกดเช็คชื่อ รายชื่อจะขึ้นมาที่นี่ทันที' : `ไม่มีคิวรอรับป้ายของ ${staffYearTab}`}
-                  </p>
+                  <p className="text-xs text-slate-400 mt-1">เมื่อมีคนสแกน QR เช็คชื่อ รายชื่อจะขึ้นมาที่นี่ทันที</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 mt-4">
@@ -1424,13 +1446,22 @@ export default function App() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleBadgeHandedOver(guest.id)}
-                        className="mt-4 w-full py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-colors"
-                      >
-                        <CheckCircle2 className="w-5 h-5" />
-                        <span>มอบป้ายชื่อ #{guest.badgeNumber} เรียบร้อย</span>
-                      </button>
+                      <div className="flex gap-2 mt-4">
+                        <button
+                          onClick={() => handleResetSingleGuestStatus(guest)}
+                          className="py-3 px-3 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-2xl text-xs flex items-center justify-center gap-1"
+                          title="ยกเลิกการเช็คชื่อ"
+                        >
+                          <Undo2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleBadgeHandedOver(guest.id)}
+                          className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-black rounded-2xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md transition-colors"
+                        >
+                          <CheckCircle2 className="w-5 h-5" />
+                          <span>มอบป้ายชื่อ #{guest.badgeNumber}</span>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1678,7 +1709,7 @@ export default function App() {
                   type="text"
                   value={parentSearchQuery}
                   onChange={(e) => setParentSearchQuery(e.target.value)}
-                  placeholder="พิมพ์ชื่อ นามสกุล หรือรหัสนักศึกษา (เช่น 69..., 68...)..."
+                  placeholder="พิมพ์ชื่อ นามสกุล หรือรหัสนักศึกษา..."
                   className="flex-1 px-4 py-3 bg-white text-slate-900 rounded-2xl text-sm font-bold outline-none shadow-sm"
                 />
               </div>
@@ -1817,8 +1848,8 @@ export default function App() {
                       <th className="p-4">ชั้นปี</th>
                       <th className="p-4">ชื่อ-นามสกุล</th>
                       <th className="p-4">รหัสนักศึกษา</th>
+                      <th className="p-4">QR Pass Token</th>
                       <th className="p-4">สถานะลงทะเบียน</th>
-                      <th className="p-4">การขานชื่อ</th>
                       <th className="p-4 text-right rounded-tr-3xl">จัดการ</th>
                     </tr>
                   </thead>
@@ -1836,7 +1867,8 @@ export default function App() {
                           {g.note && <span className="text-xs text-slate-400 font-normal ml-1.5">({g.note})</span>}
                         </td>
                         <td className="p-4 font-mono font-bold text-blue-700">{g.studentId || '-'}</td>
-                        <td className="p-4">
+                        <td className="p-4 font-mono text-xs text-slate-500">{g.qrToken}</td>
+                        <td className="p-4 flex items-center gap-2">
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-bold border ${
                               g.status === 'completed'
@@ -1852,13 +1884,15 @@ export default function App() {
                               ? '⏳ รอรับป้าย'
                               : 'ยังไม่มา'}
                           </span>
-                        </td>
-                        <td className="p-4">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                            g.called ? 'bg-blue-100 text-blue-800' : g.skipped ? 'bg-amber-100 text-amber-800' : 'text-slate-400'
-                          }`}>
-                            {g.called ? 'ขานชื่อแล้ว' : g.skipped ? 'ข้ามคิว' : '-'}
-                          </span>
+                          {g.status !== 'pending' && (
+                            <button
+                              onClick={() => handleResetSingleGuestStatus(g)}
+                              className="p-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1"
+                              title="ยกเลิกเช็คชื่อ"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </td>
                         <td className="p-4 text-right space-x-2">
                           <button
@@ -1893,8 +1927,105 @@ export default function App() {
         )}
 
         {/* ========================================================
-            MODAL: PIN 1509 KEYPAD
+            MODAL: พนักงานสแกน QR Code (สไตล์ตั๋วงาน)
         ======================================================== */}
+        {isScannerOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border flex flex-col text-center">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-base font-black text-slate-900 flex items-center gap-1.5">
+                  <ScanLine className="w-5 h-5 text-emerald-600" /> สแกนตั๋ว QR เช็คชื่อ
+                </h3>
+                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="w-full h-44 bg-slate-900 rounded-2xl flex flex-col items-center justify-center text-white p-4 border-2 border-emerald-500">
+                <QrCode className="w-16 h-16 text-emerald-400 animate-pulse mb-2" />
+                <p className="text-xs text-slate-300 font-medium">ส่องกล้องสแกน QR Code จากมือถือแขกผู้ร่วมงาน</p>
+              </div>
+
+              <div className="mt-4 space-y-2.5 text-left">
+                <label className="text-xs font-bold text-slate-700 block">
+                  หรือพิมพ์รหัส QR Token / รหัสนักศึกษา / เลขป้าย:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={scannerInputCode}
+                    onChange={(e) => setScannerInputCode(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleScanCheckIn(scannerInputCode)}
+                    placeholder="เช่น tok_xxxx หรือ 6901..."
+                    className="flex-1 px-3 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-mono outline-none"
+                  />
+                  <button
+                    onClick={() => handleScanCheckIn(scannerInputCode)}
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md"
+                  >
+                    เช็คชื่อ
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t">
+                <button
+                  onClick={() => setIsScannerOpen(false)}
+                  className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs"
+                >
+                  ปิดหน้าต่างสแกน
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================
+            MODAL: แสดงตั๋ว QR Pass ส่วนตัว
+        ======================================================== */}
+        {ticketModalGuest && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border text-center relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
+              
+              <div className="flex justify-end mb-2">
+                <button onClick={() => setTicketModalGuest(null)} className="text-slate-400 p-1">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="inline-block px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-bold text-xs mb-2">
+                🎟️ Digital Event Pass • ประดับบ่า 2026
+              </div>
+              <h3 className="font-black text-xl text-slate-900">{ticketModalGuest.name}</h3>
+              <p className="text-xs font-mono text-blue-700 mt-0.5">รหัส {ticketModalGuest.studentId || '-'} • {ticketModalGuest.year}</p>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-sky-300 my-4 flex flex-col items-center justify-center">
+                <div className="bg-white p-3 rounded-xl shadow-md mb-2">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(currentQrUrl + '&token=' + ticketModalGuest.qrToken)}&color=0f172a&bgcolor=ffffff`}
+                    alt="Ticket QR Pass"
+                    className="w-40 h-40 object-contain"
+                  />
+                </div>
+                <span className="text-[10px] font-mono text-slate-400">Token: {ticketModalGuest.qrToken}</span>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-xl border border-blue-200 text-xs text-blue-900 font-medium mb-4">
+                แสดง QR Pass นี้ให้พนักงานที่จุดลงทะเบียนสแกนเพื่อเข้างาน
+              </div>
+
+              <button
+                onClick={() => setTicketModalGuest(null)}
+                className="w-full py-3 bg-slate-950 text-sky-300 font-black rounded-xl text-xs shadow-md"
+              >
+                ปิดหน้าต่างตั๋ว
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: PIN 1509 KEYPAD */}
         {isPinModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-xs w-full shadow-2xl border text-center animate-in fade-in zoom-in duration-150">
@@ -1961,47 +2092,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Modal สแกนบัตร */}
-        {isScannerOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
-            <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border flex flex-col text-center">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-base font-black text-slate-900 flex items-center gap-1.5">
-                  <Camera className="w-4 h-4 text-blue-600" /> สแกนบัตรนักศึกษา
-                </h3>
-                <button onClick={() => setIsScannerOpen(false)} className="text-slate-400 p-1">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="w-full h-48 bg-slate-950 rounded-2xl overflow-hidden relative flex items-center justify-center border-2 border-sky-400">
-                <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                <div className="absolute inset-x-8 inset-y-12 border-2 border-dashed border-sky-400 rounded-xl pointer-events-none animate-pulse"></div>
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <p className="text-xs text-slate-500 font-medium">หรือพิมพ์รหัสนักศึกษา / เลขป้าย:</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={scannerManualInput}
-                    onChange={(e) => setScannerManualInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSearchAndCheckInByCode(scannerManualInput)}
-                    placeholder="เช่น 6901... หรือ #1"
-                    className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-xl text-xs font-mono outline-none"
-                  />
-                  <button
-                    onClick={() => handleSearchAndCheckInByCode(scannerManualInput)}
-                    className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs shadow-sm"
-                  >
-                    ค้นหา
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Modal พิมพ์ป้าย */}
         {badgePrintGuest && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
@@ -2044,7 +2134,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Modal QR Code */}
+        {/* Modal QR Code Hub */}
         {isQrModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs">
             <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border flex flex-col animate-in fade-in zoom-in duration-150">
@@ -2114,44 +2204,20 @@ export default function App() {
                   </div>
                 </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="font-bold text-slate-700">ลิงก์เว็บไซต์:</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingUrl(!isEditingUrl)}
-                      className="text-sky-600 font-bold flex items-center gap-1 text-[11px]"
-                    >
-                      <Edit3 className="w-3 h-3" />
-                      <span>{isEditingUrl ? 'ซ่อนแก้ไข' : 'แก้ไข URL'}</span>
-                    </button>
-                  </div>
-
-                  {isEditingUrl && (
-                    <input
-                      type="text"
-                      value={customBaseUrl}
-                      onChange={(e) => setCustomBaseUrl(e.target.value)}
-                      placeholder="เช่น https://ceremony-app.vercel.app"
-                      className="w-full mb-2 px-2.5 py-1.5 bg-white rounded-lg border border-sky-300 text-xs font-mono outline-none"
-                    />
-                  )}
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={currentQrUrl}
-                      className="flex-1 px-3 py-2 bg-slate-100 rounded-xl border border-slate-200 text-slate-600 text-xs font-mono outline-none select-all"
-                    />
-                    <button
-                      onClick={() => copyTextSafely(currentQrUrl)}
-                      className="px-4 py-2 bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shrink-0 shadow-sm"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                      <span>คัดลอก</span>
-                    </button>
-                  </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={currentQrUrl}
+                    className="flex-1 px-3 py-2 bg-slate-100 rounded-xl border border-slate-200 text-slate-600 text-xs font-mono outline-none select-all"
+                  />
+                  <button
+                    onClick={() => copyTextSafely(currentQrUrl)}
+                    className="px-4 py-2 bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shrink-0 shadow-sm"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>คัดลอก</span>
+                  </button>
                 </div>
               </div>
 
@@ -2178,7 +2244,7 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-base font-black text-slate-900">นำเข้ารายชื่อจาก Excel</h3>
-                    <p className="text-[11px] text-slate-500">รองรับไฟล์ .xlsx, .xls และ .csv (ตรวจจับชั้นปีจากรหัส 69-66 อัตโนมัติ)</p>
+                    <p className="text-[11px] text-slate-500">รองรับไฟล์ .xlsx และสร้าง QR Token อัตโนมัติ</p>
                   </div>
                 </div>
                 <button onClick={() => setIsExcelModalOpen(false)} className="text-slate-400 p-1">
@@ -2190,9 +2256,6 @@ export default function App() {
                 <div className="bg-sky-50 border border-sky-200 rounded-2xl p-3.5 flex items-center justify-between gap-3">
                   <div>
                     <p className="font-bold text-sky-950">ดาวน์โหลดแบบฟอร์มตัวอย่าง (69=ปี1, 68=ปี2, 67=ปี3, 66=ปี4)</p>
-                    <p className="text-[11px] text-sky-800 mt-0.5">
-                      มีหัวตารางตัวอย่าง (ชั้นปี, รหัสนักศึกษา, ชื่อ-นามสกุล, หมายเหตุ)
-                    </p>
                   </div>
                   <button
                     onClick={handleDownloadSampleExcel}
@@ -2218,38 +2281,6 @@ export default function App() {
                   <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{importError}</span>
-                  </div>
-                )}
-
-                {excelPreviewData.length > 0 && (
-                  <div className="space-y-3 pt-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-slate-900">
-                        พบข้อมูล: <strong className="text-blue-700 font-mono text-sm">{excelPreviewData.length}</strong> รายชื่อ
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 cursor-pointer font-bold text-slate-700">
-                          <input
-                            type="radio"
-                            name="importMode"
-                            checked={importMode === 'replace'}
-                            onChange={() => setImportMode('replace')}
-                            className="text-blue-600"
-                          />
-                          แทนที่เดิม
-                        </label>
-                        <label className="flex items-center gap-1 cursor-pointer font-bold text-slate-700">
-                          <input
-                            type="radio"
-                            name="importMode"
-                            checked={importMode === 'append'}
-                            onChange={() => setImportMode('append')}
-                            className="text-blue-600"
-                          />
-                          เพิ่มต่อท้าย
-                        </label>
-                      </div>
-                    </div>
                   </div>
                 )}
               </div>
@@ -2364,13 +2395,12 @@ export default function App() {
                       <option value="ปี 3">ปี 3 (รหัส 67)</option>
                       <option value="ปี 4">ปี 4 (รหัส 66)</option>
                       <option value="บัณฑิต">บัณฑิต (รหัส 65 ลงไป)</option>
-                      <option value="อาจารย์">อาจารย์</option>
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1 text-xs">ชื่อ-นามสกุล (พร้อมคำนำหน้า) *</label>
+                  <label className="font-bold text-slate-700 block mb-1 text-xs">ชื่อ-นามสกุล *</label>
                   <input
                     type="text"
                     required
@@ -2460,6 +2490,17 @@ export default function App() {
         <button
           onClick={() => {
             triggerHaptic();
+            triggerRequirePin('สแกน QR ตั๋วเช็คชื่อ', () => setIsScannerOpen(true));
+          }}
+          className="flex flex-col items-center justify-center flex-1 py-1 rounded-xl text-emerald-400 font-bold"
+        >
+          <ScanLine className="w-4 h-4 mb-0.5" />
+          <span className="text-[9px]">สแกนตั๋ว</span>
+        </button>
+
+        <button
+          onClick={() => {
+            triggerHaptic();
             triggerRequirePin('2. รับป้ายชื่อ (โต๊ะสตาฟ)', () => setActiveTab('staff'));
           }}
           className={`flex flex-col items-center justify-center flex-1 py-1 rounded-xl transition-all relative ${
@@ -2510,16 +2551,6 @@ export default function App() {
         >
           <MonitorPlay className="w-4 h-4 mb-0.5" />
           <span className="text-[9px]">4. จอ LED</span>
-        </button>
-
-        <button
-          onClick={() => { triggerHaptic(); setActiveTab('dashboard'); }}
-          className={`flex flex-col items-center justify-center flex-1 py-1 rounded-xl transition-all ${
-            activeTab === 'dashboard' ? 'text-sky-400 font-bold' : 'text-slate-400'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 mb-0.5" />
-          <span className="text-[9px]">5. สถิติ</span>
         </button>
 
         <button
