@@ -8,7 +8,7 @@ import {
   ExternalLink, Globe, Edit3, GraduationCap, ChevronRight, Lock, Unlock,
   MonitorPlay, Maximize2, SkipForward, Printer, BarChart3,
   SearchCheck, UserPlus, KeyRound, CornerDownLeft, ShieldCheck, LogOut, WifiOff,
-  ScanLine, Undo2, ImageDown
+  ScanLine, Undo2, ImageDown, Camera, CameraOff
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -155,12 +155,13 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // Print & QR Scanner (Html5Qrcode)
+  // Print & QR Scanner
   const [badgePrintGuest, setBadgePrintGuest] = useState(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerInputCode, setScannerInputCode] = useState('');
   const [ticketModalGuest, setTicketModalGuest] = useState(null);
-  const scannerInstanceRef = useRef(null);
+  const html5QrCodeRef = useRef(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
 
   const [parentSearchQuery, setParentSearchQuery] = useState('');
 
@@ -225,47 +226,55 @@ export default function App() {
     document.body.appendChild(script);
   }, []);
 
-  // โหลดไลบรารี Html5Qrcode สแกนกล้องจริง
   useEffect(() => {
-    if (window.Html5QrcodeScanner) return;
+    if (window.Html5Qrcode) return;
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
     script.async = true;
     document.body.appendChild(script);
   }, []);
 
-  // เริ่มต้นหรือปิดกล้องสแกน
   useEffect(() => {
     if (isScannerOpen) {
       const timer = setTimeout(() => {
-        if (window.Html5QrcodeScanner && document.getElementById('qr-reader')) {
+        if (window.Html5Qrcode && document.getElementById('qr-reader-container')) {
           try {
-            const scanner = new window.Html5QrcodeScanner(
-              "qr-reader",
+            const qrCode = new window.Html5Qrcode("qr-reader-container");
+            html5QrCodeRef.current = qrCode;
+            qrCode.start(
+              { facingMode: "environment" },
               { fps: 10, qrbox: { width: 250, height: 250 } },
-              false
-            );
-            scanner.render(
               (decodedText) => {
-                scanner.clear().catch(() => {});
-                setIsScannerOpen(false);
-                handleScanCheckIn(decodedText);
+                qrCode.stop().then(() => {
+                  setIsCameraActive(false);
+                  setIsScannerOpen(false);
+                  handleScanCheckIn(decodedText);
+                }).catch(() => {
+                  setIsScannerOpen(false);
+                  handleScanCheckIn(decodedText);
+                });
               },
               (errorMessage) => {}
-            );
-            scannerInstanceRef.current = scanner;
+            ).then(() => {
+              setIsCameraActive(true);
+            }).catch(err => {
+              console.warn("Camera start failed:", err);
+            });
           } catch (e) {
-            console.warn("QR Scanner init error:", e);
+            console.warn("Camera initialization error:", e);
           }
         }
-      }, 300);
+      }, 400);
       return () => clearTimeout(timer);
     } else {
-      if (scannerInstanceRef.current) {
+      if (html5QrCodeRef.current && isCameraActive) {
         try {
-          scannerInstanceRef.current.clear().catch(() => {});
+          html5QrCodeRef.current.stop().then(() => {
+            html5QrCodeRef.current.clear();
+          }).catch(() => {});
         } catch (e) {}
-        scannerInstanceRef.current = null;
+        html5QrCodeRef.current = null;
+        setIsCameraActive(false);
       }
     }
   }, [isScannerOpen]);
@@ -479,12 +488,10 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันสแกน QR: ตรวจจับ token หรือลิงก์ตั๋ว และเช็คให้อัตโนมัติทันที
   const handleScanCheckIn = (scannedText) => {
     const cleanText = scannedText.trim();
     if (!cleanText) return;
 
-    // ดึง token ออกมาจาก URL หากสแกนลิงก์เต็ม
     let targetToken = cleanText;
     if (cleanText.includes('token=')) {
       const parts = cleanText.split('token=');
@@ -839,56 +846,49 @@ export default function App() {
     window.print();
   };
 
-  // ฟังก์ชันดาวน์โหลดตั๋ว QR เป็นรูปภาพ พร้อมชื่อและรหัสด้านล่าง
   const handleDownloadTicketImage = (guest) => {
     const canvas = document.createElement('canvas');
     canvas.width = 400;
-    canvas.height = 520;
+    canvas.height = 500;
     const ctx = canvas.getContext('2d');
 
-    // พื้นหลังการ์ดตั๋ว
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // แถบบนสีน้ำเงินพรีเมียม
     const grad = ctx.createLinearGradient(0, 0, 400, 0);
     grad.addColorStop(0, '#0284c7');
     grad.addColorStop(1, '#0f172a');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 400, 70);
+    ctx.fillRect(0, 0, 400, 65);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 16px sans-serif';
+    ctx.font = 'bold 15px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('DIGITAL EVENT PASS • ประดับบ่า 2026', 200, 42);
+    ctx.fillText('DIGITAL EVENT PASS • ประดับบ่า 2026', 200, 39);
 
-    // วาด QR Code
     const qrImg = new Image();
     qrImg.crossOrigin = 'anonymous';
-    const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(currentQrUrl + '&token=' + guest.qrToken)}&color=0f172a&bgcolor=ffffff`;
+    const qrDataUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(currentQrUrl + '&token=' + guest.qrToken)}&color=0f172a&bgcolor=ffffff`;
     
     qrImg.onload = () => {
-      ctx.drawImage(qrImg, 90, 100, 220, 220);
+      ctx.drawImage(qrImg, 100, 90, 200, 200);
 
-      // วาดกรอบ QR
       ctx.strokeStyle = '#e2e8f0';
       ctx.lineWidth = 2;
-      ctx.strokeRect(88, 98, 224, 224);
+      ctx.strokeRect(98, 88, 204, 204);
 
-      // ชื่อ-นามสกุล และรหัสด้านล่าง QR Code
       ctx.fillStyle = '#0f172a';
       ctx.font = 'bold 20px sans-serif';
-      ctx.fillText(guest.name, 200, 360);
+      ctx.fillText(guest.name, 200, 330);
 
       ctx.fillStyle = '#2563eb';
       ctx.font = 'bold 14px monospace';
-      ctx.fillText(`รหัส: ${guest.studentId || '-'}  •  ${guest.year}`, 200, 390);
+      ctx.fillText(`รหัส: ${guest.studentId || '-'}  •  ${guest.year}`, 200, 360);
 
       ctx.fillStyle = '#64748b';
       ctx.font = '11px sans-serif';
-      ctx.fillText(`ลำดับป้าย: #${guest.badgeNumber} | Token: ${guest.qrToken}`, 200, 420);
+      ctx.fillText(`ลำดับป้าย: #${guest.badgeNumber} | Token: ${guest.qrToken}`, 200, 395);
 
-      // บันทึกไฟล์ภาพลงเครื่อง
       const link = document.createElement('a');
       link.download = `Ticket_${guest.studentId || guest.badgeNumber}_${guest.name.replace(/\s+/g, '_')}.png`;
       link.href = canvas.toDataURL('image/png');
@@ -1273,7 +1273,7 @@ export default function App() {
                 <Award className="w-3.5 h-3.5" /> พิธีวันเกียรติยศ • ระบบตั๋ว QR ส่วนตัว
               </div>
               <h2 className="text-xl sm:text-3xl font-black text-sky-300 tracking-tight">
-                จุดเช็คชื่อและบัตรเข้างานดิจิทัล
+                จุดเช็คชื่อ
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-md mx-auto">
                 แตะที่รายชื่อเพื่อเช็คชื่อ หรือกดปุ่ม <strong>"ดูตั๋ว QR ส่วนตัว"</strong> เพื่อแสดง QR Pass และเซฟเป็นรูปภาพ
@@ -2052,8 +2052,8 @@ export default function App() {
                 </button>
               </div>
 
-              {/* ช่องกล้องสแกนจริงจาก Html5QrcodeScanner */}
-              <div id="qr-reader" className="w-full bg-slate-900 rounded-2xl overflow-hidden mb-3 border-2 border-emerald-500"></div>
+              {/* DOM Container สำหรับกล้องสแกน Html5Qrcode */}
+              <div id="qr-reader-container" className="w-full min-h-[250px] bg-slate-900 rounded-2xl overflow-hidden mb-3 border-2 border-emerald-500"></div>
 
               <div className="space-y-2.5 text-left pt-2 border-t">
                 <label className="text-xs font-bold text-slate-700 block">
@@ -2066,11 +2066,11 @@ export default function App() {
                     onChange={(e) => setScannerInputCode(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleScanCheckIn(scannerInputCode)}
                     placeholder="เช่น tok_xxxx หรือ 6901..."
-                    className="flex-1 px-3 py-2 border-2 border-slate-200 rounded-xl text-xs font-mono outline-none"
+                    className="flex-1 px-3 py-2.5 border-2 border-slate-200 rounded-xl text-xs font-mono outline-none"
                   />
                   <button
                     onClick={() => handleScanCheckIn(scannerInputCode)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md"
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md"
                   >
                     เช็คชื่อ
                   </button>
@@ -2090,7 +2090,7 @@ export default function App() {
         )}
 
         {/* ========================================================
-            MODAL: แสดงตั๋ว QR Pass ส่วนตัว พร้อมปุ่มเซฟภาพ
+            MODAL: แสดงตั๋ว QR Pass ส่วนตัว พร้อมปุ่มดาวน์โหลดรูปภาพ
         ======================================================== */}
         {ticketModalGuest && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
@@ -2106,17 +2106,18 @@ export default function App() {
               <div className="inline-block px-3 py-1 bg-sky-100 text-sky-800 rounded-full font-bold text-xs mb-2">
                 🎟️ Digital Event Pass • ประดับบ่า 2026
               </div>
-              <h3 className="font-black text-xl text-slate-900">{ticketModalGuest.name}</h3>
-              <p className="text-xs font-mono text-blue-700 mt-0.5">รหัส {ticketModalGuest.studentId || '-'} • {ticketModalGuest.year}</p>
 
-              <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-sky-300 my-4 flex flex-col items-center justify-center">
-                <div className="bg-white p-3 rounded-xl shadow-md mb-2">
+              {/* การ์ดแสดงผลบนเว็บ: QR อยู่บน ชื่อและรหัสอยู่ด้านล่าง */}
+              <div className="bg-slate-50 p-4 rounded-2xl border-2 border-dashed border-sky-300 my-3 flex flex-col items-center justify-center space-y-2">
+                <div className="bg-white p-3 rounded-xl shadow-md">
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(currentQrUrl + '&token=' + ticketModalGuest.qrToken)}&color=0f172a&bgcolor=ffffff`}
                     alt="Ticket QR Pass"
                     className="w-40 h-40 object-contain"
                   />
                 </div>
+                <h3 className="font-black text-lg text-slate-900 pt-1">{ticketModalGuest.name}</h3>
+                <p className="text-xs font-mono font-bold text-blue-700">รหัส {ticketModalGuest.studentId || '-'} • {ticketModalGuest.year}</p>
                 <span className="text-[10px] font-mono text-slate-400">Token: {ticketModalGuest.qrToken}</span>
               </div>
 
