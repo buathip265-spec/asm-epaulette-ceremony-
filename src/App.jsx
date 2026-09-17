@@ -105,6 +105,9 @@ export default function App() {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
+  
+  // ใช้เก็บสถานะการสแกนเพื่อป้องกันกล้องสแกนซ้ำรัวๆ จนค้าง
+  const isProcessingScanRef = useRef(false);
   const html5QrCodeRef = useRef(null);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -157,28 +160,54 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ระบบจัดการเปิด/ปิดกล้องแบบเสถียร ป้องกันการค้าง
   useEffect(() => {
+    let isMounted = true;
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
         const qrContainer = document.getElementById('camera-scanner-view');
         const Html5QrcodeClass = window.Html5Qrcode;
-        if (Html5QrcodeClass && qrContainer && !html5QrCodeRef.current) {
+        if (Html5QrcodeClass && qrContainer && isMounted && !html5QrCodeRef.current) {
           try {
             const qrCode = new Html5QrcodeClass("camera-scanner-view");
             html5QrCodeRef.current = qrCode;
-            qrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => {
-              handleInspectQrCode(decodedText);
-            }, () => {}).then(() => setIsCameraActive(true)).catch(() => setIsCameraActive(false));
-          } catch (e) { setIsCameraActive(false); }
+            qrCode.start(
+              { facingMode: "environment" },
+              { fps: 10, qrbox: { width: 250, height: 250 } },
+              (decodedText) => {
+                if (!isProcessingScanRef.current) {
+                  isProcessingScanRef.current = true;
+                  handleInspectQrCode(decodedText);
+                  setTimeout(() => { isProcessingScanRef.current = false; }, 2000); // หน่วงเวลา 2 วินาทีก่อนสแกนต่อ
+                }
+              },
+              () => {}
+            ).then(() => {
+              if (isMounted) setIsCameraActive(true);
+            }).catch(() => {
+              if (isMounted) setIsCameraActive(false);
+            });
+          } catch (e) {
+            if (isMounted) setIsCameraActive(false);
+          }
         }
-      }, 300);
-      return () => clearTimeout(timer);
+      }, 400);
+      return () => {
+        isMounted = false;
+        clearTimeout(timer);
+      };
     } else {
       if (html5QrCodeRef.current) {
         try {
-          html5QrCodeRef.current.stop().then(() => html5QrCodeRef.current?.clear()).catch(() => {});
-        } catch (e) {}
-        html5QrCodeRef.current = null;
+          html5QrCodeRef.current.stop().then(() => {
+            html5QrCodeRef.current?.clear();
+            html5QrCodeRef.current = null;
+          }).catch(() => {
+            html5QrCodeRef.current = null;
+          });
+        } catch (e) {
+          html5QrCodeRef.current = null;
+        }
         setIsCameraActive(false);
       }
     }
@@ -187,15 +216,34 @@ export default function App() {
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
     if (!clean) return;
+    
     let target = clean;
-    if (clean.includes('token=')) target = clean.split('token=')[1].split('&')[0];
+    // แกะรหัส Token จากลิงก์ Apps Script ที่แนบไปในอีเมล
+    if (clean.includes('token=')) {
+      try {
+        target = clean.split('token=')[1].split('&')[0];
+      } catch (e) { target = clean; }
+    } else if (clean.includes('?')) {
+      try {
+        const urlParams = new URLSearchParams(clean.split('?')[1]);
+        if (urlParams.get('token')) target = urlParams.get('token');
+        else if (urlParams.get('id')) target = urlParams.get('id');
+      } catch (e) { target = clean; }
+    }
 
-    const found = guests.find((g) => g.qrToken === target || g.studentId === target || String(g.badgeNumber) === target.replace('#', ''));
+    // ค้นหาเทียบกับ qrToken, studentId หรือ badgeNumber อย่างแม่นยำ
+    const found = guests.find((g) => 
+      String(g.qrToken).trim() === String(target).trim() || 
+      String(g.studentId).trim() === String(target).trim() || 
+      String(g.badgeNumber) === String(target).replace('#', '').trim()
+    );
+
     if (found) {
       setScannedPreviewGuest(found);
       setManualCodeInput('');
     } else {
-      alert(`❌ ไม่พบข้อมูลรหัส "${clean}" ในระบบ`);
+      // หากสแกนแล้วไม่เจอ ให้แจ้งเตือนเบาๆ โดยไม่ทำให้กล้องค้าง
+      console.warn(`ไม่พบข้อมูล QR: ${clean} (Target: ${target})`);
     }
   };
 
@@ -409,7 +457,7 @@ export default function App() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-800 text-left">
-                <label className="text-xs font-bold text-slate-300 block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา / เลขป้าย:</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
