@@ -30,7 +30,7 @@ const CUSTOM_FIREBASE_CONFIG = {
 
 const COLLECTION_NAME = 'spu_guests';
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัstruนักศึกษา
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -708,7 +708,7 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันซิงค์ QR เข้า Google Sheets พร้อมแจ้งเตือนสถานะเมื่อเสร็จ
+  // ฟังก์ชันซิงค์ QR เข้า Google Sheets พร้อม Loading และหน่วงเวลารอเขียนข้อมูล
   const handleExportQrToGoogleSheets = async () => {
     if (!guests || guests.length === 0) {
       alert('⚠️ ไม่มีรายชื่อในระบบให้ส่งออก');
@@ -723,14 +723,18 @@ export default function App() {
     try {
       await fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guests: guests })
       });
+
+      // หน่วงเวลารอให้ Apps Script เขียนข้อมูลลง Google Sheets จนเสร็จ (3 วินาที)
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
       alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว!');
     } catch (err) {
       console.error(err);
-      alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว!');
+      alert('เกิดข้อผิดพลาดในการส่งข้อมูล: ' + err.message);
     } finally {
       setIsSyncingSheets(false);
     }
