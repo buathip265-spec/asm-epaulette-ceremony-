@@ -98,7 +98,7 @@ export default function App() {
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
   
-  // State สำหรับกำหนดจำนวนคนต่อเซตสแตนด์บาย (ค่าเริ่มต้น 14 คน)
+  // State สำหรับแถบเลื่อน Batch Size (ค่าเริ่มต้น 14 คน)
   const [batchSize, setBatchSize] = useState(14);
 
   const [activeTab, setActiveTab] = useState('scan');
@@ -236,7 +236,7 @@ export default function App() {
     const readyList = guests.filter((g) => g.status === 'checked_in' && !g.skipped);
     if (readyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
 
-    const takeCount = Math.min(batchSize, readyList.length);
+    const takeCount = Math.min(Number(batchSize), readyList.length);
     const batchList = readyList.slice(0, takeCount);
 
     try {
@@ -441,34 +441,35 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 2: จัดคิวเวที (เลือกจำนวนเซต 10-20 คน) ==================== */}
+        {/* ==================== TAB 2: จัดคิวเวที (แถบเลื่อน Slider เลือก 10-20 คน) ==================== */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
             
-            {/* แถบเลือกตัวเลข Batch Size ตั้งแต่ 10 ถึง 20 */}
-            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Sliders className="w-5 h-5 text-blue-400" />
+            {/* แถบเลื่อน Slider ปรับจำนวนคนต่อเซต (10 - 20) */}
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold">
+                  <Sliders className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">ตั้งค่าจำนวนคนเข้าสแตนด์บายต่อเซต (10 - 20 คน)</h3>
-                  <p className="text-xs text-slate-400">เลือกจำนวนให้ตรงกับจำนวนอาจารย์ผู้มอบบ่าบนเวทีจริง</p>
+                  <h3 className="text-sm font-black text-white">ปรับจำนวนคนเข้าสแตนด์บายต่อเซต</h3>
+                  <p className="text-xs text-slate-400">เลื่อนแถบเพื่อกำหนดจำนวนคนให้ตรงกับจำนวนอาจารย์บนเวทีจริง</p>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5">
-                {[10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => setBatchSize(num)}
-                    className={`w-9 h-9 rounded-xl text-xs font-black transition-all flex items-center justify-center ${
-                      batchSize === num 
-                        ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400 scale-105' 
-                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                    }`}
-                  >
-                    {num}
-                  </button>
-                ))}
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                <input
+                  type="range"
+                  min="10"
+                  max="20"
+                  step="1"
+                  value={batchSize}
+                  onChange={(e) => setBatchSize(Number(e.target.value))}
+                  className="w-full md:w-48 accent-blue-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                />
+                <span className="px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-sm font-black shadow-md min-w-[75px] text-center">
+                  {batchSize} คน
+                </span>
               </div>
             </div>
 
