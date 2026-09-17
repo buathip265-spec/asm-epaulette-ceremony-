@@ -333,9 +333,9 @@ export default function App() {
     switch (st) {
       case 'pending': return 'ยังไม่มา';
       case 'checked_in': return 'เช็กชื่อแล้ว (มาปกติ)';
-      case 'no_item_ordered': return 'สั่งของไม่ทัน (ไม่ขึ้นเวที)';
-      case 'late_receive_after': return 'มาสาย (ไม่ขึ้นเวที - รับของหลังงาน)';
-      case 'dress_violation_receive_after': return 'ผิดระเบียบ (ไม่ขึ้นเวที - รับของหลังงาน)';
+      case 'no_item_ordered': return 'เข้าร่วมพิธี (ไม่ขึ้นรับบ่า)';
+      case 'late_receive_after': return 'มาสาย (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
+      case 'dress_violation_receive_after': return 'ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
       case 'standby': return 'สแตนด์บาย';
       case 'on_stage': return 'กำลังขึ้นเวที';
       case 'completed': return 'ลงเวทีแล้ว';
@@ -446,10 +446,10 @@ export default function App() {
                       </button>
                       <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px]">
-                          ⏰ มาสาย (ไม่ขึ้นเวที - รับของหลังงาน)
+                          ⏰ มาสาย (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)
                         </button>
                         <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px]">
-                          ⚠️ ผิดระเบียบ (ไม่ขึ้นเวที - รับของหลังงาน)
+                          ⚠️ ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)
                         </button>
                       </div>
                     </>
@@ -587,7 +587,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 3: จอ LED (หน้าจอเดียว รายชื่อคนขึ้นเวทีตรงกลาง + คิวสแตนด์บายข้างล่างแบบกะทัดรัด) ==================== */}
+        {/* ==================== TAB 3: จอ LED ==================== */}
         {activeTab === 'led' && (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-8 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
@@ -599,7 +599,6 @@ export default function App() {
               </div>
 
               {currentStageGroup.length > 0 ? (
-                /* Grid แสดงรายชื่อทุกคนที่ขึ้นเวทีพร้อมกันในเซตนี้ */
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
                   {currentStageGroup.map((g) => (
                     <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
@@ -621,7 +620,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* แถบรายชื่อสแตนด์บายหลังเวที (วางด้านล่างแบบกะทัดรัด) */}
               <div className="mt-10 pt-6 border-t border-slate-800/80">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -690,7 +688,7 @@ export default function App() {
                           {g.badgeNumber && g.status !== 'no_item_ordered' && g.status !== 'late_receive_after' && g.status !== 'dress_violation_receive_after' ? (
                             <span className="text-blue-400">#{g.badgeNumber}</span>
                           ) : (
-                            <span className="text-slate-600 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">- (ไม่ขึ้นเวที)</span>
+                            <span className="text-slate-600 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">- (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)</span>
                           )}
                         </td>
                         <td className="p-3.5 font-mono">{g.studentId || '-'}</td>
