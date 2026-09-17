@@ -5,7 +5,7 @@ import {
   Plus, Edit2, Trash2, X, AlertTriangle, RotateCcw, 
   Mic2, Filter, Loader2, Sparkles, FileSpreadsheet, 
   Upload, Download, Check, Maximize2, SkipForward, Undo2, 
-  Camera, ScanLine, FileDown, Layers
+  Camera, ScanLine, FileDown, Layers, UserX, AlertCircle, Ban
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -25,7 +25,7 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -38,9 +38,72 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
+// ฟังก์ชันตรวจจับว่าคนนี้ "ยังไม่ได้รับของ / สั่งของไม่ทัน / ยังไม่จ่ายเงิน" หรือไม่
+const checkIsItemPending = (guest) => {
+  if (!guest) return false;
+  const text = `${guest.note || ''} ${guest.itemStatus || ''}`.toLowerCase();
+  const keywords = ['ไม่ได้รับของ', 'ยังไม่ได้รับของ', 'สั่งของไม่ทัน', 'ไม่ทัน', 'ยังไม่จ่าย', 'ค้างจ่าย', 'ไม่จ่าย', 'ไม่มีของ'];
+  return keywords.some((kw) => text.includes(kw));
+};
+
+// 1. เกณฑ์ชั้นปี: ปี 1 -> ปี 4
+const YEAR_WEIGHTS = {
+  'ปี 1': 1,
+  'ปี 2': 2,
+  'ปี 3': 3,
+  'ปี 4': 4,
+  'บัณฑิต': 5
+};
+
+const getYearOrderWeight = (yearStr) => {
+  if (!yearStr) return 99;
+  for (const [key, weight] of Object.entries(YEAR_WEIGHTS)) {
+    if (yearStr.includes(key)) return weight;
+  }
+  return 50;
+};
+
+// 2. เกณฑ์เพศ: หญิง (0) -> ชาย (1)
+const getGenderOrderWeight = (fullName) => {
+  if (!fullName) return 2;
+  const name = fullName.trim();
+  if (name.startsWith('นางสาว') || name.startsWith('นาง') || name.startsWith('ด.ญ.') || name.startsWith('น.ส.')) {
+    return 0;
+  }
+  if (name.startsWith('นาย') || name.startsWith('ด.ช.')) {
+    return 1;
+  }
+  return 2;
+};
+
+// 3. ตัดคำนำหน้า เพื่อนำชื่อจริงไปเรียง ก-ฮ
+const getSortableCleanName = (fullName) => {
+  if (!fullName) return '';
+  return fullName
+    .replace(/^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.|ผศ\.|รศ\.|ดร\.)\s*/, '')
+    .trim();
+};
+
+// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> พยัญชนะ ก-ฮ
+const sortGuestsByCustomCriteria = (list) => {
+  return [...list].sort((a, b) => {
+    const yearA = getYearOrderWeight(a.year);
+    const yearB = getYearOrderWeight(b.year);
+    if (yearA !== yearB) return yearA - yearB;
+
+    const genderA = getGenderOrderWeight(a.name);
+    const genderB = getGenderOrderWeight(b.name);
+    if (genderA !== genderB) return genderA - genderB;
+
+    const cleanNameA = getSortableCleanName(a.name);
+    const cleanNameB = getSortableCleanName(b.name);
+    return cleanNameA.localeCompare(cleanNameB, 'th');
+  });
+};
+
 const DEFAULT_INITIAL_GUESTS = [
   { id: 'g01', badgeNumber: 1, qrToken: '69014522', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี', email: 'kittikorn.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g02', badgeNumber: 2, qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์', email: 'jirapinya.pon@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
+  { id: 'g02', badgeNumber: 2, qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์', email: 'jirapinya.pon@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'ยังไม่ได้รับของ', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g03', badgeNumber: 3, qrToken: '68023567', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี', email: 'jiraporn.ths@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g04', badgeNumber: 4, qrToken: '68091147', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส', email: 'achita.sao@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g05', badgeNumber: 5, qrToken: '67037256', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู', email: 'wimonrat.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', skipped: false, prevStatus: null, standbyOrder: null },
@@ -56,17 +119,17 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลักตามคู่มือ: 'scan' | 'queue' | 'led' | 'dashboard'
+  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
-  // สแกน QR
+  // สแกน QR[span_3](start_span)[span_3](end_span)
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   const html5QrCodeRef = useRef(null);
 
-  // แดชบอร์ด & ตัวกรอง
+  // แดชบอร์ด & ตัวกรอง[span_4](start_span)[span_4](end_span)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
@@ -74,10 +137,9 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // รายการที่เลือกสำหรับลบแบบกลุ่ม
   const [selectedGuestIds, setSelectedGuestIds] = useState([]);
 
-  // เพิ่ม / แก้ไข
+  // เพิ่ม / แก้ไข[span_5](start_span)[span_5](end_span)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
   const [formData, setFormData] = useState({
@@ -89,7 +151,7 @@ export default function App() {
     note: ''
   });
 
-  // นำเข้า Excel
+  // นำเข้า Excel[span_6](start_span)[span_6](end_span)
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [importMode, setImportMode] = useState('append');
@@ -98,7 +160,7 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // รีเซ็ตสถานะทั้งหมด
+  // รีเซ็ตสถานะ[span_7](start_span)[span_7](end_span)
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -120,7 +182,11 @@ export default function App() {
         if (snapshot.empty) {
           try {
             const batch = writeBatch(db);
-            DEFAULT_INITIAL_GUESTS.forEach((g) => {
+            const sortedInitial = sortGuestsByCustomCriteria(DEFAULT_INITIAL_GUESTS).map((g, idx) => ({
+              ...g,
+              badgeNumber: idx + 1
+            }));
+            sortedInitial.forEach((g) => {
               batch.set(doc(guestsColRef, g.id), g);
             });
             await batch.commit();
@@ -135,9 +201,9 @@ export default function App() {
           ...docSnap.data()
         }));
 
-        items.sort((a, b) => Number(a.badgeNumber || 0) - Number(b.badgeNumber || 0));
+        const sortedItems = sortGuestsByCustomCriteria(items);
 
-        setGuests(items);
+        setGuests(sortedItems);
         setIsDataLoaded(true);
         setSyncStatus('connected');
       },
@@ -145,7 +211,7 @@ export default function App() {
         console.error("Snapshot error:", error);
         setSyncStatus('error');
         if (guests.length === 0) {
-          setGuests(DEFAULT_INITIAL_GUESTS);
+          setGuests(sortGuestsByCustomCriteria(DEFAULT_INITIAL_GUESTS));
           setIsDataLoaded(true);
         }
       }
@@ -154,7 +220,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ควบคุมกล้องสแกน QR
+  // ควบคุมกล้องสแกน QR[span_8](start_span)[span_8](end_span)
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
@@ -200,7 +266,6 @@ export default function App() {
 
   const getGuestDocRef = (id) => doc(db, 'spu_guests', id);
 
-  // สแกนเพื่อขึ้นการ์ดตรวจสอบ
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
     if (!clean) return;
@@ -224,7 +289,7 @@ export default function App() {
     }
   };
 
-  // ยืนยันเช็กชื่อ
+  // 1. เช็กชื่อ: กรณีปกติ หรือตรวจพบว่าไม่ได้รับของ/ยังไม่จ่าย จะตัดออกจากคิวเวทีอัตโนมัติ
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -233,22 +298,79 @@ export default function App() {
       return;
     }
 
+    const isItemPending = checkIsItemPending(guest);
+    const targetStatus = isItemPending ? 'no_item_received' : 'checked_in';
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
     try {
       await updateDoc(getGuestDocRef(guest.id), {
-        status: 'checked_in',
+        status: targetStatus,
         checkInTime: timeStr,
         prevStatus: 'pending',
         skipped: false
       });
-      alert(`✅ ยืนยันเช็กชื่อสำเร็จ: ${guest.name} (ป้าย #${guest.badgeNumber})`);
+
+      if (isItemPending) {
+        alert(`⚠️ แจ้งเตือน: ${guest.name} ตรวจพบหมายเหตุ "${guest.note || 'ยังไม่ได้รับของ/ยังไม่จ่าย'}" ระบบเช็คชื่อเข้าร่วมงานเรียบร้อย แต่ตัดสิทธิ์การขึ้นเวทีรับบ่าให้อัตโนมัติ`);
+      } else {
+        alert(`✅ ยืนยันเช็กชื่อสำเร็จ: ${guest.name} (เข้าคิวรับบ่าปกติ)`);
+      }
     } catch (e) {
       console.error(e);
     }
     setScannedPreviewGuest(null);
   };
 
-  // ย้ายเข้าสแตนด์บาย
+  // 2. เช็กชื่อและตัดสิทธิ์เฉพาะกรณี: มาสาย หรือ แต่งตัวผิดระเบียบ
+  const handleCheckInWithDisqualify = async (guest, reasonStatus) => {
+    if (!guest) return;
+    if (guest.status !== 'pending') {
+      alert('ผู้เข้าร่วมคนนี้ถูกดำเนินการไปแล้ว');
+      setScannedPreviewGuest(null);
+      return;
+    }
+
+    const reasonLabel = reasonStatus === 'late' ? 'มาสาย' : 'แต่งตัวผิดระเบียบ';
+    const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
+    try {
+      await updateDoc(getGuestDocRef(guest.id), {
+        status: reasonStatus,
+        checkInTime: timeStr,
+        prevStatus: 'pending',
+        skipped: false
+      });
+      alert(`⚠️ บันทึกเรียบร้อย: ${guest.name} (${reasonLabel}) - ตัดสิทธิ์การขึ้นรับบ่าบนเวทีแล้ว`);
+    } catch (e) {
+      console.error(e);
+    }
+    setScannedPreviewGuest(null);
+  };
+
+  // ปรับสถานะตัดสิทธิ์จากหน้าคิวเวที
+  const handleDisqualifyFromQueue = async (guest, newStatus, reasonText) => {
+    setConfirmModal({
+      isOpen: true,
+      title: `ตัดสิทธิ์: ${reasonText}`,
+      message: `ต้องการตัดสิทธิ์ "${guest.name}" ออกจากคิวเวทีเนื่องจาก "${reasonText}" ใช่หรือไม่?`,
+      confirmText: 'ยืนยันตัดสิทธิ์',
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
+        try {
+          await updateDoc(getGuestDocRef(guest.id), {
+            status: newStatus,
+            prevStatus: guest.status,
+            skipped: false
+          });
+          alert(`ตัดสิทธิ์ "${guest.name}" (${reasonText}) ออกจากคิวเวทีเรียบร้อย`);
+        } catch (e) {
+          console.error(e);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   const handleMoveToStandby = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -262,7 +384,6 @@ export default function App() {
     }
   };
 
-  // ส่งขึ้นเวที
   const handleMoveToOnStage = async (guest) => {
     try {
       const batch = writeBatch(db);
@@ -284,7 +405,6 @@ export default function App() {
     }
   };
 
-  // จบขั้นตอนลงเวทีแล้ว
   const handleMoveToCompleted = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -296,7 +416,6 @@ export default function App() {
     }
   };
 
-  // ข้ามคิว / ยกเลิกข้ามคิว
   const handleToggleSkip = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -307,7 +426,6 @@ export default function App() {
     }
   };
 
-  // ย้อนสถานะ 1 ขั้น
   const handleUndoStatus = async (guest) => {
     if (!guest.prevStatus) {
       alert('ไม่มีสถานะก่อนหน้าให้ย้อนกลับ');
@@ -335,7 +453,6 @@ export default function App() {
     });
   };
 
-  // รีเซ็ตสถานะทั้งหมด
   const handleResetAllStatuses = async () => {
     if (resetConfirmInput !== 'RESET') {
       alert('กรุณาพิมพ์ RESET ให้ถูกต้องเพื่อยืนยัน');
@@ -362,7 +479,6 @@ export default function App() {
     }
   };
 
-  // บันทึกเพิ่ม/แก้ไข
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -418,7 +534,6 @@ export default function App() {
     setEditingGuest(null);
   };
 
-  // ลบรายชื่อเดี่ยว
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -438,14 +553,12 @@ export default function App() {
     });
   };
 
-  // สลับเลือก/ไม่เลือกทีละคน
   const handleToggleSelectGuest = (id) => {
     setSelectedGuestIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
 
-  // เลือกทั้งหมดในหน้าที่กำลังแสดง
   const handleToggleSelectAll = () => {
     const pageIds = paginatedGuests.map((g) => g.id);
     const allSelected = pageIds.every((id) => selectedGuestIds.includes(id));
@@ -457,7 +570,6 @@ export default function App() {
     }
   };
 
-  // ลบรายชื่อที่เลือกพร้อมกัน (Bulk Delete)
   const handleDeleteSelectedGuests = () => {
     if (selectedGuestIds.length === 0) return;
 
@@ -487,7 +599,6 @@ export default function App() {
     });
   };
 
-  // ประมวลผลไฟล์ Excel
   const handleExcelUpload = (e) => {
     const file = e.target.files?.[0];
     const excelLib = window.XLSX || XLSX;
@@ -524,7 +635,7 @@ export default function App() {
           const name = find(['ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'name']);
           const email = find(['อีเมล', 'email']);
           const roleRaw = find(['ประเภท', 'role']);
-          const note = find(['หมายเหตุ', 'note']);
+          const note = find(['หมายเหตุ', 'note', 'สถานะของ', 'การรับของ']);
 
           const role = roleRaw.includes('สตาฟ') ? 'สตาฟ' : 'ผู้เข้าร่วม';
           const year = detectYearFromStudentId(studentId);
@@ -568,7 +679,6 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // ยืนยันนำเข้า Excel
   const handleConfirmImport = async () => {
     if (excelPreviewData.length === 0) return;
     setIsImporting(true);
@@ -584,15 +694,17 @@ export default function App() {
         }
       }
 
-      for (let i = 0; i < excelPreviewData.length; i += 400) {
+      const sortedImport = sortGuestsByCustomCriteria(excelPreviewData);
+
+      for (let i = 0; i < sortedImport.length; i += 400) {
         const b = writeBatch(db);
-        excelPreviewData.slice(i, i + 400).forEach((g) => b.set(doc(colRef, g.id), g));
+        sortedImport.slice(i, i + 400).forEach((g) => b.set(doc(colRef, g.id), g));
         await b.commit();
       }
 
       setIsExcelModalOpen(false);
       setExcelPreviewData([]);
-      alert(`นำเข้ารายชื่อสำเร็จทั้งหมด ${excelPreviewData.length} รายการ`);
+      alert(`นำเข้ารายชื่อสำเร็จทั้งหมด ${sortedImport.length} รายการ (จัดเรียง ปี 1-4, หญิงก่อนชาย และ ก-ฮ ให้อัตโนมัติ)`);
     } catch (e) {
       setImportError('บันทึกข้อมูลไม่สำเร็จ: ' + e.message);
     } finally {
@@ -600,7 +712,6 @@ export default function App() {
     }
   };
 
-  // ส่งออก QR สำหรับส่งอีเมล
   const handleExportQrExcel = () => {
     const excelLib = window.XLSX || XLSX;
     if (!excelLib || !excelLib.utils) {
@@ -622,6 +733,7 @@ export default function App() {
         'ชั้นปี': g.year,
         'ประเภท': g.role,
         'รหัสเช็กชื่อ (QR Token)': g.qrToken,
+        'หมายเหตุ': g.note || '',
         'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(g.qrToken)}`
       }));
 
@@ -635,7 +747,6 @@ export default function App() {
     }
   };
 
-  // ส่งออกรายงานสรุป
   const handleExportReportExcel = () => {
     const excelLib = window.XLSX || XLSX;
     if (!excelLib || !excelLib.utils) {
@@ -675,6 +786,9 @@ export default function App() {
     switch (st) {
       case 'pending': return 'ยังไม่มา';
       case 'checked_in': return 'เช็กชื่อแล้ว';
+      case 'no_item_received': return 'ไม่ได้รับของ/ยังไม่จ่าย (ไม่ขึ้นเวที)';
+      case 'late': return 'มาสาย (ไม่ขึ้นเวที)';
+      case 'dress_code_violation': return 'แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที)';
       case 'standby': return 'สแตนด์บาย';
       case 'on_stage': return 'กำลังขึ้นเวที';
       case 'completed': return 'ลงเวทีแล้ว';
@@ -686,19 +800,26 @@ export default function App() {
     const total = guests.length;
     const pending = guests.filter((g) => g.status === 'pending').length;
     const checkedIn = guests.filter((g) => g.status === 'checked_in').length;
+    const noItem = guests.filter((g) => g.status === 'no_item_received').length;
+    const late = guests.filter((g) => g.status === 'late').length;
+    const dressViolation = guests.filter((g) => g.status === 'dress_code_violation').length;
     const standby = guests.filter((g) => g.status === 'standby').length;
     const onStage = guests.filter((g) => g.status === 'on_stage').length;
     const completed = guests.filter((g) => g.status === 'completed').length;
     const skipped = guests.filter((g) => g.skipped).length;
-    return { total, pending, checkedIn, standby, onStage, completed, skipped };
+    return { total, pending, checkedIn, noItem, late, dressViolation, standby, onStage, completed, skipped };
   }, [guests]);
 
+  // คิวพร้อมเรียก: คนที่เช็กชื่อปกติและไม่มีปัญหาเรื่องของ/มาสาย/การแต่งกาย
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
+
+  // คิวสแตนด์บาย: เรียงตามลำดับที่สตาฟกดจริง[span_9](start_span)[span_9](end_span)[span_10](start_span)[span_10](end_span)
   const standbyQueue = useMemo(() => {
     return guests
       .filter((g) => g.status === 'standby' && !g.skipped)
       .sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0));
   }, [guests]);
+
   const currentStagePerson = useMemo(() => guests.find((g) => g.status === 'on_stage'), [guests]);
   const skippedList = useMemo(() => guests.filter((g) => g.skipped), [guests]);
 
@@ -788,18 +909,24 @@ export default function App() {
       {/* แถบสรุปสถิติ */}
       <div className="bg-slate-950/70 border-b border-slate-800/80 px-4 py-2 text-xs text-slate-300">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span>ทั้งหมด: <strong className="text-white">{stats.total}</strong></span>
             <span>|</span>
-            <span className="text-emerald-400">เช็กชื่อแล้ว: <strong>{stats.checkedIn}</strong></span>
+            <span className="text-emerald-400">เช็กชื่อรับบ่า: <strong>{stats.checkedIn}</strong></span>
+            <span className="text-rose-400">ไม่ได้รับของ: <strong>{stats.noItem}</strong></span>
+            <span className="text-amber-400">สาย: <strong>{stats.late}</strong></span>
+            <span className="text-orange-400">ผิดระเบียบ: <strong>{stats.dressViolation}</strong></span>
             <span className="text-blue-400">สแตนด์บาย: <strong>{stats.standby}</strong></span>
-            <span className="text-amber-400">บนเวที: <strong>{stats.onStage}</strong></span>
+            <span className="text-emerald-300">บนเวที: <strong>{stats.onStage}</strong></span>
             <span className="text-purple-400">ลงเวทีแล้ว: <strong>{stats.completed}</strong></span>
             {stats.skipped > 0 && (
               <span className="text-red-400 font-bold bg-red-950/50 px-2 py-0.5 rounded border border-red-800">
                 ข้ามคิว: {stats.skipped}
               </span>
             )}
+          </div>
+          <div className="text-[11px] text-slate-400 font-medium">
+            เกณฑ์การเรียง: ปี 1-4 → หญิงก่อนชาย → พยัญชนะ ก-ฮ
           </div>
         </div>
       </div>
@@ -814,7 +941,7 @@ export default function App() {
                 <ScanLine className="w-5 h-5 text-blue-500" /> สแกน QR เช็กชื่อผู้เข้าร่วม
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                เล็งกล้องไปที่ QR ของผู้เข้าร่วม ตรวจสอบข้อมูลให้ถูกต้อง แล้วกดยืนยันเช็กชื่อ
+                ตรวจพบสถานะไม่ได้รับของอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / แต่งตัวผิดระเบียบ[span_11](start_span)[span_11](end_span)
               </p>
 
               <div className="mt-4 bg-black rounded-2xl overflow-hidden border-2 border-slate-800 relative min-h-[260px] flex items-center justify-center">
@@ -870,26 +997,60 @@ export default function App() {
                   <p className="text-xs font-mono font-bold text-blue-600">
                     รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}
                   </p>
-                  <p className="text-xs text-slate-500">{scannedPreviewGuest.email || '-'}</p>
+                  {scannedPreviewGuest.note && (
+                    <div className={`p-2 rounded-xl text-xs font-bold mt-1 ${
+                      checkIsItemPending(scannedPreviewGuest)
+                        ? 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      หมายเหตุ: {scannedPreviewGuest.note}
+                    </div>
+                  )}
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-100 flex gap-2">
+                <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
                   {scannedPreviewGuest.status === 'pending' ? (
-                    <button
-                      onClick={() => handleConfirmCheckIn(scannedPreviewGuest)}
-                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md"
-                    >
-                      <Check className="w-4 h-4" /> ยืนยันเช็กชื่อ
-                    </button>
+                    <>
+                      {/* ปุ่มยืนยันหลัก: ถ้ามีโน้ตยังไม่ได้รับของจะแจ้งเตือนว่าตัดสิทธิ์อัตโนมัติ */}
+                      <button
+                        onClick={() => handleConfirmCheckIn(scannedPreviewGuest)}
+                        className={`w-full py-3 text-white font-black rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md ${
+                          checkIsItemPending(scannedPreviewGuest)
+                            ? 'bg-rose-600 hover:bg-rose-700'
+                            : 'bg-emerald-600 hover:bg-emerald-700'
+                        }`}
+                      >
+                        <Check className="w-4 h-4" /> 
+                        {checkIsItemPending(scannedPreviewGuest)
+                          ? 'ยืนยันเช็กชื่อ (ไม่ได้รับของ - ตัดสิทธิ์เวทีอัตโนมัติ)'
+                          : 'ยืนยันเช็กชื่อ (เข้าคิวรับบ่าปกติ)'}
+                      </button>
+
+                      {/* ปุ่มตัวเลือกตัดสิทธิ์เฉพาะหน้า: สาย หรือ แต่งตัวผิดระเบียบ */}
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'late')}
+                          className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                        >
+                          <Clock className="w-3.5 h-3.5" /> มาสาย (ไม่ขึ้นเวที)
+                        </button>
+                        <button
+                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'dress_code_violation')}
+                          className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                        >
+                          <Ban className="w-3.5 h-3.5" /> ผิดระเบียบ (ไม่ขึ้นเวที)
+                        </button>
+                      </div>
+                    </>
                   ) : (
-                    <div className="flex-1 py-3 bg-slate-100 text-slate-500 font-bold rounded-2xl text-xs text-center">
+                    <div className="py-3 bg-slate-100 text-slate-500 font-bold rounded-2xl text-xs text-center">
                       ผู้เข้าร่วมคนนี้ถูกดำเนินการไปแล้ว
                     </div>
                   )}
 
                   <button
                     onClick={() => setScannedPreviewGuest(null)}
-                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs"
+                    className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl text-xs mt-1"
                   >
                     สแกนคนต่อไป
                   </button>
@@ -904,7 +1065,7 @@ export default function App() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               
-              {/* คอลัมน์ 1: พร้อมเรียกคิว */}
+              {/* คอลัมน์ 1: พร้อมเรียกคิว (เฉพาะคนที่พร้อมขึ้นรับบ่า) */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -928,21 +1089,40 @@ export default function App() {
                         <div>
                           <div className="text-sm font-bold text-white truncate">{g.name}</div>
                           <div className="text-xs font-mono text-slate-400">{g.studentId || '-'}</div>
+                          {g.note && <div className="text-[10px] text-slate-500 mt-0.5 truncate">{g.note}</div>}
                         </div>
-                        <div className="flex items-center gap-1.5 pt-1 border-t border-slate-800/60">
-                          <button
-                            onClick={() => handleToggleSkip(g)}
-                            className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-xl"
-                            title="ข้ามคิว"
-                          >
-                            <SkipForward className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleMoveToStandby(g)}
-                            className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
-                          >
-                            เข้าสแตนด์บาย →
-                          </button>
+                        
+                        {/* ปุ่มควบคุมคิว และปุ่มตัดสิทธิ์เฉพาะหน้า */}
+                        <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/60">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleToggleSkip(g)}
+                              className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg text-xs"
+                              title="ข้ามคิว"
+                            >
+                              <SkipForward className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleMoveToStandby(g)}
+                              className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs"
+                            >
+                              เข้าสแตนด์บาย →
+                            </button>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleDisqualifyFromQueue(g, 'late', 'มาสาย')}
+                              className="flex-1 py-1 bg-slate-800 hover:bg-amber-900/50 text-amber-300 rounded-lg text-[10px] font-bold"
+                            >
+                              ตัดสิทธิ์: สาย
+                            </button>
+                            <button
+                              onClick={() => handleDisqualifyFromQueue(g, 'dress_code_violation', 'แต่งตัวผิดระเบียบ')}
+                              className="flex-1 py-1 bg-slate-800 hover:bg-orange-900/50 text-orange-300 rounded-lg text-[10px] font-bold"
+                            >
+                              ตัดสิทธิ์: ผิดระเบียบ
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -950,7 +1130,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 2: แสตนบาย */}
+              {/* คอลัมน์ 2: แสตนบาย[span_12](start_span)[span_12](end_span)[span_13](start_span)[span_13](end_span) */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1003,7 +1183,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 3: ขึ้นเวที */}
+              {/* คอลัมน์ 3: ขึ้นเวที[span_14](start_span)[span_14](end_span) */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1145,7 +1325,7 @@ export default function App() {
             <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-black text-white">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
-                <p className="text-xs text-slate-400">จัดการข้อมูล กรองสถานะ และนำเข้า/ส่งออก Excel</p>
+                <p className="text-xs text-slate-400">เรียงตาม ปี 1-4 → หญิงก่อนชาย → ก-ฮ อัตโนมัติ</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -1223,6 +1403,9 @@ export default function App() {
                   <option value="all">ทุกสถานะ</option>
                   <option value="pending">ยังไม่มา</option>
                   <option value="checked_in">เช็กชื่อแล้ว</option>
+                  <option value="no_item_received">ไม่ได้รับของ/ยังไม่จ่าย (ไม่ขึ้นเวที)</option>
+                  <option value="late">มาสาย (ไม่ขึ้นเวที)</option>
+                  <option value="dress_code_violation">แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที)</option>
                   <option value="standby">สแตนด์บาย</option>
                   <option value="on_stage">กำลังขึ้นเวที</option>
                   <option value="completed">ลงเวทีแล้ว</option>
@@ -1275,6 +1458,7 @@ export default function App() {
                       <th className="p-3.5">ชั้นปี</th>
                       <th className="p-3.5">ประเภท</th>
                       <th className="p-3.5">สถานะ</th>
+                      <th className="p-3.5">หมายเหตุ</th>
                       <th className="p-3.5">เวลาเช็กชื่อ</th>
                       <th className="p-3.5 text-right">จัดการ</th>
                     </tr>
@@ -1306,6 +1490,12 @@ export default function App() {
                               ? 'bg-amber-900/40 text-amber-300'
                               : g.status === 'standby'
                               ? 'bg-blue-900/40 text-blue-300'
+                              : g.status === 'no_item_received'
+                              ? 'bg-rose-900/40 text-rose-300 border border-rose-800'
+                              : g.status === 'late'
+                              ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                              : g.status === 'dress_code_violation'
+                              ? 'bg-orange-950 text-orange-400 border border-orange-800'
                               : g.status === 'checked_in'
                               ? 'bg-emerald-900/40 text-emerald-300'
                               : 'bg-slate-800 text-slate-400'
@@ -1313,6 +1503,7 @@ export default function App() {
                             {getStatusLabel(g.status)}
                           </span>
                         </td>
+                        <td className="p-3.5 text-slate-400">{g.note || '-'}</td>
                         <td className="p-3.5 text-slate-400 font-mono">{g.checkInTime || '-'}</td>
                         <td className="p-3.5 text-right space-x-1.5">
                           {g.prevStatus && (
@@ -1422,7 +1613,7 @@ export default function App() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
-                  placeholder="เช่น นายกิตติกร บุญมี"
+                  placeholder="เช่น นางสาวสมหญิง จริงใจ หรือ นายสมชาย ใจดี"
                 />
               </div>
               <div>
@@ -1448,13 +1639,13 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ</label>
+                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'ยังไม่ได้รับของ' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
                 <input
                   type="text"
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
-                  placeholder="เช่น สโมสรนักศึกษา"
+                  placeholder="เช่น ยังไม่ได้รับของ, สั่งของไม่ทัน, ค้างจ่าย"
                 />
               </div>
 
@@ -1515,7 +1706,7 @@ export default function App() {
             <div className="border-2 border-dashed border-slate-800 rounded-2xl p-6 text-center">
               <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
               <p className="text-xs text-slate-300 font-bold">เลือกไฟล์ Excel (.xlsx, .xls, .csv)</p>
-              <p className="text-[10px] text-slate-500 mt-1">หัวคอลัมน์: ลำดับ, รหัสนักศึกษา, ชื่อ-นามสกุล, อีเมล, ประเภท, หมายเหตุ</p>
+              <p className="text-[10px] text-slate-500 mt-1">คอลัมน์: ลำดับ, รหัสนักศึกษา, ชื่อ-นามสกุล, อีเมล, ประเภท, หมายเหตุ</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1582,7 +1773,7 @@ export default function App() {
             </div>
             <h3 className="text-base font-black text-white">รีเซ็ตสถานะทั้งหมด (สำหรับซ้อม)</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ
+              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ[span_15](start_span)[span_15](end_span)
             </p>
             <div className="pt-2 text-left">
               <label className="text-[11px] text-slate-300 block mb-1">พิมพ์คำว่า <strong>RESET</strong> เพื่อยืนยัน:</label>
