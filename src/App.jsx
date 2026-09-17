@@ -15,7 +15,7 @@ import {
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
 
-// วาง Web App URL จาก Google Apps Script (ถ้าต้องการส่งอีเมลพร้อม QR อัตโนมัติเมื่อนำเข้า Excel)
+// Web App URL จาก Google Apps Script (หากต้องการระบบส่งอีเมลพร้อม QR อัตโนมัติหลังนำเข้า Excel)
 const GOOGLE_APPS_SCRIPT_URL = ""; 
 
 const CUSTOM_FIREBASE_CONFIG = {
@@ -28,7 +28,10 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// คำนวณชั้นปีอัตโนมัติจากรหัสนักศึกษา 2 ตัวแรก[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
+// ใช้ชื่อ Collection ให้ตรงกันทั้งระบบ
+const COLLECTION_NAME = 'spu_guests';
+
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -41,7 +44,7 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
-// ตรวจจับกรณีเดียวกัน: สั่งของไม่ทัน / ไม่ได้รับของ / จ่ายช้า / ค้างจ่าย
+// ตรวจจับกรณีสั่งของไม่ทัน / ไม่ได้รับของ / จ่ายช้า (กรณีเดียวกัน)
 const checkIsItemNotReady = (guest) => {
   if (!guest) return false;
   const text = `${guest.note || ''} ${guest.itemStatus || ''}`.toLowerCase();
@@ -49,7 +52,7 @@ const checkIsItemNotReady = (guest) => {
   return keywords.some((kw) => text.includes(kw));
 };
 
-// เกณฑ์ชั้นปี: ปี 1 -> ปี 4
+// 1. เกณฑ์ชั้นปี: ปี 1 -> ปี 4
 const YEAR_WEIGHTS = {
   'ปี 1': 1,
   'ปี 2': 2,
@@ -66,7 +69,7 @@ const getYearOrderWeight = (yearStr) => {
   return 50;
 };
 
-// เกณฑ์เพศ: หญิง (0) -> ชาย (1)
+// 2. เกณฑ์เพศ: หญิง (0) -> ชาย (1)
 const getGenderOrderWeight = (fullName) => {
   if (!fullName) return 2;
   const name = fullName.trim();
@@ -79,7 +82,7 @@ const getGenderOrderWeight = (fullName) => {
   return 2;
 };
 
-// ตัดคำนำหน้า เพื่อนำชื่อจริงไปเรียง ก-ฮ
+// 3. ตัดคำนำหน้า เพื่อนำชื่อจริงไปเปรียบเทียบ ก-ฮ
 const getSortableCleanName = (fullName) => {
   if (!fullName) return '';
   return fullName
@@ -87,7 +90,7 @@ const getSortableCleanName = (fullName) => {
     .trim();
 };
 
-// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
+// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> พยัญชนะ ก-ฮ
 const sortGuestsByCustomCriteria = (list) => {
   return [...list].sort((a, b) => {
     const yearA = getYearOrderWeight(a.year);
@@ -104,15 +107,6 @@ const sortGuestsByCustomCriteria = (list) => {
   });
 };
 
-const DEFAULT_INITIAL_GUESTS = [
-  { id: 'g01', badgeNumber: 1, qrToken: '69014522', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี', email: 'kittikorn.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g02', badgeNumber: 2, qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์', email: 'jirapinya.pon@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'สั่งของไม่ทัน', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g03', badgeNumber: 3, qrToken: '68023567', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี', email: 'jiraporn.ths@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g04', badgeNumber: 4, qrToken: '68091147', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส', email: 'achita.sao@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g05', badgeNumber: 5, qrToken: '67037256', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู', email: 'wimonrat.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g06', badgeNumber: 6, qrToken: '66045914', year: 'ปี 4', studentId: '66045914', name: 'นางสาวบัวทิพย์ วัฒนเกษมสกุล', email: 'buathip.wat@spumail.net', role: 'สตาฟ', status: 'pending', checkInTime: null, note: 'ฝ่ายพิธีการ', skipped: false, prevStatus: null, standbyOrder: null },
-];
-
 const app = initializeApp(CUSTOM_FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -122,7 +116,7 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลักตามคู่มือ: scan | queue | led | dashboard[span_2](start_span)[span_2](end_span)
+  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
@@ -175,27 +169,20 @@ export default function App() {
     onConfirm: null
   });
 
+  const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
+
   useEffect(() => {
     signInAnonymously(auth).catch(() => {});
-    const guestsColRef = collection(db, 'spu_guests');
+    const guestsColRef = collection(db, COLLECTION_NAME);
 
     const unsubscribe = onSnapshot(
       guestsColRef,
-      async (snapshot) => {
+      (snapshot) => {
+        // แก้ไข: ถ้าลบจนฐานข้อมูลว่าง ให้เคลียร์หน้าจอเป็น 0 คนทันที ไม่แทรกข้อมูลเก่ากลับเข้ามา
         if (snapshot.empty) {
-          try {
-            const batch = writeBatch(db);
-            const sortedInitial = sortGuestsByCustomCriteria(DEFAULT_INITIAL_GUESTS).map((g, idx) => ({
-              ...g,
-              badgeNumber: idx + 1
-            }));
-            sortedInitial.forEach((g) => {
-              batch.set(doc(guestsColRef, g.id), g);
-            });
-            await batch.commit();
-          } catch (e) {
-            console.error("Init guests error:", e);
-          }
+          setGuests([]);
+          setIsDataLoaded(true);
+          setSyncStatus('connected');
           return;
         }
 
@@ -205,18 +192,14 @@ export default function App() {
         }));
 
         const sortedItems = sortGuestsByCustomCriteria(items);
-
         setGuests(sortedItems);
         setIsDataLoaded(true);
         setSyncStatus('connected');
       },
       (error) => {
-        console.error("Snapshot error:", error);
+        console.error("Firestore Snapshot error:", error);
         setSyncStatus('error');
-        if (guests.length === 0) {
-          setGuests(sortGuestsByCustomCriteria(DEFAULT_INITIAL_GUESTS));
-          setIsDataLoaded(true);
-        }
+        setIsDataLoaded(true);
       }
     );
 
@@ -267,8 +250,6 @@ export default function App() {
     }
   }, [activeTab]);
 
-  const getGuestDocRef = (id) => doc(db, 'spu_guests', id);
-
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
     if (!clean) return;
@@ -292,7 +273,7 @@ export default function App() {
     }
   };
 
-  // 1. เช็กชื่อ: กรณีปกติ หรือ ตรวจพบสั่งของไม่ทัน/จ่ายช้า (จะตัดสิทธิ์เวทีอัตโนมัติ)
+  // 1. เช็กชื่อปกติ หรือ ตรวจพบสั่งของไม่ทัน/จ่ายช้า (ตัดสิทธิ์เวทีอัตโนมัติ)
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -314,9 +295,9 @@ export default function App() {
       });
 
       if (isNoItem) {
-        alert(`⚠️ ตรวจพบ: ${guest.name} (${guest.note || 'สั่งของไม่ทัน/จ่ายช้า'})\nระบบเช็คชื่อเข้าร่วมงานเรียบร้อย แต่ตัดสิทธิ์ขึ้นรับบ่าบนเวที (ไม่มีของรับในงาน)`);
+        alert(`⚠️ ตรวจพบ: ${guest.name} (${guest.note || 'สั่งของไม่ทัน/จ่ายช้า'})\nระบบเช็คชื่อเข้าร่วมงานเรียบร้อย แต่ตัดสิทธิ์ขึ้นรับบ่าบนเวที (ไม่มีของรับในวันงาน)`);
       } else {
-        alert(`✅ ยืนยันเช็กชื่อสำเร็จ: ${guest.name} (เข้าคิวรับบ่าปกติ)`);
+        alert(`✅ ยืนยันเช็กชื่อสำเร็จ: ${guest.name} (เข้าคิวขึ้นรับบ่าปกติ)`);
       }
     } catch (e) {
       console.error(e);
@@ -324,7 +305,7 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
-  // 2. เช็กชื่อและตัดสิทธิ์: มาสาย หรือ แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที แต่มีของให้รับหลังจบงาน)
+  // 2. เช็กชื่อและตัดสิทธิ์: มาสาย หรือ แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที แต่มีสิทธิ์รับของหลังจบงาน)
   const handleCheckInWithDisqualify = async (guest, reasonStatus) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -355,7 +336,7 @@ export default function App() {
     setConfirmModal({
       isOpen: true,
       title: `ตัดสิทธิ์คิวเวที: ${reasonText}`,
-      message: `ต้องการตัดสิทธิ์ "${guest.name}" ออกจากคิวเวทีเนื่องจาก "${reasonText}" ใช่หรือไม่? (นักศึกษาจะสามารถรับของได้หลังจบงาน)`,
+      message: `ต้องการตัดสิทธิ์ "${guest.name}" ออกจากคิวเวทีเนื่องจาก "${reasonText}" ใช่หรือไม่? (สามารถรับของได้หลังจบงาน)`,
       confirmText: 'ยืนยันตัดสิทธิ์',
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
@@ -537,7 +518,7 @@ export default function App() {
     setEditingGuest(null);
   };
 
-  // ลบรายชื่อเดี่ยว (Optimistic Update)
+  // ลบรายชื่อเดี่ยว: หายทันทีบนจอ (Optimistic UI) + ลบบน Firestore
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -577,7 +558,7 @@ export default function App() {
     }
   };
 
-  // ลบหลายรายการพร้อมกัน (Optimistic Update)
+  // ลบหลายรายการพร้อมกัน: หายทันทีบนจอ (Optimistic UI) + ลบบน Firestore
   const handleDeleteSelectedGuests = () => {
     if (selectedGuestIds.length === 0) return;
 
@@ -696,7 +677,7 @@ export default function App() {
     setIsImporting(true);
 
     try {
-      const colRef = collection(db, 'spu_guests');
+      const colRef = collection(db, COLLECTION_NAME);
 
       if (importMode === 'replace') {
         for (let i = 0; i < guests.length; i += 400) {
@@ -1049,7 +1030,6 @@ export default function App() {
                 <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
                   {scannedPreviewGuest.status === 'pending' ? (
                     <>
-                      {/* ปุ่มยืนยันเช็กชื่อหลัก */}
                       <button
                         onClick={() => handleConfirmCheckIn(scannedPreviewGuest)}
                         className={`w-full py-3 text-white font-black rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md ${
@@ -1064,7 +1044,6 @@ export default function App() {
                           : 'ยืนยันเช็กชื่อ (เข้าคิวขึ้นรับบ่าปกติ)'}
                       </button>
 
-                      {/* ปุ่มกรณีตรวจพบหน้างาน: มาสาย หรือ แต่งตัวผิดระเบียบ */}
                       <div className="grid grid-cols-2 gap-2 pt-1">
                         <button
                           onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'late_receive_after')}
@@ -1250,7 +1229,7 @@ export default function App() {
                           className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
                           title="ย้อนสถานะ"
                         >
-                          <Undo2 className="w-4 h-4" />
+                          <Undo2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleMoveToCompleted(currentStagePerson)}
@@ -1690,7 +1669,7 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'สั่งของไม่ทัน' หรือ 'ไม่ได้รับของ' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
+                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'สั่งของไม่ทัน' หรือ 'จ่ายช้า' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
                 <input
                   type="text"
                   value={formData.note}
