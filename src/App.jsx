@@ -97,8 +97,6 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
-  
-  // State สำหรับแถบเลื่อน Batch Size (ค่าเริ่มต้น 14 คน)
   const [batchSize, setBatchSize] = useState(14);
 
   const [activeTab, setActiveTab] = useState('scan');
@@ -232,6 +230,7 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
+  // ดึงคนเข้าสแตนด์บายทีละ Batch (เช่น ทีละ 10-20 คนตาม slider)
   const handleMoveToStandbyBatch = async () => {
     const readyList = guests.filter((g) => g.status === 'checked_in' && !g.skipped);
     if (readyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
@@ -254,19 +253,50 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  const handleMoveToOnStage = async (guest) => {
+  // ย้ายคนจากสแตนด์บายขึ้นเวที "ยกเซต" พร้อมกันทีเดียวตามจำนวน batchSize
+  const handleMoveBatchToOnStage = async () => {
+    const standbyList = guests
+      .filter((g) => g.status === 'standby' && !g.skipped)
+      .sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0));
+
+    if (standbyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในแถวสแตนด์บาย');
+
+    const takeCount = Math.min(Number(batchSize), standbyList.length);
+    const batchList = standbyList.slice(0, takeCount);
+
     try {
       const batch = writeBatch(db);
-      const currentOnStage = guests.find((g) => g.status === 'on_stage');
-      if (currentOnStage) batch.update(getGuestDocRef(currentOnStage.id), { status: 'completed', prevStatus: 'on_stage' });
-      batch.update(getGuestDocRef(guest.id), { status: 'on_stage', prevStatus: guest.status, skipped: false });
+      
+      // เคลียร์คนที่อยู่บนเวทีเดิมให้เป็น completed ก่อน
+      guests.filter(g => g.status === 'on_stage').forEach(oldOnStage => {
+        batch.update(getGuestDocRef(oldOnStage.id), { status: 'completed', prevStatus: 'on_stage' });
+      });
+
+      // ย้ายชุดใหม่ขึ้นเวทีพร้อมกัน
+      batchList.forEach((g) => {
+        batch.update(getGuestDocRef(g.id), {
+          status: 'on_stage',
+          prevStatus: 'standby',
+          skipped: false
+        });
+      });
+
       await batch.commit();
+      alert(`🚀 ประกาศขึ้นเวทีเซตนี้จำนวน ${takeCount} คนเรียบร้อยแล้ว!`);
     } catch (e) { console.error(e); }
   };
 
-  const handleMoveToCompleted = async (guest) => {
+  // กดลงเวทีทั้งเซต
+  const handleCompleteStageBatch = async () => {
+    const onStageList = guests.filter((g) => g.status === 'on_stage');
+    if (onStageList.length === 0) return alert('ไม่มีผู้เข้าร่วมบนเวทีขณะนี้');
+
     try {
-      await updateDoc(getGuestDocRef(guest.id), { status: 'completed', prevStatus: 'on_stage' });
+      const batch = writeBatch(db);
+      onStageList.forEach((g) => {
+        batch.update(getGuestDocRef(g.id), { status: 'completed', prevStatus: 'on_stage' });
+      });
+      await batch.commit();
     } catch (e) { console.error(e); }
   };
 
@@ -323,7 +353,9 @@ export default function App() {
 
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
   const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
-  const currentStagePerson = useMemo(() => guests.find((g) => g.status === 'on_stage'), [guests]);
+  
+  // รายชื่อทุกคนที่กำลังขึ้นเวทีพร้อมกันในเซตนี้
+  const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
   const skippedList = useMemo(() => guests.filter((g) => g.skipped), [guests]);
 
   const filteredDashboardGuests = useMemo(() => {
@@ -441,19 +473,19 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 2: จัดคิวเวที (แถบเลื่อน Slider เลือก 10-20 คน) ==================== */}
+        {/* ==================== TAB 2: จัดคิวเวที (ควบคุมการดึงและประกาศขึ้นเวทีเป็นชุด) ==================== */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
             
-            {/* แถบเลื่อน Slider ปรับจำนวนคนต่อเซต (10 - 20) */}
+            {/* แถบเลื่อน Slider ปรับจำนวนคนต่อเซต */}
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold">
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white">ปรับจำนวนคนเข้าสแตนด์บายต่อเซต</h3>
-                  <p className="text-xs text-slate-400">เลื่อนแถบเพื่อกำหนดจำนวนคนให้ตรงกับจำนวนอาจารย์บนเวทีจริง</p>
+                  <h3 className="text-sm font-black text-white">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
+                  <p className="text-xs text-slate-400">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
                 </div>
               </div>
 
@@ -488,7 +520,6 @@ export default function App() {
                     className="w-full mb-3 py-2.5 bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/40 rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
                   >
                     <span>🚀 ดึงเข้าสแตนด์บายเซตละ {batchSize} คน</span>
-                    <span className="text-[10px] opacity-75">(เหลือ {Math.max(0, readyQueue.length - batchSize)} คน)</span>
                   </button>
                 )}
 
@@ -500,66 +531,127 @@ export default function App() {
                         <div className="text-sm font-bold text-white truncate">{g.name}</div>
                         <div className="text-xs font-mono text-slate-400">{g.studentId || '-'}</div>
                       </div>
-                      <div className="flex items-center gap-1.5 pt-1 border-t border-slate-800/60">
-                        <button onClick={() => handleToggleSkip(g)} className="p-1.5 text-slate-400 hover:text-amber-400 rounded-lg text-xs" title="ข้ามคิว"><SkipForward className="w-3.5 h-3.5" /></button>
-                        <button onClick={handleMoveToStandbyBatch} className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs">เข้าสแตนด์บาย →</button>
+                      <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-400 text-left hover:underline">ข้ามคิวนี้</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* คอลัมน์ 2: แสตนบายหลังเวที */}
+              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
+                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
+                  <span className="px-2 py-0.5 bg-amber-900/40 text-amber-300 text-xs font-bold rounded-full">{standbyQueue.length} คน</span>
+                </div>
+
+                {standbyQueue.length > 0 && (
+                  <button
+                    onClick={handleMoveBatchToOnStage}
+                    className="w-full mb-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <span>🎯 ประกาศขึ้นเวทีเซตนี้ ({Math.min(batchSize, standbyQueue.length)} คน) →</span>
+                  </button>
+                )}
+
+                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-slate-600 py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
+                    <div key={g.id} className="bg-slate-900 border border-amber-900/40 rounded-2xl p-3 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
+                        <span className="text-xs font-bold text-white">{g.name}</span>
+                        <div className="text-[10px] text-slate-400 font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* คอลัมน์ 2: แสตนบาย */}
+              {/* คอลัมน์ 3: กำลังขึ้นเวที */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
-                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
-                  <span className="px-2 py-0.5 bg-amber-900/40 text-amber-300 text-xs font-bold rounded-full">{standbyQueue.length} คน</span>
+                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
+                  <span className="px-2 py-0.5 bg-emerald-900/40 text-emerald-300 text-xs font-bold rounded-full">{currentStageGroup.length} คน</span>
                 </div>
-                <div className="flex-1 space-y-2.5 overflow-y-auto">
-                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-slate-600 py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g) => (
-                    <div key={g.id} className="bg-slate-900 border border-amber-900/40 rounded-2xl p-3 flex flex-col justify-between gap-2">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-amber-400">#{g.badgeNumber}</span><span className="text-[10px] text-slate-400">{g.year}</span></div>
-                      <div className="text-sm font-bold text-white truncate">{g.name}</div>
-                      <button onClick={() => handleMoveToOnStage(g)} className="w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs rounded-xl">ขึ้นเวที →</button>
+
+                {currentStageGroup.length > 0 && (
+                  <button
+                    onClick={handleCompleteStageBatch}
+                    className="w-full mb-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs transition-all shadow-md"
+                  >
+                    ✓ ลงเวทีแล้วทั้งหมด ({currentStageGroup.length} คน)
+                  </button>
+                )}
+
+                <div className="flex-1 space-y-2 overflow-y-auto">
+                  {currentStageGroup.length === 0 ? (
+                    <p className="text-center text-xs text-slate-600 py-12">ยังไม่มีชุดขึ้นเวที</p>
+                  ) : (
+                    currentStageGroup.map((g) => (
+                      <div key={g.id} className="bg-slate-900 border-2 border-emerald-500/50 rounded-xl p-2.5 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs font-black text-emerald-400">#{g.badgeNumber}</span>
+                          <span className="text-xs font-bold text-white ml-2">{g.name}</span>
+                        </div>
+                        <span className="text-[10px] text-slate-400">{g.year}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ==================== TAB 3: จอ LED (แสดงรายชื่อทุกคนบนเวทีพร้อมกันเป็นเซต) ==================== */}
+        {activeTab === 'led' && (
+          <div className="max-w-6xl mx-auto space-y-6">
+            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-8 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
+              
+              <div className="text-center mb-8">
+                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
+                  <Sparkles className="w-4 h-4 animate-spin" /> พิธีวันเกียรติยศ SPU • กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+                </div>
+              </div>
+
+              {currentStageGroup.length > 0 ? (
+                /* Grid แสดงรายชื่อทุกคนที่ขึ้นเวทีพร้อมกันในเซตนี้ (เช่น 10-20 คน) */
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
+                  {currentStageGroup.map((g) => (
+                    <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
+                      <span className="inline-block px-3 py-0.5 bg-blue-600 text-white font-black text-sm rounded-xl">
+                        #{g.badgeNumber}
+                      </span>
+                      <h4 className="text-base sm:text-lg font-black text-white truncate">{g.name}</h4>
+                      <p className="text-xs font-mono text-blue-300">{g.studentId || '-'} • {g.year}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-20 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
+                    <Award className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-black text-white">พิธีมอบประดับบ่าเกียรติยศ SPU</h3>
+                  <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+                </div>
+              )}
+
+              {/* แถบแสดงคิวสแตนด์บายถัดไปด้านล่าง */}
+              <div className="mt-12 pt-6 border-t border-slate-800">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">
+                  คิวสแตนด์บายเตรียมขึ้นชุดถัดไป ({standbyQueue.length} คนรออยู่)
+                </h4>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {standbyQueue.slice(0, 10).map((g, idx) => (
+                    <div key={g.id} className="bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-1.5 text-center">
+                      <span className="text-xs font-black text-amber-400">#{g.badgeNumber}</span>
+                      <span className="text-xs text-white ml-1.5">{g.name}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* คอลัมน์ 3: ขึ้นเวที */}
-              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
-                <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
-                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
-                  <span className="px-2 py-0.5 bg-emerald-900/40 text-emerald-300 text-xs font-bold rounded-full">{currentStagePerson ? '1' : '0'} คน</span>
-                </div>
-                <div className="flex-1 flex flex-col items-center justify-center">
-                  {currentStagePerson ? (
-                    <div className="w-full bg-slate-900 border-2 border-emerald-500 rounded-2xl p-5 text-center space-y-3">
-                      <span className="inline-block px-3 py-1 bg-emerald-500 text-slate-950 text-sm font-black rounded-xl">#{currentStagePerson.badgeNumber}</span>
-                      <h4 className="text-xl font-black text-white">{currentStagePerson.name}</h4>
-                      <button onClick={() => handleMoveToCompleted(currentStagePerson)} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl">ลงเวทีแล้ว ✓</button>
-                    </div>
-                  ) : <p className="text-xs text-slate-600">ยังไม่มีคนขึ้นเวที</p>}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ==================== TAB 3: จอ LED ==================== */}
-        {activeTab === 'led' && (
-          <div className="max-w-4xl mx-auto space-y-6">
-            <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl p-8 sm:p-14 text-center shadow-2xl relative">
-              <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-bold mb-4">
-                <Sparkles className="w-3.5 h-3.5" /> กำลังขึ้นเวทีขณะนี้
-              </div>
-              {currentStagePerson ? (
-                <div className="space-y-4">
-                  <div className="text-5xl sm:text-7xl font-black text-blue-400">#{currentStagePerson.badgeNumber}</div>
-                  <h2 className="text-3xl sm:text-5xl font-black text-white">{currentStagePerson.name}</h2>
-                  <p className="text-base text-slate-400">{currentStagePerson.studentId || '-'} • {currentStagePerson.year}</p>
-                </div>
-              ) : <div className="py-12 text-slate-600 text-xl font-bold">รอการเรียกคิวขึ้นเวที</div>}
             </div>
           </div>
         )}
