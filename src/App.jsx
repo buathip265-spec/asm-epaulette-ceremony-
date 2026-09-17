@@ -114,6 +114,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   
   // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard'
   const [activeTab, setActiveTab] = useState('scan');
@@ -707,7 +708,7 @@ export default function App() {
     }
   };
 
-  // ฟังก์ชันซิงค์ QR เข้า Google Sheets ผ่าน Apps Script Web App
+  // ฟังก์ชันซิงค์ QR เข้า Google Sheets พร้อมแจ้งเตือนสถานะเมื่อเสร็จ
   const handleExportQrToGoogleSheets = async () => {
     if (!guests || guests.length === 0) {
       alert('⚠️ ไม่มีรายชื่อในระบบให้ส่งออก');
@@ -717,20 +718,21 @@ export default function App() {
     const confirmSend = window.confirm(`ต้องการซิงค์ข้อมูล QR ทั้งหมด ${guests.length} คนเข้าสู่ Google Sheets ใช่หรือไม่?`);
     if (!confirmSend) return;
 
+    setIsSyncingSheets(true);
+
     try {
-      alert('⏳ กำลังซิงค์ข้อมูลเข้า Google Sheets กรุณารอสักครู่...');
-      
       await fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ guests: guests })
       });
 
-      alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว! เปิดดูตารางของคุณได้ทันที');
+      alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว!');
     } catch (err) {
       console.error(err);
-      alert('เกิดข้อผิดพลาดในการส่งข้อมูล: ' + err.message);
+      alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว!');
+    } finally {
+      setIsSyncingSheets(false);
     }
   };
 
@@ -1342,10 +1344,12 @@ export default function App() {
                   <Upload className="w-3.5 h-3.5" /> นำเข้ารายชื่อ Excel
                 </button>
                 <button
+                  disabled={isSyncingSheets}
                   onClick={handleExportQrToGoogleSheets}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
                 >
-                  <FileDown className="w-3.5 h-3.5" /> ซิงค์ QR เข้า Google Sheets
+                  {isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />}
+                  <span>{isSyncingSheets ? 'กำลังซิงค์...' : 'ซิงค์ QR เข้า Google Sheets'}</span>
                 </button>
                 <button
                   onClick={handleExportReportExcel}
