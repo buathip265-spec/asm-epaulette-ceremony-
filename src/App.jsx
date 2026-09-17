@@ -159,6 +159,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // ปรับจูนความเร็วกล้อง (เพิ่ม FPS เป็น 20 และขยายพื้นที่สแกนจับภาพไวขึ้น)
   useEffect(() => {
     let isMounted = true;
     if (activeTab === 'scan') {
@@ -171,12 +172,16 @@ export default function App() {
             html5QrCodeRef.current = qrCode;
             qrCode.start(
               { facingMode: "environment" },
-              { fps: 10, qrbox: { width: 250, height: 250 } },
+              { 
+                fps: 20, // เพิ่มความถี่ในการจับภาพให้สูงขึ้น (สแกนติดไวขึ้น)
+                qrbox: { width: 280, height: 280 }, // ขยายกรอบสแกนให้กว้างขึ้น เล็งง่ายขึ้น
+                aspectRatio: 1.0
+              },
               (decodedText) => {
                 if (!isProcessingScanRef.current) {
                   isProcessingScanRef.current = true;
                   handleInspectQrCode(decodedText);
-                  setTimeout(() => { isProcessingScanRef.current = false; }, 2000);
+                  setTimeout(() => { isProcessingScanRef.current = false; }, 1200); // หน่วงเวลาสั้นลงเพื่อให้พร้อมสแกนคนต่อไปไวขึ้น
                 }
               },
               () => {}
@@ -189,7 +194,7 @@ export default function App() {
             if (isMounted) setIsCameraActive(false);
           }
         }
-      }, 300);
+      }, 200);
       return () => {
         isMounted = false;
         clearTimeout(timer);
@@ -239,7 +244,16 @@ export default function App() {
       setScannedPreviewGuest(found);
       setManualCodeInput('');
     } else {
-      alert(`❌ สแกนรหัส "${clean}" แล้วไม่พบข้อมูลในฐานข้อมูล`);
+      // ค้นหาแบบยืดหยุ่นสำรอง (Partial Match)
+      const partialFound = guests.find((g) => 
+        String(g.name || '').toLowerCase().includes(clean.toLowerCase()) ||
+        String(g.studentId || '').includes(clean)
+      );
+      if (partialFound) {
+        setScannedPreviewGuest(partialFound);
+      } else {
+        console.warn(`ไม่พบข้อมูล QR: ${clean}`);
+      }
     }
   };
 
@@ -336,7 +350,6 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  // ฟังก์ชันลบรายชื่อเดี่ยว
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -358,7 +371,6 @@ export default function App() {
     });
   };
 
-  // ฟังก์ชันเลือกทั้งหมดในหน้า
   const handleToggleSelectAll = () => {
     const pageIds = paginatedGuests.map((g) => g.id);
     const allSelected = pageIds.every((id) => selectedGuestIds.includes(id));
@@ -375,7 +387,6 @@ export default function App() {
     );
   };
 
-  // ฟังก์ชันลบรายชื่อที่เลือกทั้งหมด
   const handleDeleteSelectedGuests = () => {
     if (selectedGuestIds.length === 0) return;
     setConfirmModal({
@@ -405,7 +416,6 @@ export default function App() {
     });
   };
 
-  // บันทึกเพิ่ม/แก้ไขผู้เข้าร่วมรายบุคคล
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -824,7 +834,6 @@ export default function App() {
                 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
                 <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR Code</button>
                 
-                {/* ปุ่มเพิ่มผู้เข้าร่วมจากในระบบ */}
                 <button
                   onClick={() => {
                     setEditingGuest(null);
@@ -847,7 +856,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* ตารางแดชบอร์ด พร้อมช่องติ๊กเลือกทั้งหมดและปุ่มลบรายบุคคล */}
+            {/* ตารางแดชบอร์ด */}
             <div className="bg-slate-950 rounded-3xl border border-slate-800 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
