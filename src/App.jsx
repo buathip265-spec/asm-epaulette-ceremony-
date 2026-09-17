@@ -159,7 +159,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ระบบเปิด/ปิดกล้องแบบสมบูรณ์ ป้องกันกล้องค้าง
   useEffect(() => {
     let isMounted = true;
     if (activeTab === 'scan') {
@@ -217,7 +216,6 @@ export default function App() {
     if (!clean) return;
     
     let target = clean;
-    // แกะรหัส URL จาก QR Code อีเมลอย่างแม่นยำ
     if (clean.includes('?')) {
       try {
         const queryString = clean.split('?')[1];
@@ -230,7 +228,6 @@ export default function App() {
       try { target = clean.split('token=')[1].split('&')[0]; } catch (e) {}
     }
 
-    // ค้นหาเทียบใน Firebase ทุกมิติ (ทั้ง qrToken, studentId, badgeNumber)
     const found = guests.find((g) => 
       String(g.qrToken || '').trim() === String(target).trim() || 
       String(g.studentId || '').trim() === String(target).trim() || 
@@ -337,6 +334,115 @@ export default function App() {
       });
       await batch.commit();
     } catch (e) { console.error(e); }
+  };
+
+  // ฟังก์ชันลบรายชื่อเดี่ยว
+  const handleDeleteGuest = (guest) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'ยืนยันการลบผู้เข้าร่วม',
+      message: `คุณต้องการลบ "${guest.name}" ใช่หรือไม่?`,
+      confirmText: 'ลบข้อมูล',
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
+        setGuests((prev) => prev.filter((g) => g.id !== guest.id));
+        setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
+        try {
+          await deleteDoc(getGuestDocRef(guest.id));
+          alert('✅ ลบรายชื่อเรียบร้อยแล้ว');
+        } catch (e) {
+          alert('เกิดข้อผิดพลาดในการลบ: ' + e.message);
+        }
+        setConfirmModal((p) => ({ ...p, isOpen: false }));
+      }
+    });
+  };
+
+  // ฟังก์ชันเลือกทั้งหมดในหน้า
+  const handleToggleSelectAll = () => {
+    const pageIds = paginatedGuests.map((g) => g.id);
+    const allSelected = pageIds.every((id) => selectedGuestIds.includes(id));
+    if (allSelected) {
+      setSelectedGuestIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleToggleSelectGuest = (id) => {
+    setSelectedGuestIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // ฟังก์ชันลบรายชื่อที่เลือกทั้งหมด
+  const handleDeleteSelectedGuests = () => {
+    if (selectedGuestIds.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'ยืนยันการลบรายชื่อที่เลือก',
+      message: `คุณต้องการลบรายชื่อจำนวน ${selectedGuestIds.length} รายการใช่หรือไม่?`,
+      confirmText: `ลบ ${selectedGuestIds.length} รายชื่อ`,
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
+        const idsToDelete = [...selectedGuestIds];
+        setGuests((prev) => prev.filter((g) => !idsToDelete.includes(g.id)));
+        setSelectedGuestIds([]);
+        try {
+          for (let i = 0; i < idsToDelete.length; i += 400) {
+            const batch = writeBatch(db);
+            idsToDelete.slice(i, i + 400).forEach((id) => {
+              batch.delete(getGuestDocRef(id));
+            });
+            await batch.commit();
+          }
+          alert('✅ ลบรายชื่อที่เลือกเรียบร้อยแล้ว');
+        } catch (e) {
+          alert('เกิดข้อผิดพลาด: ' + e.message);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  // บันทึกเพิ่ม/แก้ไขผู้เข้าร่วมรายบุคคล
+  const handleSaveGuest = async (e) => {
+    e.preventDefault();
+    if (!formData.name.trim()) return;
+    const bNum = Number(formData.badgeNumber) || (guests.length + 1);
+    const calculatedYear = detectYearFromStudentId(formData.studentId);
+    const qrToken = formData.studentId.trim() || `K${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
+    if (editingGuest) {
+      await updateDoc(getGuestDocRef(editingGuest.id), {
+        name: formData.name.trim(),
+        studentId: formData.studentId.trim(),
+        year: calculatedYear,
+        email: formData.email.trim(),
+        role: formData.role,
+        note: formData.note.trim()
+      });
+    } else {
+      const newGuest = {
+        id: 'spu_' + Date.now(),
+        badgeNumber: bNum,
+        name: formData.name.trim(),
+        studentId: formData.studentId.trim(),
+        year: calculatedYear,
+        email: formData.email.trim(),
+        role: formData.role,
+        note: formData.note.trim(),
+        qrToken,
+        status: 'pending',
+        checkInTime: null,
+        prevStatus: null,
+        skipped: false,
+        standbyOrder: null
+      };
+      await setDoc(getGuestDocRef(newGuest.id), newGuest);
+    }
+    setIsEditModalOpen(false);
+    setEditingGuest(null);
   };
 
   const handleResetAllStatuses = async () => {
@@ -706,19 +812,58 @@ export default function App() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {selectedGuestIds.length > 0 && (
+                  <button
+                    onClick={handleDeleteSelectedGuests}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
+                  </button>
+                )}
                 <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" /> นำเข้า Excel</button>
                 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
                 <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR Code</button>
+                
+                {/* ปุ่มเพิ่มผู้เข้าร่วมจากในระบบ */}
+                <button
+                  onClick={() => {
+                    setEditingGuest(null);
+                    setFormData({
+                      badgeNumber: String((guests[guests.length - 1]?.badgeNumber || 0) + 1),
+                      studentId: '',
+                      name: '',
+                      email: '',
+                      role: 'ผู้เข้าร่วม',
+                      note: ''
+                    });
+                    setIsEditModalOpen(true);
+                  }}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                >
+                  <Plus className="w-3.5 h-3.5" /> เพิ่มผู้เข้าร่วม
+                </button>
+
                 <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
               </div>
             </div>
 
-            {/* ตารางแดชบอร์ด */}
+            {/* ตารางแดชบอร์ด พร้อมช่องติ๊กเลือกทั้งหมดและปุ่มลบรายบุคคล */}
             <div className="bg-slate-950 rounded-3xl border border-slate-800 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
                   <thead className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800">
                     <tr>
+                      <th className="p-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            paginatedGuests.length > 0 &&
+                            paginatedGuests.every((g) => selectedGuestIds.includes(g.id))
+                          }
+                          onChange={handleToggleSelectAll}
+                          className="rounded bg-slate-800 border-slate-700 text-blue-600 cursor-pointer"
+                        />
+                      </th>
                       <th className="p-3.5">ลำดับคิวเวที</th>
                       <th className="p-3.5">รหัสนักศึกษา</th>
                       <th className="p-3.5">ชื่อ-นามสกุล</th>
@@ -730,7 +875,15 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {paginatedGuests.map((g) => (
-                      <tr key={g.id} className="hover:bg-slate-900/50">
+                      <tr key={g.id} className={`hover:bg-slate-900/50 ${selectedGuestIds.includes(g.id) ? 'bg-blue-950/20' : ''}`}>
+                        <td className="p-3.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedGuestIds.includes(g.id)}
+                            onChange={() => handleToggleSelectGuest(g.id)}
+                            className="rounded bg-slate-800 border-slate-700 text-blue-600 cursor-pointer"
+                          />
+                        </td>
                         <td className="p-3.5 font-bold">
                           {g.badgeNumber && g.status !== 'no_item_ordered' && g.status !== 'late_receive_after' && g.status !== 'dress_violation_receive_after' ? (
                             <span className="text-blue-400">#{g.badgeNumber}</span>
@@ -753,7 +906,7 @@ export default function App() {
                         </td>
                         <td className="p-3.5 text-right space-x-2">
                           {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-amber-400 hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
-                          <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:underline"><Trash2 className="w-3.5 h-3.5 inline" /> ลบ</button>
+                          <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-slate-800 p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                         </td>
                       </tr>
                     ))}
@@ -766,7 +919,53 @@ export default function App() {
 
       </main>
 
-      {/* MODALS ต่างๆ */}
+      {/* MODAL เพิ่ม/แก้ไข รายบุคคล */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-base font-black text-white mb-4">เพิ่มผู้เข้าร่วมใหม่</h3>
+            <form onSubmit={handleSaveGuest} className="space-y-3.5 text-xs">
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">รหัสนักศึกษา</label>
+                <input
+                  type="text"
+                  value={formData.studentId}
+                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
+                  placeholder="เช่น 69014522"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">ชื่อ-นามสกุล *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
+                  placeholder="เช่น นายสมชาย ใจดี"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-slate-300 block mb-1">อีเมล</label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
+                  placeholder="name@spumail.net"
+                />
+              </div>
+              <div className="pt-3 border-t border-slate-800 flex gap-2">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 bg-slate-900 text-slate-400 font-bold rounded-xl">ยกเลิก</button>
+                <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl">บันทึก</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODALS อื่นๆ */}
       {isExcelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4">
@@ -814,6 +1013,19 @@ export default function App() {
             <div className="flex gap-2">
               <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-2 bg-slate-900 text-slate-400 rounded-xl text-xs font-bold">ยกเลิก</button>
               <button disabled={resetConfirmInput !== 'RESET'} onClick={handleResetAllStatuses} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-bold">รีเซ็ต</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-white">{confirmModal.title}</h3>
+            <p className="text-xs text-slate-400">{confirmModal.message}</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-slate-900 text-slate-400 rounded-xl text-xs font-bold">ยกเลิก</button>
+              <button onClick={confirmModal.onConfirm} className={`flex-1 py-2 text-white rounded-xl text-xs font-bold ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
             </div>
           </div>
         </div>
