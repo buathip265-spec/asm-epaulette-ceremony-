@@ -15,7 +15,6 @@ import {
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
 
-// Web App URL จาก Google Apps Script (หากต้องการระบบส่งอีเมลพร้อม QR อัตโนมัติหลังนำเข้า Excel)
 const GOOGLE_APPS_SCRIPT_URL = ""; 
 
 const CUSTOM_FIREBASE_CONFIG = {
@@ -28,7 +27,6 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// ใช้ชื่อ Collection ให้ตรงกันทั้งระบบ
 const COLLECTION_NAME = 'spu_guests';
 
 // คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
@@ -44,7 +42,7 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
-// ตรวจจับกรณีสั่งของไม่ทัน / ไม่ได้รับของ / จ่ายช้า (กรณีเดียวกัน)
+// ตรวจจับกรณีสั่งของไม่ทัน / ไม่ได้รับของ / จ่ายช้า
 const checkIsItemNotReady = (guest) => {
   if (!guest) return false;
   const text = `${guest.note || ''} ${guest.itemStatus || ''}`.toLowerCase();
@@ -82,7 +80,7 @@ const getGenderOrderWeight = (fullName) => {
   return 2;
 };
 
-// 3. ตัดคำนำหน้า เพื่อนำชื่อจริงไปเปรียบเทียบ ก-ฮ
+// 3. ตัดคำนำหน้า เพื่อนำชื่อจริงไปเรียง ก-ฮ
 const getSortableCleanName = (fullName) => {
   if (!fullName) return '';
   return fullName
@@ -90,7 +88,7 @@ const getSortableCleanName = (fullName) => {
     .trim();
 };
 
-// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> พยัญชนะ ก-ฮ
+// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
 const sortGuestsByCustomCriteria = (list) => {
   return [...list].sort((a, b) => {
     const yearA = getYearOrderWeight(a.year);
@@ -152,7 +150,7 @@ export default function App() {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [importMode, setImportMode] = useState('append');
-  const [importSummary, setImportSummary] = useState({ total: 0, valid: 0, errors: 0, duplicates: 0 });
+  const [importSummary, setImportSummary] = useState({ total: 0, valid: 0, errors: 0 });
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
@@ -178,7 +176,6 @@ export default function App() {
     const unsubscribe = onSnapshot(
       guestsColRef,
       (snapshot) => {
-        // แก้ไข: ถ้าลบจนฐานข้อมูลว่าง ให้เคลียร์หน้าจอเป็น 0 คนทันที ไม่แทรกข้อมูลเก่ากลับเข้ามา
         if (snapshot.empty) {
           setGuests([]);
           setIsDataLoaded(true);
@@ -331,7 +328,6 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
-  // ตัดสิทธิ์จากหน้าคิวเวที
   const handleDisqualifyFromQueue = async (guest, newStatus, reasonText) => {
     setConfirmModal({
       isOpen: true,
@@ -467,13 +463,7 @@ export default function App() {
     e.preventDefault();
     if (!formData.name.trim()) return;
 
-    const bNum = Number(formData.badgeNumber);
-    const isDuplicate = guests.some((g) => Number(g.badgeNumber) === bNum && (!editingGuest || g.id !== editingGuest.id));
-    if (isDuplicate) {
-      alert(`⚠️ เลขลำดับป้าย #${bNum} มีอยู่ในระบบแล้ว กรุณาใช้เลขอื่น`);
-      return;
-    }
-
+    const bNum = Number(formData.badgeNumber) || (guests.length + 1);
     const calculatedYear = detectYearFromStudentId(formData.studentId);
     const qrToken = formData.studentId.trim() || `K${Math.random().toString(36).substring(2, 6).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
@@ -518,7 +508,6 @@ export default function App() {
     setEditingGuest(null);
   };
 
-  // ลบรายชื่อเดี่ยว: หายทันทีบนจอ (Optimistic UI) + ลบบน Firestore
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -558,7 +547,6 @@ export default function App() {
     }
   };
 
-  // ลบหลายรายการพร้อมกัน: หายทันทีบนจอ (Optimistic UI) + ลบบน Firestore
   const handleDeleteSelectedGuests = () => {
     if (selectedGuestIds.length === 0) return;
 
@@ -592,10 +580,16 @@ export default function App() {
     });
   };
 
+  // =========================================================================
+  // ฟังก์ชันอัปโหลด Excel ใหม่: ไม่ต้องมีคอลัมน์ลำดับ + ดึงคำนำหน้า+ชื่ออัตโนมัติ
+  // =========================================================================
   const handleExcelUpload = (e) => {
     const file = e.target.files?.[0];
     const excelLib = window.XLSX || XLSX;
-    if (!file || !excelLib) return;
+    if (!file || !excelLib) {
+      setImportError('กำลังโหลดโมดูลอ่านไฟล์ Excel กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
 
     setImportError('');
     const reader = new FileReader();
@@ -607,49 +601,51 @@ export default function App() {
         const raw = excelLib.utils.sheet_to_json(sheet, { defval: '' });
 
         if (raw.length === 0) {
-          setImportError('ไม่พบข้อมูลในไฟล์ Excel');
+          setImportError('ไม่พบข้อมูลในไฟล์ Excel ที่เลือก');
+          setExcelPreviewData([]);
           return;
         }
 
         let validCount = 0;
         let errCount = 0;
-        let dupCount = 0;
-        const seenBadges = new Set(guests.map((g) => Number(g.badgeNumber)));
 
         const parsed = raw.map((row, idx) => {
           const keys = Object.keys(row);
           const find = (arr) => {
-            const k = keys.find((key) => arr.some((h) => key.toLowerCase().includes(h.toLowerCase())));
+            const k = keys.find((key) => 
+              arr.some((h) => key.toLowerCase().replace(/[\s\-_]/g, '').includes(h.toLowerCase().replace(/[\s\-_]/g, '')))
+            );
             return k ? String(row[k]).trim() : '';
           };
 
-          const badge = parseInt(find(['ลำดับ', 'badge', 'no']), 10);
-          const studentId = find(['รหัสนักศึกษา', 'student_id', 'id']);
-          const name = find(['ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'name']);
-          const email = find(['อีเมล', 'email']);
+          const prefix = find(['คำนำหน้า', 'คำนำหน้านาม', 'title', 'prefix']);
+          const rawName = find(['ชื่อ-นามสกุล', 'ชื่อ นามสกุล', 'ชื่อสกุล', 'ชื่อ', 'name', 'fullname']);
+          const studentId = find(['รหัสนักศึกษา', 'student_id', 'student', 'รหัสประจำตัว', 'รหัส']);
+          const email = find(['อีเมล', 'email', 'mail']) || (studentId ? `${studentId}@spumail.net` : `user${idx + 1}@spumail.net`);
           const roleRaw = find(['ประเภท', 'role']);
-          const note = find(['หมายเหตุ', 'note', 'สถานะของ', 'การรับของ']);
+          const note = find(['หมายเหตุ', 'note', 'สถานะของ', 'การรับของ', 'remark', 'ความประสงค์']);
+
+          // ประกอบคำนำหน้ากับชื่อเข้าด้วยกันถ้าแยกคอลัมน์มา
+          let fullName = rawName;
+          if (prefix && !rawName.startsWith(prefix)) {
+            fullName = `${prefix} ${rawName}`.trim();
+          }
 
           const role = roleRaw.includes('สตาฟ') ? 'สตาฟ' : 'ผู้เข้าร่วม';
           const year = detectYearFromStudentId(studentId);
 
-          if (!badge || !name || !email) {
+          // ขอแค่มีชื่อ ก็สามารถนำเข้าได้
+          if (!fullName) {
             errCount++;
             return null;
-          }
-
-          if (seenBadges.has(badge)) {
-            dupCount++;
-          } else {
-            seenBadges.add(badge);
           }
 
           validCount++;
           return {
             id: 'imp_' + Date.now() + '_' + idx,
-            badgeNumber: badge,
+            badgeNumber: 0, // ให้ระบบไปรันเลขใหม่หลังจัดเรียง
             studentId,
-            name,
+            name: fullName,
             email,
             role,
             year,
@@ -663,15 +659,21 @@ export default function App() {
           };
         }).filter(Boolean);
 
-        setImportSummary({ total: raw.length, valid: validCount, errors: errCount, duplicates: dupCount });
+        setImportSummary({ total: raw.length, valid: validCount, errors: errCount });
         setExcelPreviewData(parsed);
+
+        if (parsed.length === 0) {
+          setImportError('ระบบไม่พบคอลัมน์ "ชื่อ" หรือ "ชื่อ-นามสกุล" ในไฟล์');
+        }
       } catch (err) {
-        setImportError('ไม่สามารถประมวลผลไฟล์ได้: ' + err.message);
+        console.error(err);
+        setImportError('ไม่สามารถอ่านไฟล์ได้: ' + err.message);
       }
     };
     reader.readAsBinaryString(file);
   };
 
+  // กดยืนยันนำเข้า: เรียงตามเกณฑ์อัตโนมัติ และรันเลข Badge ให้ใหม่ทันที
   const handleConfirmImport = async () => {
     if (excelPreviewData.length === 0) return;
     setIsImporting(true);
@@ -687,11 +689,23 @@ export default function App() {
         }
       }
 
-      const sortedImport = sortGuestsByCustomCriteria(excelPreviewData);
+      // รวมรายชื่อเดิมเข้ากับรายชื่อใหม่ (กรณี append)
+      const baseList = importMode === 'replace' ? [] : [...guests];
+      const combined = [...baseList, ...excelPreviewData];
 
-      for (let i = 0; i < sortedImport.length; i += 400) {
+      // จัดเรียงตามเกณฑ์: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
+      const sortedCombined = sortGuestsByCustomCriteria(combined);
+
+      // รันเลขลำดับ Badge ใหม่ตั้งแต่ 1 ถึง N
+      const finalizedList = sortedCombined.map((item, index) => ({
+        ...item,
+        badgeNumber: index + 1
+      }));
+
+      // บันทึกลง Firestore
+      for (let i = 0; i < finalizedList.length; i += 400) {
         const b = writeBatch(db);
-        sortedImport.slice(i, i + 400).forEach((g) => b.set(doc(colRef, g.id), g));
+        finalizedList.slice(i, i + 400).forEach((g) => b.set(doc(colRef, g.id), g));
         await b.commit();
       }
 
@@ -703,12 +717,12 @@ export default function App() {
           method: "POST",
           mode: "no-cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ guests: sortedImport })
+          body: JSON.stringify({ guests: finalizedList })
         }).catch((err) => console.warn("Auto-mail error:", err));
 
-        alert(`✅ นำเข้ารายชื่อ ${sortedImport.length} คนสำเร็จ และระบบได้สั่งส่งเมล QR ให้อัตโนมัติแล้ว`);
+        alert(`✅ นำเข้ารายชื่อสำเร็จ ${finalizedList.length} รายการ (จัดเรียงตามเกณฑ์และรันเลขป้ายใหม่เรียบร้อย)`);
       } else {
-        alert(`✅ นำเข้ารายชื่อ ${sortedImport.length} คนสำเร็จ (จัดเรียง ปี 1-4, หญิงก่อนชาย และ ก-ฮ ให้อัตโนมัติ)`);
+        alert(`✅ นำเข้ารายชื่อสำเร็จ ${finalizedList.length} รายการ (จัดเรียง ปี 1-4, หญิงก่อนชาย, ก-ฮ และรันเลขป้ายใหม่ให้อัตโนมัติ)`);
       }
     } catch (e) {
       setImportError('บันทึกข้อมูลไม่สำเร็จ: ' + e.message);
@@ -739,7 +753,7 @@ export default function App() {
         'ประเภท': g.role,
         'รหัสเช็กชื่อ (QR Token)': g.qrToken,
         'หมายเหตุ': g.note || '',
-        'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(g.qrToken)}`
+        'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=jpg&data=${encodeURIComponent(g.qrToken)}`
       }));
 
       const ws = excelLib.utils.json_to_sheet(rows);
@@ -824,10 +838,8 @@ export default function App() {
     return { total, pending, checkedIn, noItemOrdered, late, dressViolation, standby, onStage, completed, skipped };
   }, [guests]);
 
-  // คิวพร้อมเรียก: เฉพาะคนที่เช็กชื่อแล้ว และมีสิทธิ์ขึ้นรับบ่าบนเวที
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
 
-  // คิวสแตนด์บาย: เรียงตามลำดับที่สตาฟกดจริง[span_9](start_span)[span_9](end_span)[span_10](start_span)[span_10](end_span)
   const standbyQueue = useMemo(() => {
     return guests
       .filter((g) => g.status === 'standby' && !g.skipped)
@@ -940,7 +952,7 @@ export default function App() {
             )}
           </div>
           <div className="text-[11px] text-slate-400 font-medium">
-            เกณฑ์: ปี 1-4 → หญิงก่อนชาย → พยัญชนะ ก-ฮ
+            เกณฑ์: ปี 1-4 → หญิงก่อนชาย → พยัญชนะ ก-ฮ (รันเลขป้ายให้อัตโนมัติ)
           </div>
         </div>
       </div>
@@ -955,7 +967,7 @@ export default function App() {
                 <ScanLine className="w-5 h-5 text-blue-500" /> สแกน QR เช็กชื่อผู้เข้าร่วม
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                ตรวจพบกรณีสั่งของไม่ทัน/จ่ายช้าอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / ผิดระเบียบ[span_11](start_span)[span_11](end_span)
+                ตรวจพบกรณีสั่งของไม่ทัน/จ่ายช้าอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / ผิดระเบียบ[span_9](start_span)[span_9](end_span)
               </p>
 
               <div className="mt-4 bg-black rounded-2xl overflow-hidden border-2 border-slate-800 relative min-h-[260px] flex items-center justify-center">
@@ -1084,7 +1096,7 @@ export default function App() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               
-              {/* คอลัมน์ 1: พร้อมเรียกคิว (เฉพาะคนที่พร้อมขึ้นรับบ่า) */}
+              {/* คอลัมน์ 1: พร้อมเรียกคิว */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1148,7 +1160,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 2: แสตนบาย[span_12](start_span)[span_12](end_span)[span_13](start_span)[span_13](end_span) */}
+              {/* คอลัมน์ 2: แสตนบาย[span_10](start_span)[span_10](end_span)[span_11](start_span)[span_11](end_span) */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1201,7 +1213,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 3: ขึ้นเวที[span_14](start_span)[span_14](end_span) */}
+              {/* คอลัมน์ 3: ขึ้นเวที[span_12](start_span)[span_12](end_span) */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1614,15 +1626,14 @@ export default function App() {
             </h3>
             <form onSubmit={handleSaveGuest} className="space-y-3.5 text-xs">
               <div>
-                <label className="font-bold text-slate-300 block mb-1">เลขลำดับ (Badge) *</label>
+                <label className="font-bold text-slate-300 block mb-1">เลขลำดับ (Badge)</label>
                 <input
                   type="number"
-                  required
                   disabled={!!editingGuest}
                   value={formData.badgeNumber}
                   onChange={(e) => setFormData({ ...formData, badgeNumber: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none disabled:opacity-50"
-                  placeholder="เช่น 1, 2, 3"
+                  placeholder="ว่างไว้ได้ (ระบบจัดเรียงให้อัตโนมัติ)"
                 />
               </div>
               <div>
@@ -1647,10 +1658,9 @@ export default function App() {
                 />
               </div>
               <div>
-                <label className="font-bold text-slate-300 block mb-1">อีเมล *</label>
+                <label className="font-bold text-slate-300 block mb-1">อีเมล</label>
                 <input
                   type="email"
-                  required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
@@ -1669,7 +1679,7 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'สั่งของไม่ทัน' หรือ 'จ่ายช้า' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
+                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'สั่งของไม่ทัน' เพื่อตัดสิทธิ์เวทีอัตโนมัติ)</label>
                 <input
                   type="text"
                   value={formData.note}
@@ -1735,8 +1745,10 @@ export default function App() {
 
             <div className="border-2 border-dashed border-slate-800 rounded-2xl p-6 text-center">
               <Upload className="w-8 h-8 text-slate-500 mx-auto mb-2" />
-              <p className="text-xs text-slate-300 font-bold">เลือกไฟล์ Excel (.xlsx, .xls, .csv)</p>
-              <p className="text-[10px] text-slate-500 mt-1">คอลัมน์: ลำดับ, รหัสนักศึกษา, ชื่อ-นามสกุล, อีเมล, ประเภท, หมายเหตุ</p>
+              <p className="text-xs text-slate-300 font-bold">เลือกไฟล์ Excel / Forms (.xlsx, .xls, .csv)</p>
+              <p className="text-[10px] text-slate-500 mt-1">
+                ไม่ต้องมีคอลัมน์ลำดับ • ระบบรวม "คำนำหน้า" กับ "ชื่อ-นามสกุล" และจัดเรียงให้เองอัตโนมัติ
+              </p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -1747,7 +1759,7 @@ export default function App() {
             </div>
 
             {excelPreviewData.length > 0 && (
-              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
                   <span className="block text-slate-500 text-[10px]">พบทั้งหมด</span>
                   <span className="font-bold text-white">{importSummary.total}</span>
@@ -1757,12 +1769,8 @@ export default function App() {
                   <span className="font-bold text-emerald-400">{importSummary.valid}</span>
                 </div>
                 <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
-                  <span className="block text-red-400 text-[10px]">ไม่ถูกต้อง</span>
+                  <span className="block text-red-400 text-[10px]">ไม่มีชื่อ</span>
                   <span className="font-bold text-red-400">{importSummary.errors}</span>
-                </div>
-                <div className="bg-slate-900 p-2.5 rounded-xl border border-slate-800">
-                  <span className="block text-amber-400 text-[10px]">ลำดับซ้ำ</span>
-                  <span className="font-bold text-amber-400">{importSummary.duplicates}</span>
                 </div>
               </div>
             )}
@@ -1803,7 +1811,7 @@ export default function App() {
             </div>
             <h3 className="text-base font-black text-white">รีเซ็ตสถานะทั้งหมด (สำหรับซ้อม)</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ[span_15](start_span)[span_15](end_span)
+              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ[span_13](start_span)[span_13](end_span)
             </p>
             <div className="pt-2 text-left">
               <label className="text-[11px] text-slate-300 block mb-1">พิมพ์คำว่า <strong>RESET</strong> เพื่อยืนยัน:</label>
