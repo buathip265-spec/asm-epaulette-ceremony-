@@ -106,7 +106,6 @@ export default function App() {
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   
-  // ใช้เก็บสถานะการสแกนเพื่อป้องกันกล้องสแกนซ้ำรัวๆ จนค้าง
   const isProcessingScanRef = useRef(false);
   const html5QrCodeRef = useRef(null);
 
@@ -160,7 +159,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ระบบจัดการเปิด/ปิดกล้องแบบเสถียร ป้องกันการค้าง
+  // ระบบเปิด/ปิดกล้องแบบสมบูรณ์ ป้องกันกล้องค้าง
   useEffect(() => {
     let isMounted = true;
     if (activeTab === 'scan') {
@@ -178,7 +177,7 @@ export default function App() {
                 if (!isProcessingScanRef.current) {
                   isProcessingScanRef.current = true;
                   handleInspectQrCode(decodedText);
-                  setTimeout(() => { isProcessingScanRef.current = false; }, 2000); // หน่วงเวลา 2 วินาทีก่อนสแกนต่อ
+                  setTimeout(() => { isProcessingScanRef.current = false; }, 2000);
                 }
               },
               () => {}
@@ -191,7 +190,7 @@ export default function App() {
             if (isMounted) setIsCameraActive(false);
           }
         }
-      }, 400);
+      }, 300);
       return () => {
         isMounted = false;
         clearTimeout(timer);
@@ -218,32 +217,32 @@ export default function App() {
     if (!clean) return;
     
     let target = clean;
-    // แกะรหัส Token จากลิงก์ Apps Script ที่แนบไปในอีเมล
-    if (clean.includes('token=')) {
+    // แกะรหัส URL จาก QR Code อีเมลอย่างแม่นยำ
+    if (clean.includes('?')) {
       try {
-        target = clean.split('token=')[1].split('&')[0];
-      } catch (e) { target = clean; }
-    } else if (clean.includes('?')) {
-      try {
-        const urlParams = new URLSearchParams(clean.split('?')[1]);
+        const queryString = clean.split('?')[1];
+        const urlParams = new URLSearchParams(queryString);
         if (urlParams.get('token')) target = urlParams.get('token');
         else if (urlParams.get('id')) target = urlParams.get('id');
+        else if (urlParams.get('badge')) target = urlParams.get('badge');
       } catch (e) { target = clean; }
+    } else if (clean.includes('token=')) {
+      try { target = clean.split('token=')[1].split('&')[0]; } catch (e) {}
     }
 
-    // ค้นหาเทียบกับ qrToken, studentId หรือ badgeNumber อย่างแม่นยำ
+    // ค้นหาเทียบใน Firebase ทุกมิติ (ทั้ง qrToken, studentId, badgeNumber)
     const found = guests.find((g) => 
-      String(g.qrToken).trim() === String(target).trim() || 
-      String(g.studentId).trim() === String(target).trim() || 
-      String(g.badgeNumber) === String(target).replace('#', '').trim()
+      String(g.qrToken || '').trim() === String(target).trim() || 
+      String(g.studentId || '').trim() === String(target).trim() || 
+      String(g.badgeNumber || '') === String(target).replace('#', '').trim() ||
+      String(g.studentId || '').trim() === String(clean).trim()
     );
 
     if (found) {
       setScannedPreviewGuest(found);
       setManualCodeInput('');
     } else {
-      // หากสแกนแล้วไม่เจอ ให้แจ้งเตือนเบาๆ โดยไม่ทำให้กล้องค้าง
-      console.warn(`ไม่พบข้อมูล QR: ${clean} (Target: ${target})`);
+      alert(`❌ สแกนรหัส "${clean}" แล้วไม่พบข้อมูลในฐานข้อมูล`);
     }
   };
 
