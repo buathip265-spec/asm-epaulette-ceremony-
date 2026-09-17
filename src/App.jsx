@@ -25,7 +25,7 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -56,17 +56,17 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลักตามคู่มือ: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
+  // 4 แท็บหลักตามคู่มือ: 'scan' | 'queue' | 'led' | 'dashboard'
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
-  // สแกน QR[span_3](start_span)[span_3](end_span)
+  // สแกน QR
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   const html5QrCodeRef = useRef(null);
 
-  // แดชบอร์ด & ตัวกรอง[span_4](start_span)[span_4](end_span)
+  // แดชบอร์ด & ตัวกรอง
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
@@ -74,7 +74,10 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // เพิ่ม / แก้ไข[span_5](start_span)[span_5](end_span)
+  // รายการที่เลือกสำหรับลบแบบกลุ่ม
+  const [selectedGuestIds, setSelectedGuestIds] = useState([]);
+
+  // เพิ่ม / แก้ไข
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
   const [formData, setFormData] = useState({
@@ -86,7 +89,7 @@ export default function App() {
     note: ''
   });
 
-  // นำเข้า Excel[span_6](start_span)[span_6](end_span)
+  // นำเข้า Excel
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [importMode, setImportMode] = useState('append');
@@ -95,7 +98,7 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // รีเซ็ตสถานะทั้งหมด[span_7](start_span)[span_7](end_span)
+  // รีเซ็ตสถานะทั้งหมด
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -151,7 +154,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ควบคุมกล้องสแกน QR[span_8](start_span)[span_8](end_span)
+  // ควบคุมกล้องสแกน QR
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
@@ -197,7 +200,7 @@ export default function App() {
 
   const getGuestDocRef = (id) => doc(db, 'spu_guests', id);
 
-  // ค้นหาข้อมูลก่อนยืนยันเช็คชื่อ[span_9](start_span)[span_9](end_span)
+  // สแกนเพื่อขึ้นการ์ดตรวจสอบ
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
     if (!clean) return;
@@ -221,7 +224,7 @@ export default function App() {
     }
   };
 
-  // ยืนยันเช็คชื่อ (เขียนลงระบบจริง)[span_10](start_span)[span_10](end_span)
+  // ยืนยันเช็กชื่อ
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -245,7 +248,7 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
-  // ย้ายเข้าสแตนด์บาย[span_11](start_span)[span_11](end_span)
+  // ย้ายเข้าสแตนด์บาย
   const handleMoveToStandby = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -259,7 +262,7 @@ export default function App() {
     }
   };
 
-  // ส่งขึ้นเวที (คนเก่าลงเวทีอัตโนมัติ)[span_12](start_span)[span_12](end_span)[span_13](start_span)[span_13](end_span)
+  // ส่งขึ้นเวที
   const handleMoveToOnStage = async (guest) => {
     try {
       const batch = writeBatch(db);
@@ -281,7 +284,7 @@ export default function App() {
     }
   };
 
-  // ลงเวทีแล้ว[span_14](start_span)[span_14](end_span)
+  // จบขั้นตอนลงเวทีแล้ว
   const handleMoveToCompleted = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -293,7 +296,7 @@ export default function App() {
     }
   };
 
-  // ข้ามคิว / ยกเลิกข้ามคิว[span_15](start_span)[span_15](end_span)
+  // ข้ามคิว / ยกเลิกข้ามคิว
   const handleToggleSkip = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -304,7 +307,7 @@ export default function App() {
     }
   };
 
-  // ย้อนสถานะ 1 ขั้น[span_16](start_span)[span_16](end_span)
+  // ย้อนสถานะ 1 ขั้น
   const handleUndoStatus = async (guest) => {
     if (!guest.prevStatus) {
       alert('ไม่มีสถานะก่อนหน้าให้ย้อนกลับ');
@@ -332,7 +335,7 @@ export default function App() {
     });
   };
 
-  // รีเซ็ตสถานะทั้งหมด[span_17](start_span)[span_17](end_span)
+  // รีเซ็ตสถานะทั้งหมด
   const handleResetAllStatuses = async () => {
     if (resetConfirmInput !== 'RESET') {
       alert('กรุณาพิมพ์ RESET ให้ถูกต้องเพื่อยืนยัน');
@@ -359,7 +362,7 @@ export default function App() {
     }
   };
 
-  // บันทึกเพิ่ม/แก้ไข[span_18](start_span)[span_18](end_span)
+  // บันทึกเพิ่ม/แก้ไข
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -415,7 +418,7 @@ export default function App() {
     setEditingGuest(null);
   };
 
-  // ลบรายชื่อ[span_19](start_span)[span_19](end_span)
+  // ลบรายชื่อเดี่ยว
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -426,6 +429,7 @@ export default function App() {
       onConfirm: async () => {
         try {
           await deleteDoc(getGuestDocRef(guest.id));
+          setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
         } catch (e) {
           console.error(e);
         }
@@ -434,7 +438,56 @@ export default function App() {
     });
   };
 
-  // ประมวลผลไฟล์ Excel[span_20](start_span)[span_20](end_span)
+  // สลับเลือก/ไม่เลือกทีละคน
+  const handleToggleSelectGuest = (id) => {
+    setSelectedGuestIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // เลือกทั้งหมดในหน้าที่กำลังแสดง
+  const handleToggleSelectAll = () => {
+    const pageIds = paginatedGuests.map((g) => g.id);
+    const allSelected = pageIds.every((id) => selectedGuestIds.includes(id));
+
+    if (allSelected) {
+      setSelectedGuestIds((prev) => prev.filter((id) => !pageIds.includes(id)));
+    } else {
+      setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  // ลบรายชื่อที่เลือกพร้อมกัน (Bulk Delete)
+  const handleDeleteSelectedGuests = () => {
+    if (selectedGuestIds.length === 0) return;
+
+    setConfirmModal({
+      isOpen: true,
+      title: 'ยืนยันการลบรายชื่อที่เลือก',
+      message: `คุณต้องการลบรายชื่อจำนวน ${selectedGuestIds.length} รายการออกจากระบบใช่หรือไม่? ข้อมูลและรหัส QR จะถูกลบถาวร`,
+      confirmText: `ลบ ${selectedGuestIds.length} รายชื่อ`,
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
+        try {
+          for (let i = 0; i < selectedGuestIds.length; i += 400) {
+            const batch = writeBatch(db);
+            selectedGuestIds.slice(i, i + 400).forEach((id) => {
+              batch.delete(getGuestDocRef(id));
+            });
+            await batch.commit();
+          }
+          setSelectedGuestIds([]);
+          alert('✅ ลบรายชื่อที่เลือกเรียบร้อยแล้ว');
+        } catch (e) {
+          console.error("Batch delete error:", e);
+          alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + e.message);
+        }
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  // ประมวลผลไฟล์ Excel
   const handleExcelUpload = (e) => {
     const file = e.target.files?.[0];
     const excelLib = window.XLSX || XLSX;
@@ -515,7 +568,7 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // ยืนยันนำเข้า Excel[span_21](start_span)[span_21](end_span)
+  // ยืนยันนำเข้า Excel
   const handleConfirmImport = async () => {
     if (excelPreviewData.length === 0) return;
     setIsImporting(true);
@@ -547,7 +600,7 @@ export default function App() {
     }
   };
 
-  // ส่งออก QR สำหรับส่งอีเมล (แก้ไขสมบูรณ์)[span_22](start_span)[span_22](end_span)
+  // ส่งออก QR สำหรับส่งอีเมล
   const handleExportQrExcel = () => {
     const excelLib = window.XLSX || XLSX;
     if (!excelLib || !excelLib.utils) {
@@ -582,7 +635,7 @@ export default function App() {
     }
   };
 
-  // ส่งออกรายงานสรุป[span_23](start_span)[span_23](end_span)
+  // ส่งออกรายงานสรุป
   const handleExportReportExcel = () => {
     const excelLib = window.XLSX || XLSX;
     if (!excelLib || !excelLib.utils) {
@@ -1096,6 +1149,14 @@ export default function App() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {selectedGuestIds.length > 0 && (
+                  <button
+                    onClick={handleDeleteSelectedGuests}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md animate-in fade-in"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
+                  </button>
+                )}
                 <button
                   onClick={() => setIsExcelModalOpen(true)}
                   className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5"
@@ -1197,6 +1258,17 @@ export default function App() {
                 <table className="w-full text-left text-xs whitespace-nowrap">
                   <thead className="bg-slate-900/80 text-slate-400 font-bold border-b border-slate-800">
                     <tr>
+                      <th className="p-3.5 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            paginatedGuests.length > 0 &&
+                            paginatedGuests.every((g) => selectedGuestIds.includes(g.id))
+                          }
+                          onChange={handleToggleSelectAll}
+                          className="rounded bg-slate-800 border-slate-700 text-blue-600 cursor-pointer"
+                        />
+                      </th>
                       <th className="p-3.5">ลำดับ</th>
                       <th className="p-3.5">รหัสนักศึกษา</th>
                       <th className="p-3.5">ชื่อ-นามสกุล</th>
@@ -1209,7 +1281,15 @@ export default function App() {
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {paginatedGuests.map((g) => (
-                      <tr key={g.id} className="hover:bg-slate-900/50 transition-colors">
+                      <tr key={g.id} className={`hover:bg-slate-900/50 transition-colors ${selectedGuestIds.includes(g.id) ? 'bg-blue-950/20' : ''}`}>
+                        <td className="p-3.5 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedGuestIds.includes(g.id)}
+                            onChange={() => handleToggleSelectGuest(g.id)}
+                            className="rounded bg-slate-800 border-slate-700 text-blue-600 cursor-pointer"
+                          />
+                        </td>
                         <td className="p-3.5 font-bold text-blue-400">#{g.badgeNumber}</td>
                         <td className="p-3.5 font-mono">{g.studentId || '-'}</td>
                         <td className="p-3.5 font-bold text-white">
@@ -1264,6 +1344,7 @@ export default function App() {
                           <button
                             onClick={() => handleDeleteGuest(g)}
                             className="p-1.5 text-red-400 hover:text-red-300 hover:bg-slate-800 rounded-lg"
+                            title="ลบรายชื่อนี้"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
