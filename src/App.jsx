@@ -15,7 +15,8 @@ import {
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
 
-const GOOGLE_APPS_SCRIPT_URL = ""; 
+// เชื่อมต่อ Google Apps Script Web App URL สำหรับซิงค์ QR เข้า Google Sheets
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwdCucN15exfJzY30fpQJ0Uawom3e39uRA8mvMwqWv7Yi0oJydoESRQJ6Q8UxSKOookYg/exec"; 
 
 const CUSTOM_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBj539S9o8t92HzmPqQ6PiCLKCdHFswRNA",
@@ -29,7 +30,7 @@ const CUSTOM_FIREBASE_CONFIG = {
 
 const COLLECTION_NAME = 'spu_guests';
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -88,7 +89,7 @@ const getSortableCleanName = (fullName) => {
     .trim();
 };
 
-// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
+// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> พยัญชนะ ก-ฮ
 const sortGuestsByCustomCriteria = (list) => {
   return [...list].sort((a, b) => {
     const yearA = getYearOrderWeight(a.year);
@@ -114,17 +115,17 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
+  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard'
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
-  // สแกน QR[span_3](start_span)[span_3](end_span)
+  // สแกน QR
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   const html5QrCodeRef = useRef(null);
 
-  // แดชบอร์ด & ตัวกรอง[span_4](start_span)[span_4](end_span)
+  // แดชบอร์ด & ตัวกรอง
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
@@ -134,7 +135,7 @@ export default function App() {
 
   const [selectedGuestIds, setSelectedGuestIds] = useState([]);
 
-  // เพิ่ม / แก้ไข[span_5](start_span)[span_5](end_span)
+  // เพิ่ม / แก้ไข
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
   const [formData, setFormData] = useState({
@@ -146,7 +147,7 @@ export default function App() {
     note: ''
   });
 
-  // นำเข้า Excel[span_6](start_span)[span_6](end_span)
+  // นำเข้า Excel
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [importMode, setImportMode] = useState('append');
@@ -155,7 +156,7 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // รีเซ็ตสถานะ[span_7](start_span)[span_7](end_span)
+  // รีเซ็ตสถานะ
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -203,7 +204,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // เปิด-ปิด กล้องสแกน QR[span_8](start_span)[span_8](end_span)
+  // เปิด-ปิด กล้องสแกน QR
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
@@ -270,7 +271,6 @@ export default function App() {
     }
   };
 
-  // 1. เช็กชื่อปกติ หรือ ตรวจพบสั่งของไม่ทัน/จ่ายช้า (ตัดสิทธิ์เวทีอัตโนมัติ)
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -302,7 +302,6 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
-  // 2. เช็กชื่อและตัดสิทธิ์: มาสาย หรือ แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที แต่มีสิทธิ์รับของหลังจบงาน)
   const handleCheckInWithDisqualify = async (guest, reasonStatus) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -580,9 +579,6 @@ export default function App() {
     });
   };
 
-  // =========================================================================
-  // ฟังก์ชันอัปโหลด Excel ใหม่: ไม่ต้องมีคอลัมน์ลำดับ + ดึงคำนำหน้า+ชื่ออัตโนมัติ
-  // =========================================================================
   const handleExcelUpload = (e) => {
     const file = e.target.files?.[0];
     const excelLib = window.XLSX || XLSX;
@@ -625,7 +621,6 @@ export default function App() {
           const roleRaw = find(['ประเภท', 'role']);
           const note = find(['หมายเหตุ', 'note', 'สถานะของ', 'การรับของ', 'remark', 'ความประสงค์']);
 
-          // ประกอบคำนำหน้ากับชื่อเข้าด้วยกันถ้าแยกคอลัมน์มา
           let fullName = rawName;
           if (prefix && !rawName.startsWith(prefix)) {
             fullName = `${prefix} ${rawName}`.trim();
@@ -634,7 +629,6 @@ export default function App() {
           const role = roleRaw.includes('สตาฟ') ? 'สตาฟ' : 'ผู้เข้าร่วม';
           const year = detectYearFromStudentId(studentId);
 
-          // ขอแค่มีชื่อ ก็สามารถนำเข้าได้
           if (!fullName) {
             errCount++;
             return null;
@@ -643,7 +637,7 @@ export default function App() {
           validCount++;
           return {
             id: 'imp_' + Date.now() + '_' + idx,
-            badgeNumber: 0, // ให้ระบบไปรันเลขใหม่หลังจัดเรียง
+            badgeNumber: 0,
             studentId,
             name: fullName,
             email,
@@ -673,7 +667,6 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
-  // กดยืนยันนำเข้า: เรียงตามเกณฑ์อัตโนมัติ และรันเลข Badge ให้ใหม่ทันที
   const handleConfirmImport = async () => {
     if (excelPreviewData.length === 0) return;
     setIsImporting(true);
@@ -689,20 +682,15 @@ export default function App() {
         }
       }
 
-      // รวมรายชื่อเดิมเข้ากับรายชื่อใหม่ (กรณี append)
       const baseList = importMode === 'replace' ? [] : [...guests];
       const combined = [...baseList, ...excelPreviewData];
-
-      // จัดเรียงตามเกณฑ์: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
       const sortedCombined = sortGuestsByCustomCriteria(combined);
 
-      // รันเลขลำดับ Badge ใหม่ตั้งแต่ 1 ถึง N
       const finalizedList = sortedCombined.map((item, index) => ({
         ...item,
         badgeNumber: index + 1
       }));
 
-      // บันทึกลง Firestore
       for (let i = 0; i < finalizedList.length; i += 400) {
         const b = writeBatch(db);
         finalizedList.slice(i, i + 400).forEach((g) => b.set(doc(colRef, g.id), g));
@@ -711,19 +699,7 @@ export default function App() {
 
       setIsExcelModalOpen(false);
       setExcelPreviewData([]);
-
-      if (GOOGLE_APPS_SCRIPT_URL && GOOGLE_APPS_SCRIPT_URL.includes("script.google.com")) {
-        fetch(GOOGLE_APPS_SCRIPT_URL, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ guests: finalizedList })
-        }).catch((err) => console.warn("Auto-mail error:", err));
-
-        alert(`✅ นำเข้ารายชื่อสำเร็จ ${finalizedList.length} รายการ (จัดเรียงตามเกณฑ์และรันเลขป้ายใหม่เรียบร้อย)`);
-      } else {
-        alert(`✅ นำเข้ารายชื่อสำเร็จ ${finalizedList.length} รายการ (จัดเรียง ปี 1-4, หญิงก่อนชาย, ก-ฮ และรันเลขป้ายใหม่ให้อัตโนมัติ)`);
-      }
+      alert(`✅ นำเข้ารายชื่อสำเร็จ ${finalizedList.length} รายการ (จัดเรียง ปี 1-4, หญิงก่อนชาย, ก-ฮ และรันเลขป้ายใหม่ให้อัตโนมัติ)`);
     } catch (e) {
       setImportError('บันทึกข้อมูลไม่สำเร็จ: ' + e.message);
     } finally {
@@ -731,38 +707,30 @@ export default function App() {
     }
   };
 
-  const handleExportQrExcel = () => {
-    const excelLib = window.XLSX || XLSX;
-    if (!excelLib || !excelLib.utils) {
-      alert('⚠️ ระบบยังโหลดโมดูล Excel ไม่เสร็จสิ้น กรุณารอ 2-3 วินาทีแล้วลองใหม่อีกครั้ง');
-      return;
-    }
-
+  // ฟังก์ชันซิงค์ QR เข้า Google Sheets ผ่าน Apps Script Web App
+  const handleExportQrToGoogleSheets = async () => {
     if (!guests || guests.length === 0) {
       alert('⚠️ ไม่มีรายชื่อในระบบให้ส่งออก');
       return;
     }
 
-    try {
-      const rows = guests.map((g) => ({
-        'ลำดับ (Badge)': g.badgeNumber,
-        'รหัสนักศึกษา': g.studentId || '-',
-        'ชื่อ-นามสกุล': g.name,
-        'อีเมล': g.email || '-',
-        'ชั้นปี': g.year,
-        'ประเภท': g.role,
-        'รหัสเช็กชื่อ (QR Token)': g.qrToken,
-        'หมายเหตุ': g.note || '',
-        'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&format=jpg&data=${encodeURIComponent(g.qrToken)}`
-      }));
+    const confirmSend = window.confirm(`ต้องการซิงค์ข้อมูล QR ทั้งหมด ${guests.length} คนเข้าสู่ Google Sheets ใช่หรือไม่?`);
+    if (!confirmSend) return;
 
-      const ws = excelLib.utils.json_to_sheet(rows);
-      const wb = excelLib.utils.book_new();
-      excelLib.utils.book_append_sheet(wb, ws, "QR_Email_Export");
-      excelLib.writeFile(wb, `SPU_QR_For_Email_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    try {
+      alert('⏳ กำลังซิงค์ข้อมูลเข้า Google Sheets กรุณารอสักครู่...');
+      
+      await fetch(GOOGLE_APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guests: guests })
+      });
+
+      alert('✅ ซิงค์ข้อมูลเข้าสู่ Google Sheets เรียบร้อยแล้ว! เปิดดูตารางของคุณได้ทันที');
     } catch (err) {
-      console.error("Export QR Error:", err);
-      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Excel: ' + err.message);
+      console.error(err);
+      alert('เกิดข้อผิดพลาดในการส่งข้อมูล: ' + err.message);
     }
   };
 
@@ -967,7 +935,7 @@ export default function App() {
                 <ScanLine className="w-5 h-5 text-blue-500" /> สแกน QR เช็กชื่อผู้เข้าร่วม
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                ตรวจพบกรณีสั่งของไม่ทัน/จ่ายช้าอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / ผิดระเบียบ[span_9](start_span)[span_9](end_span)
+                ตรวจพบกรณีสั่งของไม่ทัน/จ่ายช้าอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / ผิดระเบียบ
               </p>
 
               <div className="mt-4 bg-black rounded-2xl overflow-hidden border-2 border-slate-800 relative min-h-[260px] flex items-center justify-center">
@@ -1160,7 +1128,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 2: แสตนบาย[span_10](start_span)[span_10](end_span)[span_11](start_span)[span_11](end_span) */}
+              {/* คอลัมน์ 2: แสตนบาย */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1213,7 +1181,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 3: ขึ้นเวที[span_12](start_span)[span_12](end_span) */}
+              {/* คอลัมน์ 3: ขึ้นเวที */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2">
@@ -1241,7 +1209,7 @@ export default function App() {
                           className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
                           title="ย้อนสถานะ"
                         >
-                          <Undo2 className="w-3.5 h-3.5" />
+                          <Undo2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleMoveToCompleted(currentStagePerson)}
@@ -1374,10 +1342,10 @@ export default function App() {
                   <Upload className="w-3.5 h-3.5" /> นำเข้ารายชื่อ Excel
                 </button>
                 <button
-                  onClick={handleExportQrExcel}
-                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                  onClick={handleExportQrToGoogleSheets}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm"
                 >
-                  <FileDown className="w-3.5 h-3.5" /> ส่งออก QR สำหรับส่งอีเมล
+                  <FileDown className="w-3.5 h-3.5" /> ซิงค์ QR เข้า Google Sheets
                 </button>
                 <button
                   onClick={handleExportReportExcel}
@@ -1811,7 +1779,7 @@ export default function App() {
             </div>
             <h3 className="text-base font-black text-white">รีเซ็ตสถานะทั้งหมด (สำหรับซ้อม)</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ[span_13](start_span)[span_13](end_span)
+              การรีเซ็ตจะปรับสถานะทุกคนกลับเป็น "ยังไม่มา" ทั้งหมด และรหัส QR เดิมจะกลับมาใช้สแกนได้อีกครั้ง รายชื่อไม่ถูกลบ
             </p>
             <div className="pt-2 text-left">
               <label className="text-[11px] text-slate-300 block mb-1">พิมพ์คำว่า <strong>RESET</strong> เพื่อยืนยัน:</label>
