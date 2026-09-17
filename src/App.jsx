@@ -230,7 +230,6 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  // ดึงคนเข้าสแตนด์บายทีละ Batch (เช่น ทีละ 10-20 คนตาม slider)
   const handleMoveToStandbyBatch = async () => {
     const readyList = guests.filter((g) => g.status === 'checked_in' && !g.skipped);
     if (readyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
@@ -253,7 +252,6 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  // ย้ายคนจากสแตนด์บายขึ้นเวที "ยกเซต" พร้อมกันทีเดียวตามจำนวน batchSize
   const handleMoveBatchToOnStage = async () => {
     const standbyList = guests
       .filter((g) => g.status === 'standby' && !g.skipped)
@@ -266,13 +264,9 @@ export default function App() {
 
     try {
       const batch = writeBatch(db);
-      
-      // เคลียร์คนที่อยู่บนเวทีเดิมให้เป็น completed ก่อน
       guests.filter(g => g.status === 'on_stage').forEach(oldOnStage => {
         batch.update(getGuestDocRef(oldOnStage.id), { status: 'completed', prevStatus: 'on_stage' });
       });
-
-      // ย้ายชุดใหม่ขึ้นเวทีพร้อมกัน
       batchList.forEach((g) => {
         batch.update(getGuestDocRef(g.id), {
           status: 'on_stage',
@@ -280,13 +274,11 @@ export default function App() {
           skipped: false
         });
       });
-
       await batch.commit();
       alert(`🚀 ประกาศขึ้นเวทีเซตนี้จำนวน ${takeCount} คนเรียบร้อยแล้ว!`);
     } catch (e) { console.error(e); }
   };
 
-  // กดลงเวทีทั้งเซต
   const handleCompleteStageBatch = async () => {
     const onStageList = guests.filter((g) => g.status === 'on_stage');
     if (onStageList.length === 0) return alert('ไม่มีผู้เข้าร่วมบนเวทีขณะนี้');
@@ -353,8 +345,6 @@ export default function App() {
 
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
   const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
-  
-  // รายชื่อทุกคนที่กำลังขึ้นเวทีพร้อมกันในเซตนี้
   const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
   const skippedList = useMemo(() => guests.filter((g) => g.skipped), [guests]);
 
@@ -473,11 +463,9 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 2: จัดคิวเวที (ควบคุมการดึงและประกาศขึ้นเวทีเป็นชุด) ==================== */}
+        {/* ==================== TAB 2: จัดคิวเวที ==================== */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
-            
-            {/* แถบเลื่อน Slider ปรับจำนวนคนต่อเซต */}
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold">
@@ -506,8 +494,6 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              
-              {/* คอลัมน์ 1: พร้อมเรียกคิว */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-blue-400" /> พร้อมเรียกคิว</h3>
@@ -537,7 +523,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 2: แสตนบายหลังเวที */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
@@ -566,7 +551,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* คอลัมน์ 3: กำลังขึ้นเวที */}
               <div className="bg-slate-950 border border-slate-800 rounded-3xl p-4 flex flex-col min-h-[500px]">
                 <div className="flex justify-between items-center pb-3 border-b border-slate-800 mb-3">
                   <h3 className="font-black text-white text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
@@ -603,19 +587,19 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 3: จอ LED (แสดงรายชื่อทุกคนบนเวทีพร้อมกันเป็นเซต) ==================== */}
+        {/* ==================== TAB 3: จอ LED (หน้าจอเดียว รายชื่อคนขึ้นเวทีตรงกลาง + คิวสแตนด์บายข้างล่างแบบกะทัดรัด) ==================== */}
         {activeTab === 'led' && (
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-8 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
               
-              <div className="text-center mb-8">
+              <div className="text-center mb-6">
                 <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
                   <Sparkles className="w-4 h-4 animate-spin" /> พิธีวันเกียรติยศ SPU • กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
                 </div>
               </div>
 
               {currentStageGroup.length > 0 ? (
-                /* Grid แสดงรายชื่อทุกคนที่ขึ้นเวทีพร้อมกันในเซตนี้ (เช่น 10-20 คน) */
+                /* Grid แสดงรายชื่อทุกคนที่ขึ้นเวทีพร้อมกันในเซตนี้ */
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
                   {currentStageGroup.map((g) => (
                     <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
@@ -628,7 +612,7 @@ export default function App() {
                   ))}
                 </div>
               ) : (
-                <div className="py-20 text-center space-y-4">
+                <div className="py-16 text-center space-y-4">
                   <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
                     <Award className="w-8 h-8" />
                   </div>
@@ -637,18 +621,29 @@ export default function App() {
                 </div>
               )}
 
-              {/* แถบแสดงคิวสแตนด์บายถัดไปด้านล่าง */}
-              <div className="mt-12 pt-6 border-t border-slate-800">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 text-center">
-                  คิวสแตนด์บายเตรียมขึ้นชุดถัดไป ({standbyQueue.length} คนรออยู่)
-                </h4>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {standbyQueue.slice(0, 10).map((g, idx) => (
-                    <div key={g.id} className="bg-slate-900/60 border border-slate-800/80 rounded-xl px-3 py-1.5 text-center">
-                      <span className="text-xs font-black text-amber-400">#{g.badgeNumber}</span>
-                      <span className="text-xs text-white ml-1.5">{g.name}</span>
-                    </div>
-                  ))}
+              {/* แถบรายชื่อสแตนด์บายหลังเวที (วางด้านล่างแบบกะทัดรัด) */}
+              <div className="mt-10 pt-6 border-t border-slate-800/80">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+                  </h4>
+                  <span className="px-2.5 py-0.5 bg-amber-950 text-amber-300 text-xs font-bold rounded-full border border-amber-900">
+                    รออยู่ {standbyQueue.length} คน
+                  </span>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                  {standbyQueue.length === 0 ? (
+                    <span className="text-xs text-slate-500 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+                  ) : (
+                    standbyQueue.map((g, idx) => (
+                      <div key={g.id} className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
+                        <span className="text-[11px] font-black text-amber-400">#{g.badgeNumber}</span>
+                        <span className="text-xs font-bold text-white truncate max-w-[120px]">{g.name}</span>
+                        <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
