@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { 
   Users, Search, CheckCircle2, Clock, Settings, Award, 
   Plus, Edit2, Trash2, X, AlertTriangle, RotateCcw, 
@@ -24,7 +25,7 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา
+// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -55,17 +56,17 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard'
+  // 4 แท็บหลักตามคู่มือ: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
-  // สแกน QR
+  // สแกน QR[span_3](start_span)[span_3](end_span)
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   const html5QrCodeRef = useRef(null);
 
-  // แดชบอร์ด & ตัวกรอง
+  // แดชบอร์ด & ตัวกรอง[span_4](start_span)[span_4](end_span)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
@@ -73,7 +74,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
-  // เพิ่ม / แก้ไข
+  // เพิ่ม / แก้ไข[span_5](start_span)[span_5](end_span)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingGuest, setEditingGuest] = useState(null);
   const [formData, setFormData] = useState({
@@ -85,7 +86,7 @@ export default function App() {
     note: ''
   });
 
-  // นำเข้า Excel
+  // นำเข้า Excel[span_6](start_span)[span_6](end_span)
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [importMode, setImportMode] = useState('append');
@@ -94,7 +95,7 @@ export default function App() {
   const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
-  // รีเซ็ตสถานะทั้งหมด
+  // รีเซ็ตสถานะทั้งหมด[span_7](start_span)[span_7](end_span)
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
@@ -150,14 +151,16 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ควบคุมกล้องสแกน QR
+  // ควบคุมกล้องสแกน QR[span_8](start_span)[span_8](end_span)
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
-        if (window.Html5Qrcode && document.getElementById('camera-scanner-view')) {
+        const qrContainer = document.getElementById('camera-scanner-view');
+        const Html5QrcodeClass = window.Html5Qrcode;
+        if (Html5QrcodeClass && qrContainer) {
           try {
             if (!html5QrCodeRef.current) {
-              const qrCode = new window.Html5Qrcode("camera-scanner-view");
+              const qrCode = new Html5QrcodeClass("camera-scanner-view");
               html5QrCodeRef.current = qrCode;
               qrCode.start(
                 { facingMode: "environment" },
@@ -194,6 +197,7 @@ export default function App() {
 
   const getGuestDocRef = (id) => doc(db, 'spu_guests', id);
 
+  // ค้นหาข้อมูลก่อนยืนยันเช็คชื่อ[span_9](start_span)[span_9](end_span)
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
     if (!clean) return;
@@ -217,6 +221,7 @@ export default function App() {
     }
   };
 
+  // ยืนยันเช็คชื่อ (เขียนลงระบบจริง)[span_10](start_span)[span_10](end_span)
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -240,6 +245,7 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
+  // ย้ายเข้าสแตนด์บาย[span_11](start_span)[span_11](end_span)
   const handleMoveToStandby = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -253,6 +259,7 @@ export default function App() {
     }
   };
 
+  // ส่งขึ้นเวที (คนเก่าลงเวทีอัตโนมัติ)[span_12](start_span)[span_12](end_span)[span_13](start_span)[span_13](end_span)
   const handleMoveToOnStage = async (guest) => {
     try {
       const batch = writeBatch(db);
@@ -274,6 +281,7 @@ export default function App() {
     }
   };
 
+  // ลงเวทีแล้ว[span_14](start_span)[span_14](end_span)
   const handleMoveToCompleted = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -285,6 +293,7 @@ export default function App() {
     }
   };
 
+  // ข้ามคิว / ยกเลิกข้ามคิว[span_15](start_span)[span_15](end_span)
   const handleToggleSkip = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), {
@@ -295,6 +304,7 @@ export default function App() {
     }
   };
 
+  // ย้อนสถานะ 1 ขั้น[span_16](start_span)[span_16](end_span)
   const handleUndoStatus = async (guest) => {
     if (!guest.prevStatus) {
       alert('ไม่มีสถานะก่อนหน้าให้ย้อนกลับ');
@@ -322,6 +332,7 @@ export default function App() {
     });
   };
 
+  // รีเซ็ตสถานะทั้งหมด[span_17](start_span)[span_17](end_span)
   const handleResetAllStatuses = async () => {
     if (resetConfirmInput !== 'RESET') {
       alert('กรุณาพิมพ์ RESET ให้ถูกต้องเพื่อยืนยัน');
@@ -348,6 +359,7 @@ export default function App() {
     }
   };
 
+  // บันทึกเพิ่ม/แก้ไข[span_18](start_span)[span_18](end_span)
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) return;
@@ -403,6 +415,7 @@ export default function App() {
     setEditingGuest(null);
   };
 
+  // ลบรายชื่อ[span_19](start_span)[span_19](end_span)
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
@@ -421,18 +434,20 @@ export default function App() {
     });
   };
 
+  // ประมวลผลไฟล์ Excel[span_20](start_span)[span_20](end_span)
   const handleExcelUpload = (e) => {
     const file = e.target.files?.[0];
-    if (!file || !window.XLSX) return;
+    const excelLib = window.XLSX || XLSX;
+    if (!file || !excelLib) return;
 
     setImportError('');
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
         const data = evt.target?.result;
-        const workbook = window.XLSX.read(data, { type: 'binary' });
+        const workbook = excelLib.read(data, { type: 'binary' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const raw = window.XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        const raw = excelLib.utils.sheet_to_json(sheet, { defval: '' });
 
         if (raw.length === 0) {
           setImportError('ไม่พบข้อมูลในไฟล์ Excel');
@@ -500,6 +515,7 @@ export default function App() {
     reader.readAsBinaryString(file);
   };
 
+  // ยืนยันนำเข้า Excel[span_21](start_span)[span_21](end_span)
   const handleConfirmImport = async () => {
     if (excelPreviewData.length === 0) return;
     setIsImporting(true);
@@ -531,41 +547,75 @@ export default function App() {
     }
   };
 
+  // ส่งออก QR สำหรับส่งอีเมล (แก้ไขสมบูรณ์)[span_22](start_span)[span_22](end_span)
   const handleExportQrExcel = () => {
-    if (!window.XLSX) return;
-    const rows = guests.map((g) => ({
-      'ลำดับ (Badge)': g.badgeNumber,
-      'รหัสนักศึกษา': g.studentId || '-',
-      'ชื่อ-นามสกุล': g.name,
-      'อีเมล': g.email || '-',
-      'ชั้นปี': g.year,
-      'ประเภท': g.role,
-      'รหัสเช็กชื่อ (QR Token)': g.qrToken,
-      'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(g.qrToken)}`
-    }));
-    const ws = window.XLSX.utils.json_to_sheet(rows);
-    const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, ws, "QR_Email_Export");
-    window.XLSX.writeFile(wb, `SPU_QR_For_Email_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const excelLib = window.XLSX || XLSX;
+    if (!excelLib || !excelLib.utils) {
+      alert('⚠️ ระบบยังโหลดโมดูล Excel ไม่เสร็จสิ้น กรุณารอ 2-3 วินาทีแล้วลองใหม่อีกครั้ง');
+      return;
+    }
+
+    if (!guests || guests.length === 0) {
+      alert('⚠️ ไม่มีรายชื่อในระบบให้ส่งออก');
+      return;
+    }
+
+    try {
+      const rows = guests.map((g) => ({
+        'ลำดับ (Badge)': g.badgeNumber,
+        'รหัสนักศึกษา': g.studentId || '-',
+        'ชื่อ-นามสกุล': g.name,
+        'อีเมล': g.email || '-',
+        'ชั้นปี': g.year,
+        'ประเภท': g.role,
+        'รหัสเช็กชื่อ (QR Token)': g.qrToken,
+        'ลิงก์ภาพ QR Code': `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(g.qrToken)}`
+      }));
+
+      const ws = excelLib.utils.json_to_sheet(rows);
+      const wb = excelLib.utils.book_new();
+      excelLib.utils.book_append_sheet(wb, ws, "QR_Email_Export");
+      excelLib.writeFile(wb, `SPU_QR_For_Email_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      console.error("Export QR Error:", err);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์ Excel: ' + err.message);
+    }
   };
 
+  // ส่งออกรายงานสรุป[span_23](start_span)[span_23](end_span)
   const handleExportReportExcel = () => {
-    if (!window.XLSX) return;
-    const rows = guests.map((g) => ({
-      'ลำดับ': g.badgeNumber,
-      'รหัสนักศึกษา': g.studentId || '-',
-      'ชื่อ-นามสกุล': g.name,
-      'ชั้นปี': g.year,
-      'ประเภท': g.role,
-      'สถานะปัจจุบัน': getStatusLabel(g.status),
-      'เวลาที่เช็กชื่อ': g.checkInTime || '-',
-      'ถูกข้ามคิว': g.skipped ? 'ใช่' : 'ไม่ใช่',
-      'หมายเหตุ': g.note || ''
-    }));
-    const ws = window.XLSX.utils.json_to_sheet(rows);
-    const wb = window.XLSX.utils.book_new();
-    window.XLSX.utils.book_append_sheet(wb, ws, "Report");
-    window.XLSX.writeFile(wb, `SPU_Ceremony_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    const excelLib = window.XLSX || XLSX;
+    if (!excelLib || !excelLib.utils) {
+      alert('⚠️ ระบบยังโหลดโมดูล Excel ไม่เสร็จสิ้น กรุณารอ 2-3 วินาทีแล้วลองใหม่อีกครั้ง');
+      return;
+    }
+
+    if (!guests || guests.length === 0) {
+      alert('⚠️ ไม่มีรายชื่อในระบบให้ส่งออก');
+      return;
+    }
+
+    try {
+      const rows = guests.map((g) => ({
+        'ลำดับ': g.badgeNumber,
+        'รหัสนักศึกษา': g.studentId || '-',
+        'ชื่อ-นามสกุล': g.name,
+        'ชั้นปี': g.year,
+        'ประเภท': g.role,
+        'สถานะปัจจุบัน': getStatusLabel(g.status),
+        'เวลาที่เช็กชื่อ': g.checkInTime || '-',
+        'ถูกข้ามคิว': g.skipped ? 'ใช่' : 'ไม่ใช่',
+        'หมายเหตุ': g.note || ''
+      }));
+
+      const ws = excelLib.utils.json_to_sheet(rows);
+      const wb = excelLib.utils.book_new();
+      excelLib.utils.book_append_sheet(wb, ws, "Report");
+      excelLib.writeFile(wb, `SPU_Ceremony_Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      console.error("Export Report Error:", err);
+      alert('เกิดข้อผิดพลาดในการสร้างไฟล์รายงาน: ' + err.message);
+    }
   };
 
   const getStatusLabel = (st) => {
