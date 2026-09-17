@@ -5,7 +5,7 @@ import {
   Plus, Edit2, Trash2, X, AlertTriangle, RotateCcw, 
   Mic2, Filter, Loader2, Sparkles, FileSpreadsheet, 
   Upload, Download, Check, Maximize2, SkipForward, Undo2, 
-  Camera, ScanLine, FileDown, Layers, UserX, AlertCircle, Ban
+  Camera, ScanLine, FileDown, Layers, Ban, PackageCheck, PackageX
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -14,6 +14,9 @@ import {
   getFirestore, doc, setDoc, updateDoc, deleteDoc, 
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
+
+// วาง Web App URL จาก Google Apps Script (ถ้าต้องการส่งอีเมลพร้อม QR อัตโนมัติเมื่อนำเข้า Excel)
+const GOOGLE_APPS_SCRIPT_URL = ""; 
 
 const CUSTOM_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBj539S9o8t92HzmPqQ6PiCLKCdHFswRNA",
@@ -25,7 +28,7 @@ const CUSTOM_FIREBASE_CONFIG = {
   measurementId: "G-GF9DHJXHQM"
 };
 
-// คำนวณชั้นปีอัตโนมัติจาก 2 หลักแรกของรหัสนักศึกษา[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
+// คำนวณชั้นปีอัตโนมัติจากรหัสนักศึกษา 2 ตัวแรก[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
   const prefix = String(studentId).trim().substring(0, 2);
@@ -38,15 +41,15 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
-// ฟังก์ชันตรวจจับว่าคนนี้ "ยังไม่ได้รับของ / สั่งของไม่ทัน / ยังไม่จ่ายเงิน" หรือไม่
-const checkIsItemPending = (guest) => {
+// ตรวจจับกรณีเดียวกัน: สั่งของไม่ทัน / ไม่ได้รับของ / จ่ายช้า / ค้างจ่าย
+const checkIsItemNotReady = (guest) => {
   if (!guest) return false;
   const text = `${guest.note || ''} ${guest.itemStatus || ''}`.toLowerCase();
-  const keywords = ['ไม่ได้รับของ', 'ยังไม่ได้รับของ', 'สั่งของไม่ทัน', 'ไม่ทัน', 'ยังไม่จ่าย', 'ค้างจ่าย', 'ไม่จ่าย', 'ไม่มีของ'];
+  const keywords = ['สั่งของไม่ทัน', 'ไม่ได้รับของ', 'ยังไม่ได้รับของ', 'จ่ายช้า', 'สั่งไม่ทัน', 'ผลิตไม่ทัน', 'ค้างจ่าย', 'ยังไม่จ่าย', 'ไม่มีของ'];
   return keywords.some((kw) => text.includes(kw));
 };
 
-// 1. เกณฑ์ชั้นปี: ปี 1 -> ปี 4
+// เกณฑ์ชั้นปี: ปี 1 -> ปี 4
 const YEAR_WEIGHTS = {
   'ปี 1': 1,
   'ปี 2': 2,
@@ -63,7 +66,7 @@ const getYearOrderWeight = (yearStr) => {
   return 50;
 };
 
-// 2. เกณฑ์เพศ: หญิง (0) -> ชาย (1)
+// เกณฑ์เพศ: หญิง (0) -> ชาย (1)
 const getGenderOrderWeight = (fullName) => {
   if (!fullName) return 2;
   const name = fullName.trim();
@@ -76,7 +79,7 @@ const getGenderOrderWeight = (fullName) => {
   return 2;
 };
 
-// 3. ตัดคำนำหน้า เพื่อนำชื่อจริงไปเรียง ก-ฮ
+// ตัดคำนำหน้า เพื่อนำชื่อจริงไปเรียง ก-ฮ
 const getSortableCleanName = (fullName) => {
   if (!fullName) return '';
   return fullName
@@ -84,7 +87,7 @@ const getSortableCleanName = (fullName) => {
     .trim();
 };
 
-// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> พยัญชนะ ก-ฮ
+// จัดเรียง: ปี 1-4 -> หญิงก่อนชาย -> ก-ฮ
 const sortGuestsByCustomCriteria = (list) => {
   return [...list].sort((a, b) => {
     const yearA = getYearOrderWeight(a.year);
@@ -103,7 +106,7 @@ const sortGuestsByCustomCriteria = (list) => {
 
 const DEFAULT_INITIAL_GUESTS = [
   { id: 'g01', badgeNumber: 1, qrToken: '69014522', year: 'ปี 1', studentId: '69014522', name: 'นายกิตติกร บุญมี', email: 'kittikorn.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
-  { id: 'g02', badgeNumber: 2, qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์', email: 'jirapinya.pon@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'ยังไม่ได้รับของ', skipped: false, prevStatus: null, standbyOrder: null },
+  { id: 'g02', badgeNumber: 2, qrToken: '69023411', year: 'ปี 1', studentId: '69023411', name: 'นางสาวจิรภิญญา พงษ์สวัสดิ์', email: 'jirapinya.pon@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'สั่งของไม่ทัน', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g03', badgeNumber: 3, qrToken: '68023567', year: 'ปี 2', studentId: '68023567', name: 'นางสาวจิราภรณ์ ทัดศรี', email: 'jiraporn.ths@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g04', badgeNumber: 4, qrToken: '68091147', year: 'ปี 2', studentId: '68091147', name: 'นายอชิตะ เสาว์รส', email: 'achita.sao@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: '', skipped: false, prevStatus: null, standbyOrder: null },
   { id: 'g05', badgeNumber: 5, qrToken: '67037256', year: 'ปี 3', studentId: '67037256', name: 'นางสาววิมลรัตน์ บุญชู', email: 'wimonrat.boo@spumail.net', role: 'ผู้เข้าร่วม', status: 'pending', checkInTime: null, note: 'สโมสรนักศึกษา', skipped: false, prevStatus: null, standbyOrder: null },
@@ -119,7 +122,7 @@ export default function App() {
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
-  // 4 แท็บหลัก: 'scan' | 'queue' | 'led' | 'dashboard[span_2](start_span)'[span_2](end_span)
+  // 4 แท็บหลักตามคู่มือ: scan | queue | led | dashboard[span_2](start_span)[span_2](end_span)
   const [activeTab, setActiveTab] = useState('scan');
   const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
 
@@ -220,7 +223,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // ควบคุมกล้องสแกน QR[span_8](start_span)[span_8](end_span)
+  // เปิด-ปิด กล้องสแกน QR[span_8](start_span)[span_8](end_span)
   useEffect(() => {
     if (activeTab === 'scan') {
       const timer = setTimeout(() => {
@@ -289,7 +292,7 @@ export default function App() {
     }
   };
 
-  // 1. เช็กชื่อ: กรณีปกติ หรือตรวจพบว่าไม่ได้รับของ/ยังไม่จ่าย จะตัดออกจากคิวเวทีอัตโนมัติ
+  // 1. เช็กชื่อ: กรณีปกติ หรือ ตรวจพบสั่งของไม่ทัน/จ่ายช้า (จะตัดสิทธิ์เวทีอัตโนมัติ)
   const handleConfirmCheckIn = async (guest) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -298,8 +301,8 @@ export default function App() {
       return;
     }
 
-    const isItemPending = checkIsItemPending(guest);
-    const targetStatus = isItemPending ? 'no_item_received' : 'checked_in';
+    const isNoItem = checkIsItemNotReady(guest);
+    const targetStatus = isNoItem ? 'no_item_ordered' : 'checked_in';
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
     try {
@@ -310,8 +313,8 @@ export default function App() {
         skipped: false
       });
 
-      if (isItemPending) {
-        alert(`⚠️ แจ้งเตือน: ${guest.name} ตรวจพบหมายเหตุ "${guest.note || 'ยังไม่ได้รับของ/ยังไม่จ่าย'}" ระบบเช็คชื่อเข้าร่วมงานเรียบร้อย แต่ตัดสิทธิ์การขึ้นเวทีรับบ่าให้อัตโนมัติ`);
+      if (isNoItem) {
+        alert(`⚠️ ตรวจพบ: ${guest.name} (${guest.note || 'สั่งของไม่ทัน/จ่ายช้า'})\nระบบเช็คชื่อเข้าร่วมงานเรียบร้อย แต่ตัดสิทธิ์ขึ้นรับบ่าบนเวที (ไม่มีของรับในงาน)`);
       } else {
         alert(`✅ ยืนยันเช็กชื่อสำเร็จ: ${guest.name} (เข้าคิวรับบ่าปกติ)`);
       }
@@ -321,7 +324,7 @@ export default function App() {
     setScannedPreviewGuest(null);
   };
 
-  // 2. เช็กชื่อและตัดสิทธิ์เฉพาะกรณี: มาสาย หรือ แต่งตัวผิดระเบียบ
+  // 2. เช็กชื่อและตัดสิทธิ์: มาสาย หรือ แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที แต่มีของให้รับหลังจบงาน)
   const handleCheckInWithDisqualify = async (guest, reasonStatus) => {
     if (!guest) return;
     if (guest.status !== 'pending') {
@@ -330,7 +333,7 @@ export default function App() {
       return;
     }
 
-    const reasonLabel = reasonStatus === 'late' ? 'มาสาย' : 'แต่งตัวผิดระเบียบ';
+    const reasonLabel = reasonStatus === 'late_receive_after' ? 'มาสาย' : 'แต่งตัวผิดระเบียบ';
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
     try {
@@ -340,19 +343,19 @@ export default function App() {
         prevStatus: 'pending',
         skipped: false
       });
-      alert(`⚠️ บันทึกเรียบร้อย: ${guest.name} (${reasonLabel}) - ตัดสิทธิ์การขึ้นรับบ่าบนเวทีแล้ว`);
+      alert(`⚠️ บันทึก: ${guest.name} (${reasonLabel})\nตัดสิทธิ์ขึ้นเวทีเรียบร้อย แต่นักศึกษาสามารถรับของได้หลังจบงาน`);
     } catch (e) {
       console.error(e);
     }
     setScannedPreviewGuest(null);
   };
 
-  // ปรับสถานะตัดสิทธิ์จากหน้าคิวเวที
+  // ตัดสิทธิ์จากหน้าคิวเวที
   const handleDisqualifyFromQueue = async (guest, newStatus, reasonText) => {
     setConfirmModal({
       isOpen: true,
-      title: `ตัดสิทธิ์: ${reasonText}`,
-      message: `ต้องการตัดสิทธิ์ "${guest.name}" ออกจากคิวเวทีเนื่องจาก "${reasonText}" ใช่หรือไม่?`,
+      title: `ตัดสิทธิ์คิวเวที: ${reasonText}`,
+      message: `ต้องการตัดสิทธิ์ "${guest.name}" ออกจากคิวเวทีเนื่องจาก "${reasonText}" ใช่หรือไม่? (นักศึกษาจะสามารถรับของได้หลังจบงาน)`,
       confirmText: 'ยืนยันตัดสิทธิ์',
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
@@ -362,7 +365,7 @@ export default function App() {
             prevStatus: guest.status,
             skipped: false
           });
-          alert(`ตัดสิทธิ์ "${guest.name}" (${reasonText}) ออกจากคิวเวทีเรียบร้อย`);
+          alert(`ตัดสิทธิ์ "${guest.name}" (${reasonText}) ออกจากคิวเวทีเรียบร้อยแล้ว`);
         } catch (e) {
           console.error(e);
         }
@@ -534,19 +537,23 @@ export default function App() {
     setEditingGuest(null);
   };
 
+  // ลบรายชื่อเดี่ยว (Optimistic Update)
   const handleDeleteGuest = (guest) => {
     setConfirmModal({
       isOpen: true,
       title: 'ยืนยันการลบผู้เข้าร่วม',
-      message: `คุณต้องการลบ "${guest.name}" (ป้าย #${guest.badgeNumber}) ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้`,
+      message: `คุณต้องการลบ "${guest.name}" (ป้าย #${guest.badgeNumber}) ใช่หรือไม่?`,
       confirmText: 'ลบข้อมูล',
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
+        setGuests((prev) => prev.filter((g) => g.id !== guest.id));
+        setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
+
         try {
           await deleteDoc(getGuestDocRef(guest.id));
-          setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
         } catch (e) {
-          console.error(e);
+          console.error("Delete error:", e);
+          alert('เกิดข้อผิดพลาดในการลบบนฐานข้อมูล: ' + e.message);
         }
         setConfirmModal((p) => ({ ...p, isOpen: false }));
       }
@@ -570,29 +577,34 @@ export default function App() {
     }
   };
 
+  // ลบหลายรายการพร้อมกัน (Optimistic Update)
   const handleDeleteSelectedGuests = () => {
     if (selectedGuestIds.length === 0) return;
 
     setConfirmModal({
       isOpen: true,
       title: 'ยืนยันการลบรายชื่อที่เลือก',
-      message: `คุณต้องการลบรายชื่อจำนวน ${selectedGuestIds.length} รายการออกจากระบบใช่หรือไม่? ข้อมูลและรหัส QR จะถูกลบถาวร`,
+      message: `คุณต้องการลบรายชื่อจำนวน ${selectedGuestIds.length} รายการออกจากระบบใช่หรือไม่?`,
       confirmText: `ลบ ${selectedGuestIds.length} รายชื่อ`,
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
+        const idsToDelete = [...selectedGuestIds];
+
+        setGuests((prev) => prev.filter((g) => !idsToDelete.includes(g.id)));
+        setSelectedGuestIds([]);
+
         try {
-          for (let i = 0; i < selectedGuestIds.length; i += 400) {
+          for (let i = 0; i < idsToDelete.length; i += 400) {
             const batch = writeBatch(db);
-            selectedGuestIds.slice(i, i + 400).forEach((id) => {
+            idsToDelete.slice(i, i + 400).forEach((id) => {
               batch.delete(getGuestDocRef(id));
             });
             await batch.commit();
           }
-          setSelectedGuestIds([]);
           alert('✅ ลบรายชื่อที่เลือกเรียบร้อยแล้ว');
         } catch (e) {
           console.error("Batch delete error:", e);
-          alert('เกิดข้อผิดพลาดในการลบข้อมูล: ' + e.message);
+          alert('เกิดข้อผิดพลาดในการลบบนฐานข้อมูล: ' + e.message);
         }
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       }
@@ -704,7 +716,19 @@ export default function App() {
 
       setIsExcelModalOpen(false);
       setExcelPreviewData([]);
-      alert(`นำเข้ารายชื่อสำเร็จทั้งหมด ${sortedImport.length} รายการ (จัดเรียง ปี 1-4, หญิงก่อนชาย และ ก-ฮ ให้อัตโนมัติ)`);
+
+      if (GOOGLE_APPS_SCRIPT_URL && GOOGLE_APPS_SCRIPT_URL.includes("script.google.com")) {
+        fetch(GOOGLE_APPS_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guests: sortedImport })
+        }).catch((err) => console.warn("Auto-mail error:", err));
+
+        alert(`✅ นำเข้ารายชื่อ ${sortedImport.length} คนสำเร็จ และระบบได้สั่งส่งเมล QR ให้อัตโนมัติแล้ว`);
+      } else {
+        alert(`✅ นำเข้ารายชื่อ ${sortedImport.length} คนสำเร็จ (จัดเรียง ปี 1-4, หญิงก่อนชาย และ ก-ฮ ให้อัตโนมัติ)`);
+      }
     } catch (e) {
       setImportError('บันทึกข้อมูลไม่สำเร็จ: ' + e.message);
     } finally {
@@ -767,6 +791,7 @@ export default function App() {
         'ชั้นปี': g.year,
         'ประเภท': g.role,
         'สถานะปัจจุบัน': getStatusLabel(g.status),
+        'สิทธิ์การรับของ': getRewardItemPolicy(g.status),
         'เวลาที่เช็กชื่อ': g.checkInTime || '-',
         'ถูกข้ามคิว': g.skipped ? 'ใช่' : 'ไม่ใช่',
         'หมายเหตุ': g.note || ''
@@ -786,9 +811,9 @@ export default function App() {
     switch (st) {
       case 'pending': return 'ยังไม่มา';
       case 'checked_in': return 'เช็กชื่อแล้ว';
-      case 'no_item_received': return 'ไม่ได้รับของ/ยังไม่จ่าย (ไม่ขึ้นเวที)';
-      case 'late': return 'มาสาย (ไม่ขึ้นเวที)';
-      case 'dress_code_violation': return 'แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที)';
+      case 'no_item_ordered': return 'สั่งของไม่ทัน/จ่ายช้า (ไม่ขึ้นเวที)';
+      case 'late_receive_after': return 'มาสาย (ไม่ขึ้นเวที - รับของหลังงาน)';
+      case 'dress_violation_receive_after': return 'ผิดระเบียบ (ไม่ขึ้นเวที - รับของหลังงาน)';
       case 'standby': return 'สแตนด์บาย';
       case 'on_stage': return 'กำลังขึ้นเวที';
       case 'completed': return 'ลงเวทีแล้ว';
@@ -796,21 +821,29 @@ export default function App() {
     }
   };
 
+  const getRewardItemPolicy = (st) => {
+    if (st === 'no_item_ordered') return 'ไม่มีของรับ (สั่งไม่ทัน/จ่ายช้า)';
+    if (st === 'late_receive_after' || st === 'dress_violation_receive_after') return 'รับของได้หลังจบงาน';
+    if (st === 'completed') return 'รับบ่าบนเวทีแล้ว';
+    if (st === 'checked_in' || st === 'standby' || st === 'on_stage') return 'รับบ่าบนเวที';
+    return '-';
+  };
+
   const stats = useMemo(() => {
     const total = guests.length;
     const pending = guests.filter((g) => g.status === 'pending').length;
     const checkedIn = guests.filter((g) => g.status === 'checked_in').length;
-    const noItem = guests.filter((g) => g.status === 'no_item_received').length;
-    const late = guests.filter((g) => g.status === 'late').length;
-    const dressViolation = guests.filter((g) => g.status === 'dress_code_violation').length;
+    const noItemOrdered = guests.filter((g) => g.status === 'no_item_ordered').length;
+    const late = guests.filter((g) => g.status === 'late_receive_after').length;
+    const dressViolation = guests.filter((g) => g.status === 'dress_violation_receive_after').length;
     const standby = guests.filter((g) => g.status === 'standby').length;
     const onStage = guests.filter((g) => g.status === 'on_stage').length;
     const completed = guests.filter((g) => g.status === 'completed').length;
     const skipped = guests.filter((g) => g.skipped).length;
-    return { total, pending, checkedIn, noItem, late, dressViolation, standby, onStage, completed, skipped };
+    return { total, pending, checkedIn, noItemOrdered, late, dressViolation, standby, onStage, completed, skipped };
   }, [guests]);
 
-  // คิวพร้อมเรียก: คนที่เช็กชื่อปกติและไม่มีปัญหาเรื่องของ/มาสาย/การแต่งกาย
+  // คิวพร้อมเรียก: เฉพาะคนที่เช็กชื่อแล้ว และมีสิทธิ์ขึ้นรับบ่าบนเวที
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
 
   // คิวสแตนด์บาย: เรียงตามลำดับที่สตาฟกดจริง[span_9](start_span)[span_9](end_span)[span_10](start_span)[span_10](end_span)
@@ -912,10 +945,10 @@ export default function App() {
           <div className="flex items-center gap-3 flex-wrap">
             <span>ทั้งหมด: <strong className="text-white">{stats.total}</strong></span>
             <span>|</span>
-            <span className="text-emerald-400">เช็กชื่อรับบ่า: <strong>{stats.checkedIn}</strong></span>
-            <span className="text-rose-400">ไม่ได้รับของ: <strong>{stats.noItem}</strong></span>
-            <span className="text-amber-400">สาย: <strong>{stats.late}</strong></span>
-            <span className="text-orange-400">ผิดระเบียบ: <strong>{stats.dressViolation}</strong></span>
+            <span className="text-emerald-400">เช็กชื่อขึ้นรับบ่า: <strong>{stats.checkedIn}</strong></span>
+            <span className="text-rose-400">สั่งของไม่ทัน: <strong>{stats.noItemOrdered}</strong></span>
+            <span className="text-amber-400">สาย (ได้ของหลังงาน): <strong>{stats.late}</strong></span>
+            <span className="text-orange-400">ผิดระเบียบ (ได้ของหลังงาน): <strong>{stats.dressViolation}</strong></span>
             <span className="text-blue-400">สแตนด์บาย: <strong>{stats.standby}</strong></span>
             <span className="text-emerald-300">บนเวที: <strong>{stats.onStage}</strong></span>
             <span className="text-purple-400">ลงเวทีแล้ว: <strong>{stats.completed}</strong></span>
@@ -926,7 +959,7 @@ export default function App() {
             )}
           </div>
           <div className="text-[11px] text-slate-400 font-medium">
-            เกณฑ์การเรียง: ปี 1-4 → หญิงก่อนชาย → พยัญชนะ ก-ฮ
+            เกณฑ์: ปี 1-4 → หญิงก่อนชาย → พยัญชนะ ก-ฮ
           </div>
         </div>
       </div>
@@ -941,7 +974,7 @@ export default function App() {
                 <ScanLine className="w-5 h-5 text-blue-500" /> สแกน QR เช็กชื่อผู้เข้าร่วม
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                ตรวจพบสถานะไม่ได้รับของอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / แต่งตัวผิดระเบียบ[span_11](start_span)[span_11](end_span)
+                ตรวจพบกรณีสั่งของไม่ทัน/จ่ายช้าอัตโนมัติ หรือกดตัดสิทธิ์กรณีมาสาย / ผิดระเบียบ[span_11](start_span)[span_11](end_span)
               </p>
 
               <div className="mt-4 bg-black rounded-2xl overflow-hidden border-2 border-slate-800 relative min-h-[260px] flex items-center justify-center">
@@ -998,12 +1031,17 @@ export default function App() {
                     รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}
                   </p>
                   {scannedPreviewGuest.note && (
-                    <div className={`p-2 rounded-xl text-xs font-bold mt-1 ${
-                      checkIsItemPending(scannedPreviewGuest)
-                        ? 'bg-rose-100 text-rose-800 border border-rose-200 animate-pulse'
+                    <div className={`p-2.5 rounded-xl text-xs font-bold mt-1.5 ${
+                      checkIsItemNotReady(scannedPreviewGuest)
+                        ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
                         : 'bg-slate-100 text-slate-700'
                     }`}>
                       หมายเหตุ: {scannedPreviewGuest.note}
+                      {checkIsItemNotReady(scannedPreviewGuest) && (
+                        <span className="block text-[11px] font-normal text-rose-600 mt-0.5">
+                          (ตรวจพบ: จ่ายช้า/สั่งของผลิตไม่ทัน - เข้าร่วมงานแต่ไม่ขึ้นเวที)
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1011,34 +1049,36 @@ export default function App() {
                 <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
                   {scannedPreviewGuest.status === 'pending' ? (
                     <>
-                      {/* ปุ่มยืนยันหลัก: ถ้ามีโน้ตยังไม่ได้รับของจะแจ้งเตือนว่าตัดสิทธิ์อัตโนมัติ */}
+                      {/* ปุ่มยืนยันเช็กชื่อหลัก */}
                       <button
                         onClick={() => handleConfirmCheckIn(scannedPreviewGuest)}
                         className={`w-full py-3 text-white font-black rounded-2xl text-xs flex items-center justify-center gap-1.5 shadow-md ${
-                          checkIsItemPending(scannedPreviewGuest)
+                          checkIsItemNotReady(scannedPreviewGuest)
                             ? 'bg-rose-600 hover:bg-rose-700'
                             : 'bg-emerald-600 hover:bg-emerald-700'
                         }`}
                       >
                         <Check className="w-4 h-4" /> 
-                        {checkIsItemPending(scannedPreviewGuest)
-                          ? 'ยืนยันเช็กชื่อ (ไม่ได้รับของ - ตัดสิทธิ์เวทีอัตโนมัติ)'
-                          : 'ยืนยันเช็กชื่อ (เข้าคิวรับบ่าปกติ)'}
+                        {checkIsItemNotReady(scannedPreviewGuest)
+                          ? 'ยืนยันเช็กชื่อ (สั่งของไม่ทัน - ตัดสิทธิ์เวทีอัตโนมัติ)'
+                          : 'ยืนยันเช็กชื่อ (เข้าคิวขึ้นรับบ่าปกติ)'}
                       </button>
 
-                      {/* ปุ่มตัวเลือกตัดสิทธิ์เฉพาะหน้า: สาย หรือ แต่งตัวผิดระเบียบ */}
+                      {/* ปุ่มกรณีตรวจพบหน้างาน: มาสาย หรือ แต่งตัวผิดระเบียบ */}
                       <div className="grid grid-cols-2 gap-2 pt-1">
                         <button
-                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'late')}
-                          className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'late_receive_after')}
+                          className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px] flex flex-col items-center justify-center shadow-sm leading-tight"
                         >
-                          <Clock className="w-3.5 h-3.5" /> มาสาย (ไม่ขึ้นเวที)
+                          <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> มาสาย</span>
+                          <span className="text-[9px] opacity-80">(ไม่ขึ้นเวที - ได้ของหลังงาน)</span>
                         </button>
                         <button
-                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'dress_code_violation')}
-                          className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] flex items-center justify-center gap-1 shadow-sm"
+                          onClick={() => handleCheckInWithDisqualify(scannedPreviewGuest, 'dress_violation_receive_after')}
+                          className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] flex flex-col items-center justify-center shadow-sm leading-tight"
                         >
-                          <Ban className="w-3.5 h-3.5" /> ผิดระเบียบ (ไม่ขึ้นเวที)
+                          <span className="flex items-center gap-1"><Ban className="w-3.5 h-3.5" /> ผิดระเบียบ</span>
+                          <span className="text-[9px] opacity-80">(ไม่ขึ้นเวที - ได้ของหลังงาน)</span>
                         </button>
                       </div>
                     </>
@@ -1092,7 +1132,6 @@ export default function App() {
                           {g.note && <div className="text-[10px] text-slate-500 mt-0.5 truncate">{g.note}</div>}
                         </div>
                         
-                        {/* ปุ่มควบคุมคิว และปุ่มตัดสิทธิ์เฉพาะหน้า */}
                         <div className="flex flex-col gap-1.5 pt-1 border-t border-slate-800/60">
                           <div className="flex items-center gap-1.5">
                             <button
@@ -1111,13 +1150,13 @@ export default function App() {
                           </div>
                           <div className="flex gap-1">
                             <button
-                              onClick={() => handleDisqualifyFromQueue(g, 'late', 'มาสาย')}
+                              onClick={() => handleDisqualifyFromQueue(g, 'late_receive_after', 'มาสาย')}
                               className="flex-1 py-1 bg-slate-800 hover:bg-amber-900/50 text-amber-300 rounded-lg text-[10px] font-bold"
                             >
                               ตัดสิทธิ์: สาย
                             </button>
                             <button
-                              onClick={() => handleDisqualifyFromQueue(g, 'dress_code_violation', 'แต่งตัวผิดระเบียบ')}
+                              onClick={() => handleDisqualifyFromQueue(g, 'dress_violation_receive_after', 'แต่งตัวผิดระเบียบ')}
                               className="flex-1 py-1 bg-slate-800 hover:bg-orange-900/50 text-orange-300 rounded-lg text-[10px] font-bold"
                             >
                               ตัดสิทธิ์: ผิดระเบียบ
@@ -1403,9 +1442,9 @@ export default function App() {
                   <option value="all">ทุกสถานะ</option>
                   <option value="pending">ยังไม่มา</option>
                   <option value="checked_in">เช็กชื่อแล้ว</option>
-                  <option value="no_item_received">ไม่ได้รับของ/ยังไม่จ่าย (ไม่ขึ้นเวที)</option>
-                  <option value="late">มาสาย (ไม่ขึ้นเวที)</option>
-                  <option value="dress_code_violation">แต่งตัวผิดระเบียบ (ไม่ขึ้นเวที)</option>
+                  <option value="no_item_ordered">สั่งของไม่ทัน/จ่ายช้า (ไม่ขึ้นเวที)</option>
+                  <option value="late_receive_after">มาสาย (ไม่ขึ้นเวที - รับของหลังงาน)</option>
+                  <option value="dress_violation_receive_after">ผิดระเบียบ (ไม่ขึ้นเวที - รับของหลังงาน)</option>
                   <option value="standby">สแตนด์บาย</option>
                   <option value="on_stage">กำลังขึ้นเวที</option>
                   <option value="completed">ลงเวทีแล้ว</option>
@@ -1458,6 +1497,7 @@ export default function App() {
                       <th className="p-3.5">ชั้นปี</th>
                       <th className="p-3.5">ประเภท</th>
                       <th className="p-3.5">สถานะ</th>
+                      <th className="p-3.5">สิทธิ์การรับของ</th>
                       <th className="p-3.5">หมายเหตุ</th>
                       <th className="p-3.5">เวลาเช็กชื่อ</th>
                       <th className="p-3.5 text-right">จัดการ</th>
@@ -1490,11 +1530,11 @@ export default function App() {
                               ? 'bg-amber-900/40 text-amber-300'
                               : g.status === 'standby'
                               ? 'bg-blue-900/40 text-blue-300'
-                              : g.status === 'no_item_received'
+                              : g.status === 'no_item_ordered'
                               ? 'bg-rose-900/40 text-rose-300 border border-rose-800'
-                              : g.status === 'late'
+                              : g.status === 'late_receive_after'
                               ? 'bg-amber-950 text-amber-400 border border-amber-800'
-                              : g.status === 'dress_code_violation'
+                              : g.status === 'dress_violation_receive_after'
                               ? 'bg-orange-950 text-orange-400 border border-orange-800'
                               : g.status === 'checked_in'
                               ? 'bg-emerald-900/40 text-emerald-300'
@@ -1502,6 +1542,17 @@ export default function App() {
                           }`}>
                             {getStatusLabel(g.status)}
                           </span>
+                        </td>
+                        <td className="p-3.5 text-slate-300">
+                          {g.status === 'no_item_ordered' ? (
+                            <span className="text-rose-400 flex items-center gap-1 font-semibold"><PackageX className="w-3 h-3" /> ไม่มีของรับ</span>
+                          ) : g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after' ? (
+                            <span className="text-amber-400 flex items-center gap-1 font-semibold"><PackageCheck className="w-3 h-3" /> รับของหลังงาน</span>
+                          ) : g.status === 'completed' ? (
+                            <span className="text-purple-400 font-semibold">รับบนเวทีแล้ว</span>
+                          ) : (
+                            <span className="text-slate-500">รับบ่าบนเวที</span>
+                          )}
                         </td>
                         <td className="p-3.5 text-slate-400">{g.note || '-'}</td>
                         <td className="p-3.5 text-slate-400 font-mono">{g.checkInTime || '-'}</td>
@@ -1639,13 +1690,13 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'ยังไม่ได้รับของ' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
+                <label className="font-bold text-slate-300 block mb-1">หมายเหตุ (พิมพ์ 'สั่งของไม่ทัน' หรือ 'ไม่ได้รับของ' เพื่อตัดสิทธิ์อัตโนมัติ)</label>
                 <input
                   type="text"
                   value={formData.note}
                   onChange={(e) => setFormData({ ...formData, note: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-white outline-none"
-                  placeholder="เช่น ยังไม่ได้รับของ, สั่งของไม่ทัน, ค้างจ่าย"
+                  placeholder="เช่น สั่งของไม่ทัน, จ่ายช้า, สโมสร"
                 />
               </div>
 
