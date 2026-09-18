@@ -5,7 +5,7 @@ import {
   Plus, Edit2, Trash2, X, AlertTriangle, RotateCcw, 
   Mic2, Filter, Loader2, Sparkles, FileSpreadsheet, 
   Upload, Download, Check, Maximize2, SkipForward, Undo2, 
-  Camera, ScanLine, FileDown, Layers, Ban, PackageCheck, PackageX, Sliders
+  Camera, ScanLine, FileDown, Layers, Ban, PackageCheck, PackageX, Sliders, Lock
 } from 'lucide-react';
 
 import { initializeApp } from "firebase/app";
@@ -92,10 +92,20 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// 1. หน้าจอ LED สาธารณะ (ไม่ต้องใส่รหัสสตาฟ)
+// 1. หน้าหลัก (หน้าจอ LED สาธารณะ สำหรับทุกคนเข้าดูได้ทันที)
 // ==========================================
-function PublicDisplayOnly() {
+function PublicDisplayApp() {
   const [guests, setGuests] = useState([]);
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (sessionStorage.getItem('staff_auth') === 'true') {
+      setIsAuthorized(true);
+    }
+  }, []);
 
   useEffect(() => {
     signInAnonymously(auth).catch(() => {});
@@ -114,14 +124,52 @@ function PublicDisplayOnly() {
   const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
   const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
 
+  const handleStaffLogin = (e) => {
+    e.preventDefault();
+    if (pinInput === '111169') {
+      sessionStorage.setItem('staff_auth', 'true');
+      setIsAuthorized(true);
+      window.location.href = '/staff';
+    } else {
+      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+      setPinInput('');
+    }
+  };
+
+  const handleNavClick = () => {
+    if (isAuthorized || sessionStorage.getItem('staff_auth') === 'true') {
+      window.location.href = '/staff';
+    } else {
+      setIsPinModalOpen(true);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
       <div className="max-w-6xl w-full mx-auto space-y-6">
+        
+        {/* แถบหัวเว็บและปุ่มเข้าสู่ระบบสตาฟ */}
+        <div className="flex justify-between items-center bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 shadow-lg">
+          <div>
+            <h1 className="text-base font-black text-white flex items-center gap-2">
+              <Award className="w-5 h-5 text-blue-500" /> พิธีมอบประดับบ่าเกียรติยศ SPU
+            </h1>
+            <p className="text-xs text-slate-400">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
+          </div>
+          <button
+            onClick={handleNavClick}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
+          >
+            <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
+          </button>
+        </div>
+
+        {/* เนื้อหาหน้าจอ LED */}
         <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-6 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
           
           <div className="text-center mb-6">
             <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
-              <Sparkles className="w-4 h-4 animate-spin" /> พิธีวันเกียรติยศ SPU • กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+              <Sparkles className="w-4 h-4 animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
             </div>
           </div>
 
@@ -142,7 +190,7 @@ function PublicDisplayOnly() {
               <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
                 <Award className="w-8 h-8" />
               </div>
-              <h3 className="text-2xl sm:text-3xl font-black text-white">พิธีมอบประดับบ่าเกียรติยศ SPU</h3>
+              <h3 className="text-2xl sm:text-3xl font-black text-white">เตรียมตัวเริ่มพิธี</h3>
               <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
             </div>
           )}
@@ -174,21 +222,42 @@ function PublicDisplayOnly() {
 
         </div>
       </div>
-      <div className="text-center text-xs text-slate-500 mt-4">
-        ลิงก์จอแสดงผลสาธารณะ (สำหรับเปิดขึ้นจอ LED หรือแจกจ่ายผู้เข้าร่วมงาน)
-      </div>
+
+      {/* Modal ใส่รหัส PIN สำหรับเข้าหน้าสตาฟ */}
+      {isPinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
+            <h3 className="text-base font-black text-white flex items-center justify-center gap-2">
+              <Lock className="w-4 h-4 text-blue-500" /> ยืนยันรหัสสตาฟ
+            </h3>
+            <p className="text-xs text-slate-400">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการ (สแกน / จัดคิว / แดชบอร์ด)</p>
+            <form onSubmit={handleStaffLogin} className="space-y-3">
+              <input 
+                type="password" 
+                maxLength="6"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                placeholder="••••••"
+                style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '10px', border: '1px solid #475569', background: '#090d16', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
+                autoFocus
+              />
+              {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs">ยกเลิก</button>
+                <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs">ยืนยัน</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ==========================================
-// 2. ระบบสตาฟ (ต้องใส่ PIN 111169 ครอบทุกหน้าจัดการ)
+// 2. ระบบจัดการหลังบ้านสำหรับสตาฟ (/staff)
 // ==========================================
-function StaffPortalContainer() {
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [pinInput, setPinInput] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-
+function StaffPortalDashboard() {
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -209,7 +278,6 @@ function StaffPortalContainer() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
-  const [filterSkippedOnly, setFilterSkippedOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -220,7 +288,6 @@ function StaffPortalContainer() {
 
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
-  const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef(null);
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
@@ -228,32 +295,11 @@ function StaffPortalContainer() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-red-600 hover:bg-red-700', onConfirm: null });
 
   useEffect(() => {
-    const authStatus = sessionStorage.getItem('staff_auth');
-    if (authStatus === 'true') {
-      setIsAuthorized(true);
+    if (sessionStorage.getItem('staff_auth') !== 'true') {
+      window.location.href = '/';
+      return;
     }
-  }, []);
 
-  const handleLogin = (e) => {
-    e.preventDefault();
-    if (pinInput === '111169') {
-      sessionStorage.setItem('staff_auth', 'true');
-      setIsAuthorized(true);
-      setErrorMsg('');
-    } else {
-      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
-      setPinInput('');
-    }
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem('staff_auth');
-    setIsAuthorized(false);
-    setPinInput('');
-  };
-
-  useEffect(() => {
-    if (!isAuthorized) return;
     signInAnonymously(auth).catch(() => {});
     const guestsColRef = collection(db, COLLECTION_NAME);
 
@@ -275,11 +321,11 @@ function StaffPortalContainer() {
     });
 
     return () => unsubscribe();
-  }, [isAuthorized]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
-    if (isAuthorized && activeTab === 'scan') {
+    if (activeTab === 'scan') {
       const timer = setTimeout(() => {
         const qrContainer = document.getElementById('camera-scanner-view');
         const Html5QrcodeClass = window.Html5Qrcode;
@@ -327,7 +373,7 @@ function StaffPortalContainer() {
         setIsCameraActive(false);
       }
     }
-  }, [isAuthorized, activeTab]);
+  }, [activeTab]);
 
   const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
 
@@ -617,47 +663,21 @@ function StaffPortalContainer() {
     return guests.filter((g) => {
       if (filterStatus !== 'all' && g.status !== filterStatus) return false;
       if (filterYear !== 'all' && g.year !== filterYear) return false;
-      if (filterSkippedOnly && !g.skipped) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.toLowerCase().includes(q)) || String(g.badgeNumber) === q.replace('#', '');
       }
       return true;
     });
-  }, [guests, filterStatus, filterYear, filterSkippedOnly, searchQuery]);
+  }, [guests, filterStatus, filterYear, searchQuery]);
 
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
 
-  if (!isAuthorized) {
-    return (
-      <div style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '20px', padding: '30px', width: '340px', textAlign: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
-          <h2 style={{ color: '#ffffff', marginBottom: '8px', fontSize: '18px', fontWeight: 'bold' }}>🔐 พื้นที่สำหรับสตาฟ</h2>
-          <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการงานประดับบ่า ASM</p>
-          <form onSubmit={handleLogin}>
-            <input 
-              type="password" 
-              maxLength="6"
-              value={pinInput}
-              onChange={(e) => setPinInput(e.target.value)}
-              placeholder="••••••"
-              style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
-              autoFocus
-            />
-            {errorMsg && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '8px' }}>{errorMsg}</p>}
-            <button type="submit" style={{ width: '100%', marginTop: '15px', padding: '12px', background: '#3b82f6', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}>ยืนยันรหัส PIN</button>
-          </form>
-          <div style={{ marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '15px' }}>
-            <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 8px 0' }}>สำหรับผู้เข้าร่วมงานหรือดูจอภาพรวม:</p>
-            <a href="/display" style={{ color: '#3b82f6', fontSize: '13px', textDecoration: 'none', fontWeight: 'bold' }}>
-              🖥️ เปิดหน้าจอแสดงผลสาธารณะ (LED Display) &rarr;
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const handleLogout = () => {
+    sessionStorage.removeItem('staff_auth');
+    window.location.href = '/';
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 text-slate-100 font-sans pb-20 md:pb-0">
@@ -667,7 +687,7 @@ function StaffPortalContainer() {
             <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center font-bold text-white shadow-lg"><Award className="w-6 h-6" /></div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black text-white">ระบบเช็คชื่อพิธีวันเกียรติยศ</h1>
+                <h1 className="text-base font-black text-white">ระบบจัดการสตาฟ</h1>
                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded-full border border-blue-500/30">Staff</span>
               </div>
               <p className="text-[11px] text-slate-400">ผู้ใช้งาน: {currentStaffUser.email}</p>
@@ -678,6 +698,7 @@ function StaffPortalContainer() {
               <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
               <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+              <a href="/" className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</a>
             </nav>
             <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
           </div>
@@ -686,7 +707,7 @@ function StaffPortalContainer() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         
-        {/* ==================== TAB 2: เช็กชื่อหน้างาน (ใส่ PIN) ==================== */}
+        {/* ==================== TAB 1: เช็กชื่อหน้างาน ==================== */}
         {activeTab === 'scan' && (
           <div className="max-w-lg mx-auto space-y-4">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 text-center shadow-xl">
@@ -760,7 +781,7 @@ function StaffPortalContainer() {
           </div>
         )}
 
-        {/* ==================== TAB 3: จัดคิวเวที (ใส่ PIN) ==================== */}
+        {/* ==================== TAB 2: จัดคิวเวที ==================== */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -884,7 +905,7 @@ function StaffPortalContainer() {
           </div>
         )}
 
-        {/* ==================== TAB 4: แดชบอร์ดจัดการ (ใส่ PIN) ==================== */}
+        {/* ==================== TAB 3: แดชบอร์ด ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -1130,13 +1151,13 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* หน้าจอ LED สาธารณะ (เปิดดูได้ทันที ไม่ต้องใส่ PIN) */}
-        <Route path="/display" element={<PublicDisplayOnly />} />
+        {/* หน้าแรกสุด (ลิงก์หลัก) คือหน้าจอ LED สาธารณะ ทุกคนเข้าดูได้ทันที */}
+        <Route path="/" element={<PublicDisplayApp />} />
         
-        {/* หน้าสตาฟทั้งหมด (สแกน, จัดคิว, แดชบอร์ด) บังคับกรอก PIN 111169 */}
-        <Route path="/" element={<StaffPortalContainer />} />
+        {/* หน้าจัดการของสตาฟ (ต้องใส่รหัส PIN ก่อนเข้าถึง) */}
+        <Route path="/staff" element={<StaffPortalDashboard />} />
         
-        {/* เส้นทางสำรอง เด้งกลับหน้าหลัก */}
+        {/* เผื่อพิมพ์ลิงก์ผิด ให้เด้งกลับหน้าจอ LED */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
