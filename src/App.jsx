@@ -91,7 +91,104 @@ const app = initializeApp(CUSTOM_FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-export default function App() {
+// ==========================================
+// 1. หน้าจอ LED สาธารณะ (ไม่ต้องใส่รหัสสตาฟ)
+// ==========================================
+function PublicDisplayOnly() {
+  const [guests, setGuests] = useState([]);
+
+  useEffect(() => {
+    signInAnonymously(auth).catch(() => {});
+    const guestsColRef = collection(db, COLLECTION_NAME);
+    const unsubscribe = onSnapshot(guestsColRef, (snapshot) => {
+      if (snapshot.empty) {
+        setGuests([]);
+        return;
+      }
+      const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setGuests(sortGuestsByCustomCriteria(items));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
+  const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
+      <div className="max-w-6xl w-full mx-auto space-y-6">
+        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-6 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
+          
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
+              <Sparkles className="w-4 h-4 animate-spin" /> พิธีวันเกียรติยศ SPU • กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+            </div>
+          </div>
+
+          {currentStageGroup.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
+              {currentStageGroup.map((g) => (
+                <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
+                  <span className="inline-block px-3 py-0.5 bg-blue-600 text-white font-black text-sm rounded-xl">
+                    #{g.badgeNumber}
+                  </span>
+                  <h4 className="text-base sm:text-lg font-black text-white truncate">{g.name}</h4>
+                  <p className="text-xs font-mono text-blue-300">{g.studentId || '-'} • {g.year}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-16 text-center space-y-4">
+              <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
+                <Award className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl sm:text-3xl font-black text-white">พิธีมอบประดับบ่าเกียรติยศ SPU</h3>
+              <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+            </div>
+          )}
+
+          <div className="mt-10 pt-6 border-t border-slate-800/80">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+              </h4>
+              <span className="px-2.5 py-0.5 bg-amber-950 text-amber-300 text-xs font-bold rounded-full border border-amber-900">
+                รออยู่ {standbyQueue.length} คน
+              </span>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+              {standbyQueue.length === 0 ? (
+                <span className="text-xs text-slate-500 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+              ) : (
+                standbyQueue.map((g, idx) => (
+                  <div key={g.id} className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
+                    <span className="text-[11px] font-black text-amber-400">#{g.badgeNumber}</span>
+                    <span className="text-xs font-bold text-white truncate max-w-[120px]">{g.name}</span>
+                    <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <div className="text-center text-xs text-slate-500 mt-4">
+        ลิงก์จอแสดงผลสาธารณะ (สำหรับเปิดขึ้นจอ LED หรือแจกจ่ายผู้เข้าร่วมงาน)
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 2. ระบบสตาฟ (ต้องใส่ PIN 111169 ครอบทุกหน้าจัดการ)
+// ==========================================
+function StaffPortalContainer() {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
   const [syncStatus, setSyncStatus] = useState('connecting');
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
@@ -123,19 +220,40 @@ export default function App() {
 
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
-  const [importMode, setImportMode] = useState('append');
-  const [importSummary, setImportSummary] = useState({ total: 0, valid: 0, errors: 0 });
   const [isImporting, setIsImporting] = useState(false);
-  const [importError, setImportError] = useState('');
   const fileInputRef = useRef(null);
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-red-600 hover:bg-red-700', onConfirm: null });
 
-  const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
+  useEffect(() => {
+    const authStatus = sessionStorage.getItem('staff_auth');
+    if (authStatus === 'true') {
+      setIsAuthorized(true);
+    }
+  }, []);
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (pinInput === '111169') {
+      sessionStorage.setItem('staff_auth', 'true');
+      setIsAuthorized(true);
+      setErrorMsg('');
+    } else {
+      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+      setPinInput('');
+    }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('staff_auth');
+    setIsAuthorized(false);
+    setPinInput('');
+  };
 
   useEffect(() => {
+    if (!isAuthorized) return;
     signInAnonymously(auth).catch(() => {});
     const guestsColRef = collection(db, COLLECTION_NAME);
 
@@ -151,18 +269,17 @@ export default function App() {
       setGuests(sortedItems);
       setIsDataLoaded(true);
       setSyncStatus('connected');
-    }, (error) => {
+    }, () => {
       setSyncStatus('error');
       setIsDataLoaded(true);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [isAuthorized]);
 
-  // ปรับจูนความเร็วกล้อง (เพิ่ม FPS เป็น 20 และขยายพื้นที่สแกนจับภาพไวขึ้น)
   useEffect(() => {
     let isMounted = true;
-    if (activeTab === 'scan') {
+    if (isAuthorized && activeTab === 'scan') {
       const timer = setTimeout(() => {
         const qrContainer = document.getElementById('camera-scanner-view');
         const Html5QrcodeClass = window.Html5Qrcode;
@@ -172,16 +289,12 @@ export default function App() {
             html5QrCodeRef.current = qrCode;
             qrCode.start(
               { facingMode: "environment" },
-              { 
-                fps: 20, // เพิ่มความถี่ในการจับภาพให้สูงขึ้น (สแกนติดไวขึ้น)
-                qrbox: { width: 280, height: 280 }, // ขยายกรอบสแกนให้กว้างขึ้น เล็งง่ายขึ้น
-                aspectRatio: 1.0
-              },
+              { fps: 20, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 },
               (decodedText) => {
                 if (!isProcessingScanRef.current) {
                   isProcessingScanRef.current = true;
                   handleInspectQrCode(decodedText);
-                  setTimeout(() => { isProcessingScanRef.current = false; }, 1200); // หน่วงเวลาสั้นลงเพื่อให้พร้อมสแกนคนต่อไปไวขึ้น
+                  setTimeout(() => { isProcessingScanRef.current = false; }, 1200);
                 }
               },
               () => {}
@@ -214,7 +327,9 @@ export default function App() {
         setIsCameraActive(false);
       }
     }
-  }, [activeTab]);
+  }, [isAuthorized, activeTab]);
+
+  const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
 
   const handleInspectQrCode = (code) => {
     const clean = String(code).trim();
@@ -244,15 +359,12 @@ export default function App() {
       setScannedPreviewGuest(found);
       setManualCodeInput('');
     } else {
-      // ค้นหาแบบยืดหยุ่นสำรอง (Partial Match)
       const partialFound = guests.find((g) => 
         String(g.name || '').toLowerCase().includes(clean.toLowerCase()) ||
         String(g.studentId || '').includes(clean)
       );
       if (partialFound) {
         setScannedPreviewGuest(partialFound);
-      } else {
-        console.warn(`ไม่พบข้อมูล QR: ${clean}`);
       }
     }
   };
@@ -270,13 +382,12 @@ export default function App() {
         prevStatus: guest.status,
         skipped: false
       });
-      alert(`✅ บันทึกสำเร็จ: ${guest.name} (${getStatusLabel(finalStatus)})`);
     } catch (e) { console.error(e); }
     setScannedPreviewGuest(null);
   };
 
   const handleUndoStatus = async (guest) => {
-    if (!guest.prevStatus) return alert('ไม่มีสถานะก่อนหน้า');
+    if (!guest.prevStatus) return;
     try {
       await updateDoc(getGuestDocRef(guest.id), { status: guest.prevStatus, prevStatus: null, ...(guest.prevStatus === 'pending' ? { checkInTime: null } : {}) });
     } catch (e) { console.error(e); }
@@ -306,7 +417,6 @@ export default function App() {
         });
       });
       await batch.commit();
-      alert(`✅ ย้ายเข้าสแตนด์บายสำเร็จ ${takeCount} คน`);
     } catch (e) { console.error(e); }
   };
 
@@ -333,13 +443,12 @@ export default function App() {
         });
       });
       await batch.commit();
-      alert(`🚀 ประกาศขึ้นเวทีเซตนี้จำนวน ${takeCount} คนเรียบร้อยแล้ว!`);
     } catch (e) { console.error(e); }
   };
 
   const handleCompleteStageBatch = async () => {
     const onStageList = guests.filter((g) => g.status === 'on_stage');
-    if (onStageList.length === 0) return alert('ไม่มีผู้เข้าร่วมบนเวทีขณะนี้');
+    if (onStageList.length === 0) return;
 
     try {
       const batch = writeBatch(db);
@@ -362,10 +471,7 @@ export default function App() {
         setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
         try {
           await deleteDoc(getGuestDocRef(guest.id));
-          alert('✅ ลบรายชื่อเรียบร้อยแล้ว');
-        } catch (e) {
-          alert('เกิดข้อผิดพลาดในการลบ: ' + e.message);
-        }
+        } catch (e) {}
         setConfirmModal((p) => ({ ...p, isOpen: false }));
       }
     });
@@ -407,10 +513,7 @@ export default function App() {
             });
             await batch.commit();
           }
-          alert('✅ ลบรายชื่อที่เลือกเรียบร้อยแล้ว');
-        } catch (e) {
-          alert('เกิดข้อผิดพลาด: ' + e.message);
-        }
+        } catch (e) {}
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       }
     });
@@ -466,7 +569,7 @@ export default function App() {
       setIsResetModalOpen(false);
       setResetConfirmInput('');
       alert('✅ รีเซ็ตสถานะทั้งหมดเรียบร้อยแล้ว');
-    } catch (e) { console.error(e); }
+    } catch (e) {}
   };
 
   const handleExportQrToGoogleSheets = async () => {
@@ -509,7 +612,6 @@ export default function App() {
   const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
   const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
   const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
-  const skippedList = useMemo(() => guests.filter((g) => g.skipped), [guests]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guests.filter((g) => {
@@ -527,6 +629,36 @@ export default function App() {
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
 
+  if (!isAuthorized) {
+    return (
+      <div style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
+        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '20px', padding: '30px', width: '340px', textAlign: 'center', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+          <h2 style={{ color: '#ffffff', marginBottom: '8px', fontSize: '18px', fontWeight: 'bold' }}>🔐 พื้นที่สำหรับสตาฟ</h2>
+          <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '20px' }}>กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการงานประดับบ่า ASM</p>
+          <form onSubmit={handleLogin}>
+            <input 
+              type="password" 
+              maxLength="6"
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value)}
+              placeholder="••••••"
+              style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '10px', border: '1px solid #475569', background: '#0f172a', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
+              autoFocus
+            />
+            {errorMsg && <p style={{ color: '#ef4444', fontSize: '13px', marginTop: '8px' }}>{errorMsg}</p>}
+            <button type="submit" style={{ width: '100%', marginTop: '15px', padding: '12px', background: '#3b82f6', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: 'bold', cursor: 'pointer' }}>ยืนยันรหัส PIN</button>
+          </form>
+          <div style={{ marginTop: '20px', borderTop: '1px solid #334155', paddingTop: '15px' }}>
+            <p style={{ color: '#64748b', fontSize: '12px', margin: '0 0 8px 0' }}>สำหรับผู้เข้าร่วมงานหรือดูจอภาพรวม:</p>
+            <a href="/display" style={{ color: '#3b82f6', fontSize: '13px', textDecoration: 'none', fontWeight: 'bold' }}>
+              🖥️ เปิดหน้าจอแสดงผลสาธารณะ (LED Display) &rarr;
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 text-slate-100 font-sans pb-20 md:pb-0">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3">
@@ -541,25 +673,27 @@ export default function App() {
               <p className="text-[11px] text-slate-400">ผู้ใช้งาน: {currentStaffUser.email}</p>
             </div>
           </div>
-          <nav className="hidden md:flex items-center bg-slate-900 p-1 rounded-2xl border border-slate-800">
-            <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
-            <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
-            <button onClick={() => setActiveTab('led')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'led' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Maximize2 className="w-4 h-4" /> จอ LED</button>
-            <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-          </nav>
+          <div className="flex items-center gap-3">
+            <nav className="hidden md:flex items-center bg-slate-900 p-1 rounded-2xl border border-slate-800">
+              <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
+              <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
+              <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+            </nav>
+            <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
+          </div>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         
-        {/* ==================== TAB 1: เช็กชื่อหน้างาน ==================== */}
+        {/* ==================== TAB 2: เช็กชื่อหน้างาน (ใส่ PIN) ==================== */}
         {activeTab === 'scan' && (
           <div className="max-w-lg mx-auto space-y-4">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 text-center shadow-xl">
               <h2 className="text-lg font-black text-white flex items-center justify-center gap-2">
                 <ScanLine className="w-5 h-5 text-blue-500" /> เช็กชื่อผู้เข้าร่วมหน้างาน
               </h2>
-              <p className="text-xs text-slate-400 mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ (มาปกติ / มาสาย / ผิดระเบียบ)</p>
+              <p className="text-xs text-slate-400 mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
 
               <div className="mt-4 bg-black rounded-2xl overflow-hidden border-2 border-slate-800 relative min-h-[220px] flex items-center justify-center">
                 <div id="camera-scanner-view" className="w-full h-full"></div>
@@ -572,7 +706,7 @@ export default function App() {
               </div>
 
               <div className="mt-4 pt-4 border-t border-slate-800 text-left">
-                <label className="text-xs font-bold text-slate-300 block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา / เลขป้าย:</label>
+                <label className="text-xs font-bold text-slate-300 block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -626,7 +760,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 2: จัดคิวเวที ==================== */}
+        {/* ==================== TAB 3: จัดคิวเวที (ใส่ PIN) ==================== */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -750,69 +884,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ==================== TAB 3: จอ LED ==================== */}
-        {activeTab === 'led' && (
-          <div className="max-w-6xl mx-auto space-y-6">
-            <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-8 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
-              
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
-                  <Sparkles className="w-4 h-4 animate-spin" /> พิธีวันเกียรติยศ SPU • กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
-                </div>
-              </div>
-
-              {currentStageGroup.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
-                  {currentStageGroup.map((g) => (
-                    <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
-                      <span className="inline-block px-3 py-0.5 bg-blue-600 text-white font-black text-sm rounded-xl">
-                        #{g.badgeNumber}
-                      </span>
-                      <h4 className="text-base sm:text-lg font-black text-white truncate">{g.name}</h4>
-                      <p className="text-xs font-mono text-blue-300">{g.studentId || '-'} • {g.year}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-16 text-center space-y-4">
-                  <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
-                    <Award className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-2xl sm:text-3xl font-black text-white">พิธีมอบประดับบ่าเกียรติยศ SPU</h3>
-                  <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
-                </div>
-              )}
-
-              <div className="mt-10 pt-6 border-t border-slate-800/80">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
-                    <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
-                  </h4>
-                  <span className="px-2.5 py-0.5 bg-amber-950 text-amber-300 text-xs font-bold rounded-full border border-amber-900">
-                    รออยู่ {standbyQueue.length} คน
-                  </span>
-                </div>
-                
-                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                  {standbyQueue.length === 0 ? (
-                    <span className="text-xs text-slate-500 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
-                  ) : (
-                    standbyQueue.map((g, idx) => (
-                      <div key={g.id} className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
-                        <span className="text-[11px] font-black text-amber-400">#{g.badgeNumber}</span>
-                        <span className="text-xs font-bold text-white truncate max-w-[120px]">{g.name}</span>
-                        <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-            </div>
-          </div>
-        )}
-
-        {/* ==================== TAB 4: แดชบอร์ด ==================== */}
+        {/* ==================== TAB 4: แดชบอร์ดจัดการ (ใส่ PIN) ==================== */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -856,7 +928,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* ตารางแดชบอร์ด */}
             <div className="bg-slate-950 rounded-3xl border border-slate-800 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
@@ -974,7 +1045,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODALS อื่นๆ */}
+      {/* MODAL นำเข้า Excel */}
       {isExcelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4">
@@ -991,7 +1062,6 @@ export default function App() {
                   id: 'imp_' + Date.now() + '_' + idx, badgeNumber: 0, studentId: String(row['รหัสนักศึกษา'] || ''), name: String(row['ชื่อ-นามสกุล'] || row['ชื่อ'] || ''), email: String(row['อีเมล'] || ''), role: 'ผู้เข้าร่วม', year: detectYearFromStudentId(String(row['รหัสนักศึกษา'] || '')), note: String(row['หมายเหตุ'] || ''), qrToken: String(row['รหัสนักศึกษา'] || Math.random()), status: 'pending', checkInTime: null, prevStatus: null, skipped: false, standbyOrder: null
                 })).filter(g => g.name);
                 setExcelPreviewData(parsed);
-                setImportSummary({ total: raw.length, valid: parsed.length, errors: raw.length - parsed.length });
               };
               reader.readAsBinaryString(file);
             }} className="text-xs text-slate-400 file:bg-blue-600 file:text-white file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer" />
@@ -1014,6 +1084,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL รีเซ็ต */}
       {isResetModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
@@ -1027,6 +1098,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL ยืนยันทั่วไป */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
@@ -1043,9 +1115,30 @@ export default function App() {
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950 border-t border-slate-800 px-2 py-2 flex justify-around">
         <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'scan' ? 'text-blue-500 font-bold' : 'text-slate-400'}`}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
         <button onClick={() => setActiveTab('queue')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'queue' ? 'text-blue-500 font-bold' : 'text-slate-400'}`}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
-        <button onClick={() => setActiveTab('led')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'led' ? 'text-blue-500 font-bold' : 'text-slate-400'}`}><Maximize2 className="w-5 h-5" /><span className="text-[10px]">จอ LED</span></button>
         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'dashboard' ? 'text-blue-500 font-bold' : 'text-slate-400'}`}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
       </nav>
     </div>
+  );
+}
+
+// ==========================================
+// 3. ตัวจัดการเส้นทางหลัก (Router)
+// ==========================================
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+
+export default function App() {
+  return (
+    <Router>
+      <Routes>
+        {/* หน้าจอ LED สาธารณะ (เปิดดูได้ทันที ไม่ต้องใส่ PIN) */}
+        <Route path="/display" element={<PublicDisplayOnly />} />
+        
+        {/* หน้าสตาฟทั้งหมด (สแกน, จัดคิว, แดชบอร์ด) บังคับกรอก PIN 111169 */}
+        <Route path="/" element={<StaffPortalContainer />} />
+        
+        {/* เส้นทางสำรอง เด้งกลับหน้าหลัก */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
   );
 }
