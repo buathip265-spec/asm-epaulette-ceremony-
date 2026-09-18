@@ -266,8 +266,7 @@ function StaffPortalDashboard() {
   const [batchSize, setBatchSize] = useState(14);
 
   const [activeTab, setActiveTab] = useState('scan');
-  const currentStaffUser = { email: 'staff@spu.ac.th', role: 'Staff' };
-
+  
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
@@ -690,7 +689,6 @@ function StaffPortalDashboard() {
                 <h1 className="text-base font-black text-white">ระบบจัดการสตาฟ</h1>
                 <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-[10px] font-bold rounded-full border border-blue-500/30">Staff</span>
               </div>
-              <p className="text-[11px] text-slate-400">ผู้ใช้งาน: {currentStaffUser.email}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
