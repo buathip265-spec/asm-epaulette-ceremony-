@@ -92,185 +92,24 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// 1. หน้าหลัก (หน้าจอ LED สาธารณะ สำหรับทุกคนเข้าดูได้ทันที)
+// Main App Component (Unified Route with PIN check)
 // ==========================================
-function PublicDisplayApp() {
+export default function App() {
   const [guests, setGuests] = useState([]);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isAuthorized, setIsAuthorized] = useState(false);
 
-  useEffect(() => {
-    if (sessionStorage.getItem('staff_auth') === 'true') {
-      setIsAuthorized(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    signInAnonymously(auth).catch(() => {});
-    const guestsColRef = collection(db, COLLECTION_NAME);
-    const unsubscribe = onSnapshot(guestsColRef, (snapshot) => {
-      if (snapshot.empty) {
-        setGuests([]);
-        return;
-      }
-      const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      setGuests(sortGuestsByCustomCriteria(items));
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
-  const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
-
-  const handleStaffLogin = (e) => {
-    e.preventDefault();
-    if (pinInput === '111169') {
-      sessionStorage.setItem('staff_auth', 'true');
-      setIsAuthorized(true);
-      window.location.href = '/staff';
-    } else {
-      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
-      setPinInput('');
-    }
-  };
-
-  const handleNavClick = () => {
-    if (isAuthorized || sessionStorage.getItem('staff_auth') === 'true') {
-      window.location.href = '/staff';
-    } else {
-      setIsPinModalOpen(true);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
-      <div className="max-w-6xl w-full mx-auto space-y-6">
-        
-        {/* แถบหัวเว็บและปุ่มเข้าสู่ระบบสตาฟ */}
-        <div className="flex justify-between items-center bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 shadow-lg">
-          <div>
-            <h1 className="text-base font-black text-white flex items-center gap-2">
-              <Award className="w-5 h-5 text-blue-500" /> พิธีมอบประดับบ่าเกียรติยศ SPU
-            </h1>
-            <p className="text-xs text-slate-400">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
-          </div>
-          <button
-            onClick={handleNavClick}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
-          >
-            <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
-          </button>
-        </div>
-
-        {/* เนื้อหาหน้าจอ LED */}
-        <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-6 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
-          
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
-              <Sparkles className="w-4 h-4 animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
-            </div>
-          </div>
-
-          {currentStageGroup.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
-              {currentStageGroup.map((g) => (
-                <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
-                  <span className="inline-block px-3 py-0.5 bg-blue-600 text-white font-black text-sm rounded-xl">
-                    #{g.badgeNumber}
-                  </span>
-                  <h4 className="text-base sm:text-lg font-black text-white truncate">{g.name}</h4>
-                  <p className="text-xs font-mono text-blue-300">{g.studentId || '-'} • {g.year}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="py-16 text-center space-y-4">
-              <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
-                <Award className="w-8 h-8" />
-              </div>
-              <h3 className="text-2xl sm:text-3xl font-black text-white">เตรียมตัวเริ่มพิธี</h3>
-              <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
-            </div>
-          )}
-
-          <div className="mt-10 pt-6 border-t border-slate-800/80">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
-              </h4>
-              <span className="px-2.5 py-0.5 bg-amber-950 text-amber-300 text-xs font-bold rounded-full border border-amber-900">
-                รออยู่ {standbyQueue.length} คน
-              </span>
-            </div>
-            
-            <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-              {standbyQueue.length === 0 ? (
-                <span className="text-xs text-slate-500 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
-              ) : (
-                standbyQueue.map((g, idx) => (
-                  <div key={g.id} className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
-                    <span className="text-[11px] font-black text-amber-400">#{g.badgeNumber}</span>
-                    <span className="text-xs font-bold text-white truncate max-w-[120px]">{g.name}</span>
-                    <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Modal ใส่รหัส PIN สำหรับเข้าหน้าสตาฟ */}
-      {isPinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
-            <h3 className="text-base font-black text-white flex items-center justify-center gap-2">
-              <Lock className="w-4 h-4 text-blue-500" /> ยืนยันรหัสสตาฟ
-            </h3>
-            <p className="text-xs text-slate-400">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการ (สแกน / จัดคิว / แดชบอร์ด)</p>
-            <form onSubmit={handleStaffLogin} className="space-y-3">
-              <input 
-                type="password" 
-                maxLength="6"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                placeholder="••••••"
-                style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '10px', border: '1px solid #475569', background: '#090d16', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
-                autoFocus
-              />
-              {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs">ยกเลิก</button>
-                <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs">ยืนยัน</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ==========================================
-// 2. ระบบจัดการหลังบ้านสำหรับสตาฟ (/staff)
-// ==========================================
-function StaffPortalDashboard() {
-  const [guests, setGuests] = useState([]);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  // Staff Portal States
+  const [activeTab, setActiveTab] = useState('scan');
+  const [batchSize, setBatchSize] = useState(14);
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmails, setIsSendingEmails] = useState(false);
-  const [batchSize, setBatchSize] = useState(14);
-
-  const [activeTab, setActiveTab] = useState('scan');
   
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
-  
-  // State สำหรับ Modal สรุปรายงานหลังจบงาน
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 
   const isProcessingScanRef = useRef(false);
@@ -296,34 +135,29 @@ function StaffPortalDashboard() {
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-red-600 hover:bg-red-700', onConfirm: null });
 
   useEffect(() => {
-    if (sessionStorage.getItem('staff_auth') !== 'true') {
-      window.location.href = '/';
-      return;
+    if (sessionStorage.getItem('staff_auth') === 'true') {
+      setIsAuthorized(true);
     }
-
-    signInAnonymously(auth).catch(() => {});
-    const guestsColRef = collection(db, COLLECTION_NAME);
-
-    const unsubscribe = onSnapshot(guestsColRef, (snapshot) => {
-      if (snapshot.empty) {
-        setGuests([]);
-        setIsDataLoaded(true);
-        return;
-      }
-      const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
-      const sortedItems = sortGuestsByCustomCriteria(items);
-      setGuests(sortedItems);
-      setIsDataLoaded(true);
-    }, () => {
-      setIsDataLoaded(true);
-    });
-
-    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
+    signInAnonymously(auth).catch(() => {});
+    const guestsColRef = collection(db, COLLECTION_NAME);
+    const unsubscribe = onSnapshot(guestsColRef, (snapshot) => {
+      if (snapshot.empty) {
+        setGuests([]);
+        return;
+      }
+      const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      setGuests(sortGuestsByCustomCriteria(items));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Camera scanner effect for staff portal when active
+  useEffect(() => {
     let isMounted = true;
-    if (activeTab === 'scan') {
+    if (isAuthorized && activeTab === 'scan') {
       const timer = setTimeout(() => {
         const qrContainer = document.getElementById('camera-scanner-view');
         const Html5QrcodeClass = window.Html5Qrcode;
@@ -371,7 +205,27 @@ function StaffPortalDashboard() {
         setIsCameraActive(false);
       }
     }
-  }, [activeTab]);
+  }, [isAuthorized, activeTab]);
+
+  const handleStaffLogin = (e) => {
+    e.preventDefault();
+    if (pinInput === '111169') {
+      sessionStorage.setItem('staff_auth', 'true');
+      setIsAuthorized(true);
+      setIsPinModalOpen(false);
+      setPinInput('');
+      setErrorMsg('');
+    } else {
+      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+      setPinInput('');
+    }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('staff_auth');
+    setIsAuthorized(false);
+    setActiveTab('scan');
+  };
 
   const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
 
@@ -639,7 +493,6 @@ function StaffPortalDashboard() {
     finally { setIsSendingEmails(false); }
   };
 
-  // คำนวณข้อมูลสำหรับรายงานสรุปหลังจบงาน
   const summaryStats = useMemo(() => {
     const total = guests.length;
     const checkedIn = guests.filter(g => g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby').length;
@@ -691,9 +544,9 @@ function StaffPortalDashboard() {
     }
   };
 
-  const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
-  const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
   const currentStageGroup = useMemo(() => guests.filter((g) => g.status === 'on_stage'), [guests]);
+  const standbyQueue = useMemo(() => guests.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guests]);
+  const readyQueue = useMemo(() => guests.filter((g) => g.status === 'checked_in' && !g.skipped), [guests]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guests.filter((g) => {
@@ -710,11 +563,117 @@ function StaffPortalDashboard() {
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('staff_auth');
-    window.location.href = '/';
-  };
+  // หากยังไม่ยืนยันตัวตนสตาฟ ให้แสดงหน้าจอ LED สาธารณะ
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
+        <div className="max-w-6xl w-full mx-auto space-y-6">
+          
+          <div className="flex justify-between items-center bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 shadow-lg">
+            <div>
+              <h1 className="text-base font-black text-white flex items-center gap-2">
+                <Award className="w-5 h-5 text-blue-500" /> พิธีมอบประดับบ่าเกียรติยศ SPU
+              </h1>
+              <p className="text-xs text-slate-400">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
+            </div>
+            <button
+              onClick={() => setIsPinModalOpen(true)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md flex items-center gap-1.5 transition-all"
+            >
+              <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
+            </button>
+          </div>
 
+          <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-6 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
+            
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
+                <Sparkles className="w-4 h-4 animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+              </div>
+            </div>
+
+            {currentStageGroup.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
+                {currentStageGroup.map((g) => (
+                  <div key={g.id} className="bg-slate-900/90 border-2 border-blue-500/60 rounded-2xl p-4 text-center shadow-lg space-y-1">
+                    <span className="inline-block px-3 py-0.5 bg-blue-600 text-white font-black text-sm rounded-xl">
+                      #{g.badgeNumber}
+                    </span>
+                    <h4 className="text-base sm:text-lg font-black text-white truncate">{g.name}</h4>
+                    <p className="text-xs font-mono text-blue-300">{g.studentId || '-'} • {g.year}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto text-blue-400 animate-pulse">
+                  <Award className="w-8 h-8" />
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-black text-white">เตรียมตัวเริ่มพิธี</h3>
+                <p className="text-sm sm:text-base text-slate-400 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+              </div>
+            )}
+
+            <div className="mt-10 pt-6 border-t border-slate-800/80">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+                </h4>
+                <span className="px-2.5 py-0.5 bg-amber-950 text-amber-300 text-xs font-bold rounded-full border border-amber-900">
+                  รออยู่ {standbyQueue.length} คน
+                </span>
+              </div>
+              
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                {standbyQueue.length === 0 ? (
+                  <span className="text-xs text-slate-500 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+                ) : (
+                  standbyQueue.map((g, idx) => (
+                    <div key={g.id} className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-2xs">
+                      <span className="text-[11px] font-black text-amber-400">#{g.badgeNumber}</span>
+                      <span className="text-xs font-bold text-white truncate max-w-[120px]">{g.name}</span>
+                      <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Modal ใส่รหัส PIN */}
+        {isPinModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
+              <h3 className="text-base font-black text-white flex items-center justify-center gap-2">
+                <Lock className="w-4 h-4 text-blue-500" /> ยืนยันรหัสสตาฟ
+              </h3>
+              <p className="text-xs text-slate-400">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการสตาฟ</p>
+              <form onSubmit={handleStaffLogin} className="space-y-3">
+                <input 
+                  type="password" 
+                  maxLength="6"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  placeholder="••••••"
+                  style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '10px', border: '1px solid #475569', background: '#090d16', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
+                  autoFocus
+                />
+                {errorMsg && <p className="text-red-500 text-xs">{errorMsg}</p>}
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs">ยกเลิก</button>
+                  <button type="submit" className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs">ยืนยัน</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // หากยืนยันตัวตนสำเร็จแล้ว แสดงหน้าแดชบอร์ดจัดการสตาฟ
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 text-slate-100 font-sans pb-20 md:pb-0">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3">
@@ -733,7 +692,7 @@ function StaffPortalDashboard() {
               <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
               <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-              <a href="/" className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</a>
+              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
             </nav>
             <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
           </div>
@@ -742,7 +701,7 @@ function StaffPortalDashboard() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         
-        {/* ==================== TAB 1: เช็กชื่อหน้างาน ==================== */}
+        {/* TAB 1: เช็กชื่อหน้างาน */}
         {activeTab === 'scan' && (
           <div className="max-w-lg mx-auto space-y-4">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 text-center shadow-xl">
@@ -816,7 +775,7 @@ function StaffPortalDashboard() {
           </div>
         )}
 
-        {/* ==================== TAB 2: จัดคิวเวที ==================== */}
+        {/* TAB 2: จัดคิวเวที */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -940,7 +899,7 @@ function StaffPortalDashboard() {
           </div>
         )}
 
-        {/* ==================== TAB 3: แดชบอร์ด ==================== */}
+        {/* TAB 3: แดชบอร์ด */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
             <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
@@ -950,7 +909,6 @@ function StaffPortalDashboard() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* ปุ่มสรุปรายงานหลังจบงาน */}
                 <button
                   onClick={() => setIsSummaryModalOpen(true)}
                   className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
@@ -1242,22 +1200,5 @@ function StaffPortalDashboard() {
         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'dashboard' ? 'text-blue-500 font-bold' : 'text-slate-400'}`}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
       </nav>
     </div>
-  );
-}
-
-// ==========================================
-// 3. ตัวจัดการเส้นทางหลัก (Router)
-// ==========================================
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-
-export default function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<PublicDisplayApp />} />
-        <Route path="/staff" element={<StaffPortalDashboard />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
   );
 }
