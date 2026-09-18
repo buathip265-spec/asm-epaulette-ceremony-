@@ -258,7 +258,6 @@ function PublicDisplayApp() {
 // 2. ระบบจัดการหลังบ้านสำหรับสตาฟ (/staff)
 // ==========================================
 function StaffPortalDashboard() {
-  const [syncStatus, setSyncStatus] = useState('connecting');
   const [guests, setGuests] = useState([]);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
@@ -271,6 +270,9 @@ function StaffPortalDashboard() {
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   
+  // State สำหรับ Modal สรุปรายงานหลังจบงาน
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+
   const isProcessingScanRef = useRef(false);
   const html5QrCodeRef = useRef(null);
 
@@ -306,16 +308,13 @@ function StaffPortalDashboard() {
       if (snapshot.empty) {
         setGuests([]);
         setIsDataLoaded(true);
-        setSyncStatus('connected');
         return;
       }
       const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       const sortedItems = sortGuestsByCustomCriteria(items);
       setGuests(sortedItems);
       setIsDataLoaded(true);
-      setSyncStatus('connected');
     }, () => {
-      setSyncStatus('error');
       setIsDataLoaded(true);
     });
 
@@ -640,6 +639,44 @@ function StaffPortalDashboard() {
     finally { setIsSendingEmails(false); }
   };
 
+  // คำนวณข้อมูลสำหรับรายงานสรุปหลังจบงาน
+  const summaryStats = useMemo(() => {
+    const total = guests.length;
+    const checkedIn = guests.filter(g => g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby').length;
+    const pending = guests.filter(g => g.status === 'pending').length;
+    const late = guests.filter(g => g.status === 'late_receive_after').length;
+    const dressViolation = guests.filter(g => g.status === 'dress_violation_receive_after').length;
+    const noItem = guests.filter(g => g.status === 'no_item_ordered').length;
+
+    const byYear = {
+      'ปี 1': guests.filter(g => g.year === 'ปี 1').length,
+      'ปี 2': guests.filter(g => g.year === 'ปี 2').length,
+      'ปี 3': guests.filter(g => g.year === 'ปี 3').length,
+      'ปี 4': guests.filter(g => g.year === 'ปี 4').length,
+      'บัณฑิต': guests.filter(g => g.year === 'บัณฑิต').length,
+    };
+
+    return { total, checkedIn, pending, late, dressViolation, noItem, byYear };
+  }, [guests]);
+
+  const generateSummaryText = () => {
+    return `📊 สรุปผลพิธีมอบประดับบ่าเกียรติยศ SPU
+----------------------------------------
+- รายชื่อทั้งหมด: ${summaryStats.total} คน
+- เข้าร่วมและเช็กชื่อแล้ว: ${summaryStats.checkedIn} คน
+- ยังไม่มา / ขาด: ${summaryStats.pending} คน
+- มาสาย (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.late} คน
+- ผิดระเบียบ (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.dressViolation} คน
+- สั่งของไม่ทัน / ไม่ขึ้นรับบ่า: ${summaryStats.noItem} คน
+
+📌 แยกตามชั้นปี:
+- ปี 1: ${summaryStats.byYear['ปี 1']} คน
+- ปี 2: ${summaryStats.byYear['ปี 2']} คน
+- ปี 3: ${summaryStats.byYear['ปี 3']} คน
+- ปี 4: ${summaryStats.byYear['ปี 4']} คน
+- บัณฑิต: ${summaryStats.byYear['บัณฑิต']} คน`;
+  };
+
   const getStatusLabel = (st) => {
     switch (st) {
       case 'pending': return 'ยังไม่มา';
@@ -913,6 +950,14 @@ function StaffPortalDashboard() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {/* ปุ่มสรุปรายงานหลังจบงาน */}
+                <button
+                  onClick={() => setIsSummaryModalOpen(true)}
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                >
+                  <Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน
+                </button>
+
                 {selectedGuestIds.length > 0 && (
                   <button
                     onClick={handleDeleteSelectedGuests}
@@ -1017,6 +1062,66 @@ function StaffPortalDashboard() {
         )}
 
       </main>
+
+      {/* MODAL สรุปรายงานหลังจบงาน */}
+      {isSummaryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <Award className="w-5 h-5 text-emerald-400" /> สรุปผลพิธีมอบประดับบ่าเกียรติยศ
+              </h3>
+              <button onClick={() => setIsSummaryModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3">
+                <span className="text-slate-400">รายชื่อทั้งหมด</span>
+                <p className="text-xl font-black text-white mt-1">{summaryStats.total} คน</p>
+              </div>
+              <div className="bg-slate-900 border border-emerald-900/50 rounded-2xl p-3">
+                <span className="text-emerald-400">เช็กชื่อเข้าร่วมแล้ว</span>
+                <p className="text-xl font-black text-emerald-300 mt-1">{summaryStats.checkedIn} คน</p>
+              </div>
+              <div className="bg-slate-900 border border-amber-900/50 rounded-2xl p-3">
+                <span className="text-amber-400">มาสาย / ผิดระเบียบ</span>
+                <p className="text-xl font-black text-amber-300 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
+              </div>
+              <div className="bg-slate-900 border border-rose-900/50 rounded-2xl p-3">
+                <span className="text-rose-400">ยังไม่มา (ขาด)</span>
+                <p className="text-xl font-black text-rose-300 mt-1">{summaryStats.pending} คน</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 text-xs space-y-1.5">
+              <span className="font-bold text-slate-300 block mb-1">สถิติแยกตามชั้นปี:</span>
+              <div className="flex justify-between text-slate-400"><span>ปี 1:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 1']} คน</span></div>
+              <div className="flex justify-between text-slate-400"><span>ปี 2:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 2']} คน</span></div>
+              <div className="flex justify-between text-slate-400"><span>ปี 3:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 3']} คน</span></div>
+              <div className="flex justify-between text-slate-400"><span>ปี 4:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 4']} คน</span></div>
+              <div className="flex justify-between text-slate-400"><span>บัณฑิต:</span><span className="font-bold text-white">{summaryStats.byYear['บัณฑิต']} คน</span></div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(generateSummaryText());
+                  alert('📋 คัดลอกข้อความสรุปรายงานไปยังคลิปบอร์ดแล้ว!');
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md"
+              >
+                คัดลอกข้อความรายงานส่งไลน์
+              </button>
+              <button
+                onClick={() => setIsSummaryModalOpen(false)}
+                className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold rounded-xl text-xs"
+              >
+                ปิด
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL เพิ่ม/แก้ไข รายบุคคล */}
       {isEditModalOpen && (
@@ -1149,13 +1254,8 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* หน้าแรกสุด (ลิงก์หลัก) คือหน้าจอ LED สาธารณะ ทุกคนเข้าดูได้ทันที */}
         <Route path="/" element={<PublicDisplayApp />} />
-        
-        {/* หน้าจัดการของสตาฟ (ต้องใส่รหัส PIN ก่อนเข้าถึง) */}
         <Route path="/staff" element={<StaffPortalDashboard />} />
-        
-        {/* เผื่อพิมพ์ลิงก์ผิด ให้เด้งกลับหน้าจอ LED */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
