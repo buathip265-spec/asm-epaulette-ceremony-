@@ -9,7 +9,6 @@ function StaffPortal() {
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // ตรวจสอบสถานะการยืนยันตัวตนในเครื่อง (SessionStorage)
   useEffect(() => {
     const authStatus = sessionStorage.getItem('staff_auth');
     if (authStatus === 'true') {
@@ -24,7 +23,8 @@ function StaffPortal() {
       setIsAuthorized(true);
       setErrorMsg('');
     } else {
-      setErrorMsg('รหัส PIN ไม่ถูกต้อง (รหัสผ่านคือ 111169)');
+      // แก้ไขข้อความแจ้งเตือนให้ปลอดภัย ไม่บอกใบ้รหัสผ่าน
+      setErrorMsg('รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
       setPinInput('');
     }
   };
@@ -35,7 +35,6 @@ function StaffPortal() {
     setPinInput('');
   };
 
-  // ถ้ายังไม่ใส่รหัส ให้แสดงหน้าจอขอรหัส PIN
   if (!isAuthorized) {
     return (
       <div style={styles.loginContainer}>
@@ -66,7 +65,6 @@ function StaffPortal() {
     );
   }
 
-  // ถ้าใส่รหัสถูกต้องแล้ว จะแสดงหน้าจอระบบสตาฟทั้งหมด
   return (
     <div style={{ background: '#0f172a', minHeight: '100vh', color: '#f8fafc', padding: '20px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid #334155', paddingBottom: '15px' }}>
@@ -115,13 +113,8 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* หน้าหลักสตาฟ (ต้องใส่ PIN 111169) */}
         <Route path="/" element={<StaffPortal />} />
-        
-        {/* หน้าจอภาพรวมสำหรับคนทั่วไป (ไม่ต้องใส่ PIN) */}
         <Route path="/display" element={<PublicDisplayView />} />
-        
-        {/* กรณีพิมพ์ลิงก์ผิด ให้เด้งกลับหน้าแรก */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
