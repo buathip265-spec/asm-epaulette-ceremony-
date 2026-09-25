@@ -92,7 +92,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// Main App Component (Unified Route with PIN check & Ultra-Vibrant UI)
+// Main App Component (Navy, Cream & Gold Luxury Theme)
 // ==========================================
 export default function App() {
   const [guests, setGuests] = useState([]);
@@ -132,7 +132,7 @@ export default function App() {
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-red-600 hover:bg-red-700', onConfirm: null });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-amber-600 hover:bg-amber-700', onConfirm: null });
 
   useEffect(() => {
     if (sessionStorage.getItem('staff_auth') === 'true') {
@@ -565,74 +565,71 @@ export default function App() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900 via-slate-950 to-purple-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
+      <div className="min-h-screen bg-[#070b19] text-[#fdfbf7] p-4 sm:p-8 flex flex-col justify-between font-sans">
         <div className="max-w-6xl w-full mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/60 backdrop-blur-xl border border-indigo-500/40 rounded-3xl px-6 py-4 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+          <div className="flex justify-between items-center bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl px-6 py-4 shadow-[0_4px_20px_rgba(212,175,55,0.15)]">
             <div>
-              <h1 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 flex items-center gap-2">
-                <Award className="w-6 h-6 text-indigo-400 animate-pulse" /> พิธีมอบประดับบ่าเกียรติยศ SPU
+              <h1 className="text-base sm:text-lg font-black text-[#f3e5ab] flex items-center gap-2">
+                <Award className="w-6 h-6 text-[#d4af37]" /> พิธีมอบประดับบ่าเกียรติยศ SPU
               </h1>
-              <p className="text-xs text-indigo-200/80 font-medium">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
+              <p className="text-xs text-[#d1c7bd]">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
             </div>
             <button
               onClick={() => setIsPinModalOpen(true)}
-              className="px-5 py-2.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white rounded-2xl text-xs font-bold shadow-[0_0_20px_rgba(99,102,241,0.5)] flex items-center gap-2 transition-all transform hover:scale-105 active:scale-95"
+              className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e6c252] hover:to-[#c19016] text-[#070b19] rounded-xl text-xs font-black shadow-[0_0_15px_rgba(212,175,55,0.4)] flex items-center gap-1.5 transition-all transform hover:scale-105"
             >
-              <Lock className="w-4 h-4" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
+              <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
             </button>
           </div>
 
-          <div className="bg-slate-950/70 backdrop-blur-2xl border-2 border-indigo-500/50 rounded-[2.5rem] p-6 sm:p-12 shadow-[0_0_80px_rgba(99,102,241,0.3)] relative overflow-hidden">
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none"></div>
-
-            <div className="text-center mb-8 relative z-10">
-              <div className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/40 text-sm font-bold tracking-wide shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-                <Sparkles className="w-4 h-4 text-indigo-400 animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+          <div className="bg-[#0e1628]/90 border-2 border-[#d4af37]/60 rounded-[2.5rem] p-6 sm:p-12 shadow-[0_0_50px_rgba(212,175,55,0.2)] relative overflow-hidden">
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#d4af37]/10 text-[#f3e5ab] border border-[#d4af37]/40 text-sm font-bold tracking-wide shadow-inner">
+                <Sparkles className="w-4 h-4 text-[#d4af37] animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
               </div>
             </div>
 
             {currentStageGroup.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 relative z-10 animate-in fade-in duration-300">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
                 {currentStageGroup.map((g) => (
-                  <div key={g.id} className="bg-slate-900/80 backdrop-blur-md border-2 border-indigo-500/70 rounded-3xl p-5 text-center shadow-[0_0_30px_rgba(99,102,241,0.35)] space-y-2 transform hover:scale-105 transition-all">
-                    <span className="inline-block px-3.5 py-1 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-sm rounded-2xl shadow-md">
+                  <div key={g.id} className="bg-[#121f38] border-2 border-[#d4af37]/70 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(212,175,55,0.25)] space-y-1">
+                    <span className="inline-block px-3 py-0.5 bg-[#d4af37] text-[#070b19] font-black text-sm rounded-xl">
                       #{g.badgeNumber}
                     </span>
-                    <h4 className="text-lg font-black text-white truncate">{g.name}</h4>
-                    <p className="text-xs font-mono font-bold text-indigo-300">{g.studentId || '-'} • {g.year}</p>
+                    <h4 className="text-base sm:text-lg font-black text-[#fdfbf7] truncate">{g.name}</h4>
+                    <p className="text-xs font-mono text-[#f3e5ab]">{g.studentId || '-'} • {g.year}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="py-20 text-center space-y-4 relative z-10">
-                <div className="w-20 h-20 rounded-3xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center mx-auto text-indigo-400 animate-pulse shadow-[0_0_35px_rgba(99,102,241,0.4)]">
-                  <Award className="w-10 h-10" />
+              <div className="py-16 text-center space-y-4">
+                <div className="w-16 h-16 rounded-3xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37] animate-pulse">
+                  <Award className="w-8 h-8" />
                 </div>
-                <h3 className="text-3xl sm:text-4xl font-black text-white">เตรียมตัวเริ่มพิธี</h3>
-                <p className="text-base text-indigo-200/80 font-medium">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-[#fdfbf7]">เตรียมตัวเริ่มพิธี</h3>
+                <p className="text-sm sm:text-base text-[#d1c7bd]">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
               </div>
             )}
 
-            <div className="mt-12 pt-8 border-t border-indigo-500/30 relative z-10">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2">
-                  <Users className="w-4 h-4" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+            <div className="mt-10 pt-6 border-t border-[#d4af37]/30">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-black text-[#f3e5ab] uppercase tracking-widest flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-[#d4af37]" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
                 </h4>
-                <span className="px-3 py-1 bg-amber-500/20 text-amber-300 text-xs font-extrabold rounded-full border border-amber-500/40 shadow-sm">
+                <span className="px-3 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">
                   รออยู่ {standbyQueue.length} คน
                 </span>
               </div>
               
-              <div className="flex flex-wrap gap-2.5 max-h-36 overflow-y-auto p-1.5">
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
                 {standbyQueue.length === 0 ? (
-                  <span className="text-xs text-slate-400 italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+                  <span className="text-xs text-[#d1c7bd] italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
                 ) : (
                   standbyQueue.map((g, idx) => (
-                    <div key={g.id} className="bg-slate-900/90 border border-amber-500/40 rounded-2xl px-3.5 py-2 flex items-center gap-2.5 shadow-md">
-                      <span className="text-xs font-black text-amber-400">#{g.badgeNumber}</span>
-                      <span className="text-xs font-bold text-white truncate max-w-[130px]">{g.name}</span>
-                      <span className="text-[10px] text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-lg font-mono font-bold">คิว {idx + 1}</span>
+                    <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                      <span className="text-[11px] font-black text-[#d4af37]">#{g.badgeNumber}</span>
+                      <span className="text-xs font-bold text-[#fdfbf7] truncate max-w-[120px]">{g.name}</span>
+                      <span className="text-[10px] text-[#f3e5ab] bg-[#d4af37]/10 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
                     </div>
                   ))
                 )}
@@ -642,29 +639,26 @@ export default function App() {
         </div>
 
         {isPinModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-            <div className="bg-slate-950 border-2 border-indigo-500/50 rounded-[2.5rem] p-8 max-w-sm w-full text-center shadow-[0_0_60px_rgba(99,102,241,0.35)] space-y-5">
-              <div className="w-14 h-14 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto text-indigo-400 shadow-[0_0_20px_rgba(99,102,241,0.3)]">
-                <Lock className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-white">ยืนยันรหัสสตาฟ</h3>
-                <p className="text-xs text-indigo-200/80 mt-1">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการ</p>
-              </div>
-              <form onSubmit={handleStaffLogin} className="space-y-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+            <div className="bg-[#0e1628] border-2 border-[#d4af37] rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
+              <h3 className="text-base font-black text-[#f3e5ab] flex items-center justify-center gap-2">
+                <Lock className="w-4 h-4 text-[#d4af37]" /> ยืนยันรหัสสตาฟ
+              </h3>
+              <p className="text-xs text-[#d1c7bd]">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการสตาฟ</p>
+              <form onSubmit={handleStaffLogin} className="space-y-3">
                 <input 
                   type="password" 
                   maxLength="6"
                   value={pinInput}
                   onChange={(e) => setPinInput(e.target.value)}
                   placeholder="••••••"
-                  style={{ width: '100%', padding: '14px', fontSize: '26px', textAlign: 'center', letterSpacing: '10px', borderRadius: '16px', border: '2px solid #6366f1', background: '#090d16', color: '#ffffff', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '12px', border: '1px solid #d4af37', background: '#070b19', color: '#fdfbf7', outline: 'none', boxSizing: 'border-box' }}
                   autoFocus
                 />
                 {errorMsg && <p className="text-red-400 text-xs font-bold">{errorMsg}</p>}
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700">ยกเลิก</button>
-                  <button type="submit" className="flex-1 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold rounded-2xl text-xs shadow-[0_0_20px_rgba(99,102,241,0.4)]">ยืนยัน</button>
+                <div className="flex gap-2 pt-2">
+                  <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-xl text-xs border border-[#d4af37]/30">ยกเลิก</button>
+                  <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl text-xs shadow-md">ยืนยัน</button>
                 </div>
               </form>
             </div>
@@ -675,66 +669,63 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 font-sans pb-24 md:pb-6">
-      <header className="bg-slate-900/80 backdrop-blur-xl border-b border-indigo-500/20 sticky top-0 z-40 px-4 py-3.5 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
+    <div className="min-h-screen flex flex-col bg-[#070b19] text-[#fdfbf7] font-sans pb-20 md:pb-0">
+      <header className="bg-[#0e1628] border-b border-[#d4af37]/30 sticky top-0 z-40 px-4 py-3 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-gradient-to-tr from-blue-600 via-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center font-bold text-white shadow-[0_0_20px_rgba(99,102,241,0.5)]">
-              <Award className="w-6 h-6 animate-pulse" />
-            </div>
+            <div className="w-10 h-10 bg-gradient-to-tr from-[#d4af37] to-[#aa7c11] rounded-2xl flex items-center justify-center font-bold text-[#070b19] shadow-md"><Award className="w-6 h-6" /></div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black text-white">ระบบจัดการสตาฟ</h1>
-                <span className="px-2.5 py-0.5 bg-indigo-500/20 text-indigo-300 text-[10px] font-extrabold rounded-full border border-indigo-500/40 shadow-inner">Staff Portal</span>
+                <h1 className="text-base font-black text-[#f3e5ab]">ระบบจัดการสตาฟ</h1>
+                <span className="px-2 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-[10px] font-bold rounded-full border border-[#d4af37]/40">Staff</span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <nav className="hidden md:flex items-center bg-slate-950/80 p-1.5 rounded-2xl border border-indigo-500/30 shadow-inner">
-              <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'scan' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-400 hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
-              <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'queue' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-400 hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
-              <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${activeTab === 'dashboard' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-400 hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-indigo-300 hover:text-white transition-all flex items-center gap-2"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
+            <nav className="hidden md:flex items-center bg-[#070b19] p-1 rounded-2xl border border-[#d4af37]/30">
+              <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
+              <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
+              <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
             </nav>
-            <button onClick={handleLogout} className="px-3.5 py-2 bg-red-500/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all shadow-sm">ออกจากระบบ</button>
+            <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
         
         {/* TAB 1: เช็กชื่อหน้างาน */}
         {activeTab === 'scan' && (
-          <div className="max-w-md mx-auto space-y-4">
-            <div className="bg-slate-900/90 backdrop-blur-xl border-2 border-indigo-500/40 rounded-[2.5rem] p-6 text-center shadow-[0_0_40px_rgba(99,102,241,0.2)]">
-              <div className="w-12 h-12 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto text-indigo-400 shadow-md mb-3">
-                <ScanLine className="w-6 h-6" />
-              </div>
-              <h2 className="text-xl font-black text-white">เช็กชื่อผู้เข้าร่วมหน้างาน</h2>
-              <p className="text-xs text-indigo-200/80 mt-1">สแกน QR Code หรือค้นหาข้อมูลเพื่อบันทึกสถานะ</p>
+          <div className="max-w-lg mx-auto space-y-4">
+            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 text-center shadow-xl">
+              <h2 className="text-lg font-black text-[#f3e5ab] flex items-center justify-center gap-2">
+                <ScanLine className="w-5 h-5 text-[#d4af37]" /> เช็กชื่อผู้เข้าร่วมหน้างาน
+              </h2>
+              <p className="text-xs text-[#d1c7bd] mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
 
-              <div className="mt-5 bg-black/80 rounded-3xl overflow-hidden border-2 border-indigo-500/40 relative min-h-[260px] flex items-center justify-center shadow-inner">
+              <div className="mt-4 bg-[#fdfbf7] rounded-2xl overflow-hidden border-2 border-[#d4af37] relative min-h-[220px] flex items-center justify-center">
                 <div id="camera-scanner-view" className="w-full h-full"></div>
                 {!isCameraActive && (
-                  <div className="absolute text-center text-slate-400 p-6">
-                    <Camera className="w-10 h-10 mx-auto mb-2 opacity-50 text-indigo-400 animate-pulse" />
-                    <p className="text-xs font-bold">กล้องสแกนพร้อมใช้งาน</p>
+                  <div className="absolute text-center text-slate-500 p-4">
+                    <Camera className="w-8 h-8 mx-auto mb-1 opacity-50 text-[#d4af37]" />
+                    <p className="text-xs text-[#070b19] font-bold">กล้องสแกนพร้อมใช้งาน</p>
                   </div>
                 )}
               </div>
 
-              <div className="mt-5 pt-5 border-t border-indigo-500/20 text-left space-y-2">
-                <label className="text-xs font-extrabold text-indigo-200 block">ค้นหาชื่อ / รหัสนักศึกษา:</label>
-                <div className="flex gap-2.5">
+              <div className="mt-4 pt-4 border-t border-[#d4af37]/30 text-left">
+                <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
+                <div className="flex gap-2">
                   <input
                     type="text"
                     value={manualCodeInput}
                     onChange={(e) => setManualCodeInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleInspectQrCode(manualCodeInput)}
                     placeholder="พิมพ์ชื่อ หรือ รหัสนักศึกษา..."
-                    className="flex-1 px-4 py-3 bg-slate-950 border border-indigo-500/40 rounded-2xl text-xs text-white outline-none focus:border-indigo-500 shadow-inner"
+                    className="flex-1 px-3 py-2.5 bg-[#070b19] border border-[#d4af37]/50 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
                   />
-                  <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-2xl shadow-[0_0_15px_rgba(99,102,241,0.4)]">ค้นหา</button>
+                  <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e6c252] text-[#070b19] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
                 </div>
               </div>
             </div>
@@ -744,18 +735,18 @@ export default function App() {
         {/* TAB 2: จัดคิวเวที */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
-            <div className="bg-slate-900/80 backdrop-blur-xl border border-indigo-500/30 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-5 shadow-xl">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold border border-indigo-500/40 shadow-inner">
-                  <Sliders className="w-6 h-6" />
+            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#d4af37]/20 text-[#d4af37] flex items-center justify-center font-bold border border-[#d4af37]/40">
+                  <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-white">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
-                  <p className="text-xs text-indigo-200/80">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
+                  <h3 className="text-sm font-black text-[#f3e5ab]">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
+                  <p className="text-xs text-[#d1c7bd]">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-5 w-full md:w-auto bg-slate-950/60 px-5 py-3 rounded-2xl border border-indigo-500/20">
+              <div className="flex items-center gap-4 w-full md:w-auto">
                 <input
                   type="range"
                   min="10"
@@ -763,100 +754,98 @@ export default function App() {
                   step="1"
                   value={batchSize}
                   onChange={(e) => setBatchSize(Number(e.target.value))}
-                  className="w-full md:w-48 accent-indigo-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                  className="w-full md:w-48 accent-[#d4af37] cursor-pointer h-2 bg-slate-800 rounded-lg"
                 />
-                <span className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-black shadow-[0_0_15px_rgba(99,102,241,0.5)] min-w-[80px] text-center">
+                <span className="px-3.5 py-1.5 bg-[#d4af37] text-[#070b19] rounded-xl text-sm font-black shadow-md min-w-[75px] text-center">
                   {batchSize} คน
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-slate-900/90 backdrop-blur-xl border border-indigo-500/30 rounded-[2.5rem] p-5 flex flex-col min-h-[520px] shadow-2xl">
-                <div className="flex justify-between items-center pb-4 border-b border-indigo-500/20 mb-4">
-                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-blue-400" /> พร้อมเรียกคิว</h3>
-                  <span className="px-3 py-1 bg-blue-500/20 text-blue-300 text-xs font-extrabold rounded-full border border-blue-500/30">{readyQueue.length} คน</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
+                <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/30 mb-3">
+                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#d4af37]" /> พร้อมเรียกคิว</h3>
+                  <span className="px-2.5 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">{readyQueue.length} คน</span>
                 </div>
 
                 {readyQueue.length > 0 && (
                   <button
                     onClick={handleMoveToStandbyBatch}
-                    className="w-full mb-4 py-3 bg-gradient-to-r from-blue-600/30 to-indigo-600/30 hover:from-blue-600 hover:to-indigo-600 text-blue-200 hover:text-white border border-blue-500/40 rounded-2xl text-xs font-extrabold transition-all shadow-sm flex items-center justify-center gap-2"
+                    className="w-full mb-3 py-2.5 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
                   >
                     <span>🚀 ดึงเข้าสแตนด์บายเซตละ {batchSize} คน</span>
                   </button>
                 )}
 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                  {readyQueue.length === 0 ? <p className="text-center text-xs text-slate-500 py-16">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
-                    <div key={g.id} className="bg-slate-950/80 border border-indigo-500/20 rounded-2xl p-3.5 flex flex-col justify-between gap-2 shadow-sm hover:border-indigo-500/50 transition-all">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-indigo-400">#{g.badgeNumber}</span><span className="text-[10px] text-indigo-200/60 font-mono bg-indigo-500/10 px-2 py-0.5 rounded">{g.year}</span></div>
+                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                  {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
+                    <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
+                      <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
                       <div>
-                        <div className="text-sm font-bold text-white truncate">{g.name}</div>
-                        <div className="text-xs font-mono text-indigo-300">{g.studentId || '-'}</div>
+                        <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
+                        <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
                       </div>
-                      <button onClick={() => handleToggleSkip(g)} className="text-[11px] text-amber-400 text-left hover:underline font-bold">⚠️ ข้ามคิวนี้ชั่วคราว</button>
+                      <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-400 text-left hover:underline">ข้ามคิวนี้</button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-slate-900/90 backdrop-blur-xl border border-amber-500/40 rounded-[2.5rem] p-5 flex flex-col min-h-[520px] shadow-2xl">
-                <div className="flex justify-between items-center pb-4 border-b border-amber-500/20 mb-4">
-                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
-                  <span className="px-3 py-1 bg-amber-500/20 text-amber-300 text-xs font-extrabold rounded-full border border-amber-500/30">{standbyQueue.length} คน</span>
+              <div className="bg-[#0e1628] border border-amber-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
+                <div className="flex justify-between items-center pb-3 border-b border-amber-500/30 mb-3">
+                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
+                  <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 text-xs font-bold rounded-full border border-amber-500/40">{standbyQueue.length} คน</span>
                 </div>
 
                 {standbyQueue.length > 0 && (
                   <button
                     onClick={handleMoveBatchToOnStage}
-                    className="w-full mb-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black rounded-2xl text-xs transition-all shadow-[0_0_20px_rgba(245,158,11,0.4)] flex items-center justify-center gap-2"
+                    className="w-full mb-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
                   >
                     <span>🎯 ประกาศขึ้นเวทีเซตนี้ ({Math.min(batchSize, standbyQueue.length)} คน) →</span>
                   </button>
                 )}
 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-slate-500 py-16">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
-                    <div key={g.id} className="bg-slate-950/80 border border-amber-500/30 rounded-2xl p-3.5 flex items-center justify-between gap-3 shadow-sm">
+                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
+                    <div key={g.id} className="bg-[#121f38] border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between gap-2">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-amber-400">#{g.badgeNumber}</span>
-                          <span className="text-xs font-bold text-white">{g.name}</span>
-                        </div>
-                        <div className="text-[10px] text-amber-300/80 font-mono pl-5 mt-0.5">คิวที่ {idx + 1} • {g.year}</div>
+                        <span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
+                        <span className="text-xs font-bold text-[#fdfbf7]">{g.name}</span>
+                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-slate-900/90 backdrop-blur-xl border border-emerald-500/40 rounded-[2.5rem] p-5 flex flex-col min-h-[520px] shadow-2xl">
-                <div className="flex justify-between items-center pb-4 border-b border-emerald-500/20 mb-4">
-                  <h3 className="font-black text-white text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
-                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 text-xs font-extrabold rounded-full border border-emerald-500/30">{currentStageGroup.length} คน</span>
+              <div className="bg-[#0e1628] border border-emerald-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
+                <div className="flex justify-between items-center pb-3 border-b border-emerald-500/30 mb-3">
+                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
+                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full border border-emerald-500/40">{currentStageGroup.length} คน</span>
                 </div>
 
                 {currentStageGroup.length > 0 && (
                   <button
                     onClick={handleCompleteStageBatch}
-                    className="w-full mb-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-2xl text-xs transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+                    className="w-full mb-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs transition-all shadow-md"
                   >
                     ✓ ลงเวทีแล้วทั้งหมด ({currentStageGroup.length} คน)
                   </button>
                 )}
 
-                <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+                <div className="flex-1 space-y-2 overflow-y-auto">
                   {currentStageGroup.length === 0 ? (
-                    <p className="text-center text-xs text-slate-500 py-16">ยังไม่มีชุดขึ้นเวที</p>
+                    <p className="text-center text-xs text-[#d1c7bd] py-12">ยังไม่มีชุดขึ้นเวที</p>
                   ) : (
                     currentStageGroup.map((g) => (
-                      <div key={g.id} className="bg-slate-950/80 border-2 border-emerald-500/60 rounded-2xl p-3.5 flex items-center justify-between shadow-[0_0_15px_rgba(16,185,129,0.25)]">
+                      <div key={g.id} className="bg-[#121f38] border-2 border-emerald-500/60 rounded-xl p-2.5 flex items-center justify-between">
                         <div>
                           <span className="text-xs font-black text-emerald-400">#{g.badgeNumber}</span>
-                          <span className="text-xs font-bold text-white ml-2">{g.name}</span>
+                          <span className="text-xs font-bold text-[#fdfbf7] ml-2">{g.name}</span>
                         </div>
-                        <span className="text-[10px] text-emerald-300 bg-emerald-500/20 px-2.5 py-1 rounded-xl font-bold">{g.year}</span>
+                        <span className="text-[10px] text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded">{g.year}</span>
                       </div>
                     ))
                   )}
@@ -869,32 +858,32 @@ export default function App() {
 
         {/* TAB 3: แดชบอร์ด */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-5">
-            <div className="bg-slate-900/80 backdrop-blur-xl p-5 rounded-[2.5rem] border border-indigo-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xl">
+          <div className="space-y-4">
+            <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg">
               <div>
-                <h2 className="text-lg font-black text-white">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
-                <p className="text-xs text-indigo-200/80 mt-0.5">คนมาสาย / ผิดระเบียบ / สั่งของไม่ทัน ระบบจะซิงค์เป็นเครื่องหมาย "-" ไม่มีเลขลำดับ และไม่นำมาคิดรวมคิวขึ้นเวที</p>
+                <h2 className="text-lg font-black text-[#f3e5ab]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
+                <p className="text-xs text-[#d1c7bd]">คนมาสาย / ผิดระเบียบ / สั่งของไม่ทัน ระบบจะซิงค์เป็นเครื่องหมาย "-" ไม่มีเลขลำดับ และไม่นำมาคิดรวมคิวขึ้นเวที</p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setIsSummaryModalOpen(true)}
-                  className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-[0_0_20px_rgba(16,185,129,0.35)] transition-transform active:scale-95"
+                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
                 >
-                  <Award className="w-4 h-4" /> สรุปรายงานหลังจบงาน
+                  <Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน
                 </button>
 
                 {selectedGuestIds.length > 0 && (
                   <button
                     onClick={handleDeleteSelectedGuests}
-                    className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-md transition-transform active:scale-95"
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
                   >
-                    <Trash2 className="w-4 h-4" /> ลบที่เลือก ({selectedGuestIds.length})
+                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
                   </button>
                 )}
-                <button onClick={() => setIsExcelModalOpen(true)} className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-2xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-4 h-4 text-indigo-400" /> นำเข้า Excel</button>
-                <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-bold flex items-center gap-1.5 shadow-sm">{isSyncingSheets ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} ซิงค์ Sheets</button>
-                <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3.5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs font-bold flex items-center gap-1.5 shadow-sm">{isSendingEmails ? <Loader2 className="w-4 h-4 animate-spin" /> : <Award className="w-4 h-4" />} ส่งอีเมล QR</button>
+                <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
+                <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
+                <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR Code</button>
                 
                 <button
                   onClick={() => {
@@ -909,21 +898,21 @@ export default function App() {
                     });
                     setIsEditModalOpen(true);
                   }}
-                  className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-transform active:scale-95"
+                  className="px-3 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md"
                 >
-                  <Plus className="w-4 h-4" /> เพิ่มผู้เข้าร่วม
+                  <Plus className="w-3.5 h-3.5" /> เพิ่มผู้เข้าร่วม
                 </button>
 
-                <button onClick={() => setIsResetModalOpen(true)} className="px-3.5 py-2.5 bg-red-950/50 text-red-300 border border-red-800/60 rounded-2xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ต</button>
+                <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
               </div>
             </div>
 
-            <div className="bg-slate-900/90 backdrop-blur-xl rounded-[2.5rem] border border-indigo-500/30 overflow-hidden shadow-2xl">
+            <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-slate-950 text-indigo-300 font-extrabold border-b border-indigo-500/20">
+                  <thead className="bg-[#070b19] text-[#f3e5ab] font-bold border-b border-[#d4af37]/30">
                     <tr>
-                      <th className="p-4 w-12 text-center">
+                      <th className="p-3.5 w-10 text-center">
                         <input
                           type="checkbox"
                           checked={
@@ -931,52 +920,52 @@ export default function App() {
                             paginatedGuests.every((g) => selectedGuestIds.includes(g.id))
                           }
                           onChange={handleToggleSelectAll}
-                          className="rounded bg-slate-800 border-slate-700 text-indigo-600 cursor-pointer w-4 h-4"
+                          className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
                         />
                       </th>
-                      <th className="p-4">ลำดับคิวเวที</th>
-                      <th className="p-4">รหัสนักศึกษา</th>
-                      <th className="p-4">ชื่อ-นามสกุล</th>
-                      <th className="p-4">ชั้นปี</th>
-                      <th className="p-4">สถานะหน้างาน</th>
-                      <th className="p-4">การจัดการด่วน (สาย / ผิดระเบียบ)</th>
-                      <th className="p-4 text-right">การจัดการ</th>
+                      <th className="p-3.5">ลำดับคิวเวที</th>
+                      <th className="p-3.5">รหัสนักศึกษา</th>
+                      <th className="p-3.5">ชื่อ-นามสกุล</th>
+                      <th className="p-3.5">ชั้นปี</th>
+                      <th className="p-3.5">สถานะหน้างาน</th>
+                      <th className="p-3.5">การจัดการด่วน (สาย / ผิดระเบียบ)</th>
+                      <th className="p-3.5 text-right">การจัดการ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-indigo-500/10">
+                  <tbody className="divide-y divide-[#d4af37]/15">
                     {paginatedGuests.map((g) => (
-                      <tr key={g.id} className={`hover:bg-indigo-950/30 transition-colors ${selectedGuestIds.includes(g.id) ? 'bg-indigo-950/50' : ''}`}>
-                        <td className="p-4 text-center">
+                      <tr key={g.id} className={`hover:bg-[#121f38] transition-colors ${selectedGuestIds.includes(g.id) ? 'bg-[#121f38]/60' : ''}`}>
+                        <td className="p-3.5 text-center">
                           <input
                             type="checkbox"
                             checked={selectedGuestIds.includes(g.id)}
                             onChange={() => handleToggleSelectGuest(g.id)}
-                            className="rounded bg-slate-800 border-slate-700 text-indigo-600 cursor-pointer w-4 h-4"
+                            className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
                           />
                         </td>
-                        <td className="p-4 font-extrabold">
+                        <td className="p-3.5 font-bold">
                           {g.badgeNumber && g.status !== 'no_item_ordered' && g.status !== 'late_receive_after' && g.status !== 'dress_violation_receive_after' ? (
-                            <span className="text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-xl border border-indigo-500/30">#{g.badgeNumber}</span>
+                            <span className="text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30">#{g.badgeNumber}</span>
                           ) : (
-                            <span className="text-slate-400 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 font-medium">- (ไม่ขึ้นรับบ่า)</span>
+                            <span className="text-[#d1c7bd] bg-[#070b19] px-2 py-0.5 rounded border border-[#d4af37]/20">- (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)</span>
                           )}
                         </td>
-                        <td className="p-4 font-mono font-bold text-indigo-200">{g.studentId || '-'}</td>
-                        <td className="p-4 font-black text-white text-sm">{g.name}</td>
-                        <td className="p-4 text-indigo-200 font-bold">{g.year}</td>
-                        <td className="p-4">
-                          <span className={`px-3 py-1.5 rounded-full text-[11px] font-extrabold shadow-sm ${g.status === 'checked_in' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : g.status.includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+                        <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
+                        <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
+                        <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
+                        <td className="p-3.5">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : g.status.includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
                             {getStatusLabel(g.status)}
                           </span>
                         </td>
-                        <td className="p-4 space-x-1.5">
-                          <button onClick={() => handleConfirmCheckIn(g, 'checked_in')} className="px-2.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded-xl text-[11px] font-extrabold transition-all border border-emerald-500/30">มาปกติ</button>
-                          <button onClick={() => handleConfirmCheckIn(g, 'late_receive_after')} className="px-2.5 py-1.5 bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white rounded-xl text-[11px] font-extrabold transition-all border border-amber-500/30">มาสาย</button>
-                          <button onClick={() => handleConfirmCheckIn(g, 'dress_violation_receive_after')} className="px-2.5 py-1.5 bg-orange-600/20 hover:bg-orange-600 text-orange-300 hover:text-white rounded-xl text-[11px] font-extrabold transition-all border border-orange-500/30">ผิดระเบียบ</button>
+                        <td className="p-3.5 space-x-1">
+                          <button onClick={() => handleConfirmCheckIn(g, 'checked_in')} className="px-2 py-1 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded text-[11px] font-bold">มาปกติ</button>
+                          <button onClick={() => handleConfirmCheckIn(g, 'late_receive_after')} className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white rounded text-[11px] font-bold">มาสาย</button>
+                          <button onClick={() => handleConfirmCheckIn(g, 'dress_violation_receive_after')} className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600 text-orange-300 hover:text-white rounded text-[11px] font-bold">ผิดระเบียบ</button>
                         </td>
-                        <td className="p-4 text-right space-x-2">
-                          {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-amber-400 hover:underline font-bold text-xs"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
-                          <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-red-500/20 p-2 rounded-xl transition-all" title="ลบรายชื่อนี้"><Trash2 className="w-4 h-4 inline" /></button>
+                        <td className="p-3.5 text-right space-x-2">
+                          {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#d4af37] hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
+                          <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                         </td>
                       </tr>
                     ))}
@@ -991,42 +980,42 @@ export default function App() {
 
       {/* ================= MODAL สแกน QR แล้วเด้งขึ้นกลางจอ ================= */}
       {scannedPreviewGuest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-950 border-2 border-indigo-500/80 text-slate-100 rounded-[2.5rem] p-7 max-w-sm w-full shadow-[0_0_80px_rgba(99,102,241,0.4)] scale-100 animate-in zoom-in-95 duration-200 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0e1628] border-2 border-[#d4af37] text-[#fdfbf7] rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200 space-y-4">
             
             <div className="flex justify-between items-start">
-              <span className={`px-3.5 py-1 rounded-2xl text-xs font-black text-white ${scannedPreviewGuest.badgeNumber ? 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md' : 'bg-slate-700'}`}>
+              <span className={`px-3 py-1 rounded-xl text-xs font-black text-[#070b19] ${scannedPreviewGuest.badgeNumber ? 'bg-[#d4af37]' : 'bg-slate-400'}`}>
                 {scannedPreviewGuest.badgeNumber ? `#${scannedPreviewGuest.badgeNumber}` : 'ไม่มีคิวเวที'}
               </span>
-              <span className="px-3.5 py-1 bg-indigo-500/20 border border-indigo-500/40 rounded-2xl text-xs font-extrabold text-indigo-300">{getStatusLabel(scannedPreviewGuest.status)}</span>
+              <span className="px-3 py-1 bg-[#121f38] border border-[#d4af37]/40 rounded-xl text-xs font-bold text-[#f3e5ab]">{getStatusLabel(scannedPreviewGuest.status)}</span>
             </div>
 
-            <div className="text-center py-2 space-y-1.5">
-              <h3 className="text-2xl font-black text-white">{scannedPreviewGuest.name}</h3>
-              <p className="text-xs font-mono font-bold text-indigo-300 bg-indigo-500/10 py-1 px-3 rounded-full inline-block">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
+            <div className="text-center py-2 space-y-1">
+              <h3 className="text-xl font-black text-[#fdfbf7]">{scannedPreviewGuest.name}</h3>
+              <p className="text-xs font-mono font-bold text-[#d4af37]">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
             </div>
 
-            <div className="pt-3 border-t border-indigo-500/20 space-y-3">
+            <div className="pt-2 border-t border-[#d4af37]/30 space-y-2.5">
               {scannedPreviewGuest.status === 'pending' ? (
                 <>
-                  <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-2xl text-xs shadow-[0_0_20px_rgba(16,185,129,0.5)] transition-transform active:scale-95">
+                  <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs shadow-md transition-transform active:scale-95">
                     ✓ มาปกติ (เข้าคิวขึ้นรับบ่า)
                   </button>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-3 px-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-2xl text-[11px] transition-transform active:scale-95 shadow-md">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-xl text-[11px] transition-transform active:scale-95">
                       ⏰ มาสาย (ร่วมพิธี/ไม่รับบ่า)
                     </button>
-                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-3 px-2 bg-orange-600 hover:bg-orange-500 text-white font-black rounded-2xl text-[11px] transition-transform active:scale-95 shadow-md">
+                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
                       ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่รับบ่า)
                     </button>
                   </div>
                 </>
               ) : (
-                <div className="py-3.5 bg-indigo-500/15 border border-indigo-500/40 text-indigo-200 font-extrabold rounded-2xl text-xs text-center shadow-inner">
+                <div className="py-3 bg-[#121f38] border border-[#d4af37]/40 text-[#f3e5ab] font-bold rounded-2xl text-xs text-center">
                   สถานะปัจจุบัน: {getStatusLabel(scannedPreviewGuest.status)}
                 </div>
               )}
-              <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700 shadow-sm">
+              <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-2xl text-xs border border-[#d4af37]/30">
                 ปิดหน้าต่างนี้
               </button>
             </div>
@@ -1037,56 +1026,56 @@ export default function App() {
 
       {/* MODAL สรุปรายงานหลังจบงาน */}
       {isSummaryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-950 border border-indigo-500/50 rounded-[2.5rem] p-7 max-w-lg w-full space-y-5 shadow-[0_0_60px_rgba(99,102,241,0.3)]">
-            <div className="flex justify-between items-center border-b border-indigo-500/20 pb-4">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-[#d4af37]/30 pb-3">
+              <h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2">
                 <Award className="w-5 h-5 text-emerald-400" /> สรุปผลพิธีมอบประดับบ่าเกียรติยศ
               </h3>
-              <button onClick={() => setIsSummaryModalOpen(false)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <button onClick={() => setIsSummaryModalOpen(false)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3.5 text-xs">
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 shadow-sm">
-                <span className="text-slate-400 font-medium">รายชื่อทั้งหมด</span>
-                <p className="text-2xl font-black text-white mt-1">{summaryStats.total} คน</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-[#070b19] border border-[#d4af37]/30 rounded-2xl p-3">
+                <span className="text-[#d1c7bd]">รายชื่อทั้งหมด</span>
+                <p className="text-xl font-black text-[#fdfbf7] mt-1">{summaryStats.total} คน</p>
               </div>
-              <div className="bg-slate-900/80 border border-emerald-500/40 rounded-2xl p-3.5 shadow-sm">
-                <span className="text-emerald-400 font-bold">เช็กชื่อเข้าร่วมแล้ว</span>
-                <p className="text-2xl font-black text-emerald-300 mt-1">{summaryStats.checkedIn} คน</p>
+              <div className="bg-[#070b19] border border-emerald-900/50 rounded-2xl p-3">
+                <span className="text-emerald-400">เช็กชื่อเข้าร่วมแล้ว</span>
+                <p className="text-xl font-black text-emerald-300 mt-1">{summaryStats.checkedIn} คน</p>
               </div>
-              <div className="bg-slate-900/80 border border-amber-500/40 rounded-2xl p-3.5 shadow-sm">
-                <span className="text-amber-400 font-bold">มาสาย / ผิดระเบียบ</span>
-                <p className="text-2xl font-black text-amber-300 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
+              <div className="bg-[#070b19] border border-amber-900/50 rounded-2xl p-3">
+                <span className="text-amber-400">มาสาย / ผิดระเบียบ</span>
+                <p className="text-xl font-black text-amber-300 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
               </div>
-              <div className="bg-slate-900/80 border border-rose-500/40 rounded-2xl p-3.5 shadow-sm">
-                <span className="text-rose-400 font-bold">ยังไม่มา (ขาด)</span>
-                <p className="text-2xl font-black text-rose-300 mt-1">{summaryStats.pending} คน</p>
+              <div className="bg-[#070b19] border border-rose-900/50 rounded-2xl p-3">
+                <span className="text-rose-400">ยังไม่มา (ขาด)</span>
+                <p className="text-xl font-black text-rose-300 mt-1">{summaryStats.pending} คน</p>
               </div>
             </div>
 
-            <div className="bg-slate-900/90 border border-indigo-500/30 rounded-2xl p-4 text-xs space-y-2 shadow-inner">
-              <span className="font-extrabold text-indigo-300 block mb-1">สถิติแยกตามชั้นปี:</span>
-              <div className="flex justify-between text-slate-300 font-medium"><span>ปี 1:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 1']} คน</span></div>
-              <div className="flex justify-between text-slate-300 font-medium"><span>ปี 2:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 2']} คน</span></div>
-              <div className="flex justify-between text-slate-300 font-medium"><span>ปี 3:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 3']} คน</span></div>
-              <div className="flex justify-between text-slate-300 font-medium"><span>ปี 4:</span><span className="font-bold text-white">{summaryStats.byYear['ปี 4']} คน</span></div>
-              <div className="flex justify-between text-slate-300 font-medium"><span>บัณฑิต:</span><span className="font-bold text-white">{summaryStats.byYear['บัณฑิต']} คน</span></div>
+            <div className="bg-[#070b19] border border-[#d4af37]/30 rounded-2xl p-3 text-xs space-y-1.5">
+              <span className="font-bold text-[#f3e5ab] block mb-1">สถิติแยกตามชั้นปี:</span>
+              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 1:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 1']} คน</span></div>
+              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 2:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 2']} คน</span></div>
+              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 3:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 3']} คน</span></div>
+              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 4:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 4']} คน</span></div>
+              <div className="flex justify-between text-[#d1c7bd]"><span>บัณฑิต:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['บัณฑิต']} คน</span></div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-2 pt-2">
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(generateSummaryText());
                   alert('📋 คัดลอกข้อความสรุปรายงานไปยังคลิปบอร์ดแล้ว!');
                 }}
-                className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold rounded-2xl text-xs shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md"
               >
                 คัดลอกข้อความรายงานส่งไลน์
               </button>
               <button
                 onClick={() => setIsSummaryModalOpen(false)}
-                className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl text-xs border border-slate-700"
+                className="px-4 py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-xl text-xs border border-[#d4af37]/30"
               >
                 ปิด
               </button>
@@ -1097,44 +1086,44 @@ export default function App() {
 
       {/* MODAL เพิ่ม/แก้ไข รายบุคคล */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-950 border border-indigo-500/50 rounded-[2.5rem] p-7 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-lg font-black text-white">เพิ่มผู้เข้าร่วมใหม่</h3>
-            <form onSubmit={handleSaveGuest} className="space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-base font-black text-[#f3e5ab] mb-4">เพิ่มผู้เข้าร่วมใหม่</h3>
+            <form onSubmit={handleSaveGuest} className="space-y-3.5 text-xs">
               <div>
-                <label className="font-extrabold text-indigo-200 block mb-1.5">รหัสนักศึกษา</label>
+                <label className="font-bold text-[#d1c7bd] block mb-1">รหัสนักศึกษา</label>
                 <input
                   type="text"
                   value={formData.studentId}
                   onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-900 border border-indigo-500/40 rounded-2xl text-white outline-none focus:border-indigo-500 shadow-inner"
+                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
                   placeholder="เช่น 69014522"
                 />
               </div>
               <div>
-                <label className="font-extrabold text-indigo-200 block mb-1.5">ชื่อ-นามสกุล *</label>
+                <label className="font-bold text-[#d1c7bd] block mb-1">ชื่อ-นามสกุล *</label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-900 border border-indigo-500/40 rounded-2xl text-white outline-none focus:border-indigo-500 shadow-inner"
+                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
                   placeholder="เช่น นายสมชาย ใจดี"
                 />
               </div>
               <div>
-                <label className="font-extrabold text-indigo-200 block mb-1.5">อีเมล</label>
+                <label className="font-bold text-[#d1c7bd] block mb-1">อีเมล</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-4 py-3 bg-slate-900 border border-indigo-500/40 rounded-2xl text-white outline-none focus:border-indigo-500 shadow-inner"
+                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
                   placeholder="name@spumail.net"
                 />
               </div>
-              <div className="pt-3 border-t border-indigo-500/20 flex gap-3">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl border border-slate-700">ยกเลิก</button>
-                <button type="submit" className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold rounded-2xl shadow-[0_0_15px_rgba(99,102,241,0.4)]">บันทึก</button>
+              <div className="pt-3 border-t border-[#d4af37]/30 flex gap-2">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 bg-[#121f38] text-[#d1c7bd] font-bold rounded-xl border border-[#d4af37]/30">ยกเลิก</button>
+                <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl">บันทึก</button>
               </div>
             </form>
           </div>
@@ -1143,9 +1132,9 @@ export default function App() {
 
       {/* MODAL นำเข้า Excel */}
       {isExcelModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-950 border border-indigo-500/50 rounded-[2.5rem] p-7 max-w-lg w-full space-y-5 shadow-2xl">
-            <h3 className="text-lg font-black text-white flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-indigo-400" /> นำเข้ารายชื่อจาก Excel</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-lg w-full space-y-4">
+            <h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-[#d4af37]" /> นำเข้ารายชื่อจาก Excel</h3>
             <input ref={fileInputRef} type="file" accept=".xlsx, .xls, .csv" onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -1160,10 +1149,10 @@ export default function App() {
                 setExcelPreviewData(parsed);
               };
               reader.readAsBinaryString(file);
-            }} className="text-xs text-slate-300 file:bg-indigo-600 file:text-white file:border-0 file:rounded-2xl file:px-4 file:py-2.5 cursor-pointer font-bold" />
-            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400 font-bold">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl border border-slate-700">ยกเลิก</button>
+            }} className="text-xs text-[#d1c7bd] file:bg-[#d4af37] file:text-[#070b19] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
+            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button disabled={excelPreviewData.length === 0} onClick={async () => {
                 const colRef = collection(db, COLLECTION_NAME);
                 const sorted = sortGuestsByCustomCriteria([...guests, ...excelPreviewData]).map((item, idx) => ({ ...item, badgeNumber: idx + 1 }));
@@ -1174,7 +1163,7 @@ export default function App() {
                 }
                 setIsExcelModalOpen(false);
                 alert('✅ นำเข้าสำเร็จ');
-              }} className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-extrabold rounded-2xl shadow-[0_0_15px_rgba(99,102,241,0.4)]">ยืนยันนำเข้า</button>
+              }} className="flex-1 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black">ยืนยันนำเข้า</button>
             </div>
           </div>
         </div>
@@ -1182,13 +1171,13 @@ export default function App() {
 
       {/* MODAL รีเซ็ต */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-950 border border-red-500/55 rounded-[2.5rem] p-7 max-w-sm w-full text-center space-y-4 shadow-2xl">
-            <h3 className="text-lg font-black text-white">รีเซ็ตสถานะทั้งหมด</h3>
-            <input type="text" value={resetConfirmInput} onChange={(e) => setResetConfirmInput(e.target.value)} placeholder="พิมพ์ RESET" className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-2xl text-center text-xs text-white font-bold outline-none" />
-            <div className="flex gap-3">
-              <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl border border-slate-700">ยกเลิก</button>
-              <button disabled={resetConfirmInput !== 'RESET'} onClick={handleResetAllStatuses} className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-2xl shadow-md">รีเซ็ต</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-[#f3e5ab]">รีเซ็ตสถานะทั้งหมด</h3>
+            <input type="text" value={resetConfirmInput} onChange={(e) => setResetConfirmInput(e.target.value)} placeholder="พิมพ์ RESET" className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-center text-xs text-[#fdfbf7]" />
+            <div className="flex gap-2">
+              <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button disabled={resetConfirmInput !== 'RESET'} onClick={handleResetAllStatuses} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-bold">รีเซ็ต</button>
             </div>
           </div>
         </div>
@@ -1196,22 +1185,22 @@ export default function App() {
 
       {/* MODAL ยืนยันทั่วไป */}
       {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-slate-950 border border-indigo-500/50 rounded-[2.5rem] p-7 max-w-sm w-full text-center space-y-4 shadow-2xl">
-            <h3 className="text-lg font-black text-white">{confirmModal.title}</h3>
-            <p className="text-xs text-slate-300 font-medium">{confirmModal.message}</p>
-            <div className="flex gap-3 pt-2">
-              <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold rounded-2xl border border-slate-700">ยกเลิก</button>
-              <button onClick={confirmModal.onConfirm} className={`flex-1 py-3 text-white font-extrabold rounded-2xl shadow-md ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-[#f3e5ab]">{confirmModal.title}</h3>
+            <p className="text-xs text-[#d1c7bd]">{confirmModal.message}</p>
+            <div className="flex gap-2">
+              <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={confirmModal.onConfirm} className={`flex-1 py-2 text-white rounded-xl text-xs font-bold ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/90 backdrop-blur-xl border-t border-indigo-500/30 px-3 py-2.5 flex justify-around shadow-2xl">
-        <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center flex-1 py-1 transition-all ${activeTab === 'scan' ? 'text-indigo-400 font-black scale-105' : 'text-slate-400'}`}><ScanLine className="w-5 h-5 mb-0.5" /><span className="text-[11px]">เช็กชื่อ</span></button>
-        <button onClick={() => setActiveTab('queue')} className={`flex flex-col items-center flex-1 py-1 transition-all ${activeTab === 'queue' ? 'text-indigo-400 font-black scale-105' : 'text-slate-400'}`}><Layers className="w-5 h-5 mb-0.5" /><span className="text-[11px]">จัดคิว</span></button>
-        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 transition-all ${activeTab === 'dashboard' ? 'text-indigo-400 font-black scale-105' : 'text-slate-400'}`}><Settings className="w-5 h-5 mb-0.5" /><span className="text-[11px]">จัดการ</span></button>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0e1628] border-t border-[#d4af37]/30 px-2 py-2 flex justify-around">
+        <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'scan' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
+        <button onClick={() => setActiveTab('queue')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'queue' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'dashboard' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
       </nav>
     </div>
   );
