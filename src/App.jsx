@@ -273,6 +273,9 @@ export default function App() {
     const finalStatus = targetStatus || (isNoItem ? 'no_item_ordered' : 'checked_in');
     const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
+    // อัปเดต State ทันทีในเครื่อง (Optimistic Update) เพื่อความรวดเร็ว
+    setScannedPreviewGuest(prev => prev ? { ...prev, status: finalStatus, checkInTime: timeStr, prevStatus: prev.status } : null);
+
     try {
       await updateDoc(getGuestDocRef(guest.id), {
         status: finalStatus,
@@ -281,7 +284,6 @@ export default function App() {
         skipped: false
       });
     } catch (e) { console.error(e); }
-    setScannedPreviewGuest(null);
   };
 
   const handleUndoStatus = async (guest) => {
