@@ -92,7 +92,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // ==========================================
-// Main App Component (Navy, Cream & Gold Luxury Theme)
+// Main App Component (Cream, Navy & Gold Theme)
 // ==========================================
 export default function App() {
   const [guests, setGuests] = useState([]);
@@ -132,7 +132,7 @@ export default function App() {
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
-  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-amber-600 hover:bg-amber-700', onConfirm: null });
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'ยืนยัน', confirmColor: 'bg-amber-700 hover:bg-amber-800', onConfirm: null });
 
   useEffect(() => {
     if (sessionStorage.getItem('staff_auth') === 'true') {
@@ -565,71 +565,71 @@ export default function App() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#070b19] text-[#fdfbf7] p-4 sm:p-8 flex flex-col justify-between font-sans">
+      <div className="min-h-screen bg-[#FDFBF7] text-[#0A192F] p-4 sm:p-8 flex flex-col justify-between font-sans">
         <div className="max-w-6xl w-full mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl px-6 py-4 shadow-[0_4px_20px_rgba(212,175,55,0.15)]">
+          <div className="flex justify-between items-center bg-[#0A192F] text-[#FDFBF7] border border-[#C5A059] rounded-3xl px-6 py-4 shadow-xl">
             <div>
-              <h1 className="text-base sm:text-lg font-black text-[#f3e5ab] flex items-center gap-2">
-                <Award className="w-6 h-6 text-[#d4af37]" /> พิธีมอบประดับบ่าเกียรติยศ SPU
+              <h1 className="text-base sm:text-lg font-black text-[#F4E8C1] flex items-center gap-2">
+                <Award className="w-6 h-6 text-[#C5A059]" /> พิธีมอบประดับบ่าเกียรติยศ SPU
               </h1>
-              <p className="text-xs text-[#d1c7bd]">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
+              <p className="text-xs text-[#E2D6B5]">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
             </div>
             <button
               onClick={() => setIsPinModalOpen(true)}
-              className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e6c252] hover:to-[#c19016] text-[#070b19] rounded-xl text-xs font-black shadow-[0_0_15px_rgba(212,175,55,0.4)] flex items-center gap-1.5 transition-all transform hover:scale-105"
+              className="px-4 py-2 bg-gradient-to-r from-[#C5A059] to-[#997A35] hover:from-[#D4B06A] hover:to-[#B38C3F] text-[#0A192F] rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition-all transform hover:scale-105"
             >
               <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
             </button>
           </div>
 
-          <div className="bg-[#0e1628]/90 border-2 border-[#d4af37]/60 rounded-[2.5rem] p-6 sm:p-12 shadow-[0_0_50px_rgba(212,175,55,0.2)] relative overflow-hidden">
+          <div className="bg-[#FFFFFF] border-2 border-[#C5A059] rounded-[2.5rem] p-6 sm:p-12 shadow-2xl relative overflow-hidden">
             <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#d4af37]/10 text-[#f3e5ab] border border-[#d4af37]/40 text-sm font-bold tracking-wide shadow-inner">
-                <Sparkles className="w-4 h-4 text-[#d4af37] animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
+              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#F4E8C1] text-[#0A192F] border border-[#C5A059] text-sm font-bold tracking-wide shadow-inner">
+                <Sparkles className="w-4 h-4 text-[#C5A059] animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
               </div>
             </div>
 
             {currentStageGroup.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-in fade-in duration-300">
                 {currentStageGroup.map((g) => (
-                  <div key={g.id} className="bg-[#121f38] border-2 border-[#d4af37]/70 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(212,175,55,0.25)] space-y-1">
-                    <span className="inline-block px-3 py-0.5 bg-[#d4af37] text-[#070b19] font-black text-sm rounded-xl">
+                  <div key={g.id} className="bg-[#FDFBF7] border-2 border-[#C5A059] rounded-2xl p-4 text-center shadow-md space-y-1">
+                    <span className="inline-block px-3 py-0.5 bg-[#0A192F] text-[#F4E8C1] font-black text-sm rounded-xl">
                       #{g.badgeNumber}
                     </span>
-                    <h4 className="text-base sm:text-lg font-black text-[#fdfbf7] truncate">{g.name}</h4>
-                    <p className="text-xs font-mono text-[#f3e5ab]">{g.studentId || '-'} • {g.year}</p>
+                    <h4 className="text-base sm:text-lg font-black text-[#0A192F] truncate">{g.name}</h4>
+                    <p className="text-xs font-mono text-[#735A1E] font-bold">{g.studentId || '-'} • {g.year}</p>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="py-16 text-center space-y-4">
-                <div className="w-16 h-16 rounded-3xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37] animate-pulse">
+                <div className="w-16 h-16 rounded-3xl bg-[#F4E8C1] border border-[#C5A059] flex items-center justify-center mx-auto text-[#735A1E] animate-pulse">
                   <Award className="w-8 h-8" />
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-black text-[#fdfbf7]">เตรียมตัวเริ่มพิธี</h3>
-                <p className="text-sm sm:text-base text-[#d1c7bd]">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+                <h3 className="text-2xl sm:text-3xl font-black text-[#0A192F]">เตรียมตัวเริ่มพิธี</h3>
+                <p className="text-sm sm:text-base text-[#52606D]">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
               </div>
             )}
 
-            <div className="mt-10 pt-6 border-t border-[#d4af37]/30">
+            <div className="mt-10 pt-6 border-t border-[#E5DCC3]">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-black text-[#f3e5ab] uppercase tracking-widest flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-[#d4af37]" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+                <h4 className="text-xs font-black text-[#735A1E] uppercase tracking-widest flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-[#C5A059]" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
                 </h4>
-                <span className="px-3 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">
+                <span className="px-3 py-0.5 bg-[#F4E8C1] text-[#0A192F] text-xs font-bold rounded-full border border-[#C5A059]">
                   รออยู่ {standbyQueue.length} คน
                 </span>
               </div>
               
               <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
                 {standbyQueue.length === 0 ? (
-                  <span className="text-xs text-[#d1c7bd] italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+                  <span className="text-xs text-[#8492A6] italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
                 ) : (
                   standbyQueue.map((g, idx) => (
-                    <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-sm">
-                      <span className="text-[11px] font-black text-[#d4af37]">#{g.badgeNumber}</span>
-                      <span className="text-xs font-bold text-[#fdfbf7] truncate max-w-[120px]">{g.name}</span>
-                      <span className="text-[10px] text-[#f3e5ab] bg-[#d4af37]/10 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+                    <div key={g.id} className="bg-[#FDFBF7] border border-[#C5A059]/60 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-xs">
+                      <span className="text-[11px] font-black text-[#735A1E]">#{g.badgeNumber}</span>
+                      <span className="text-xs font-bold text-[#0A192F] truncate max-w-[120px]">{g.name}</span>
+                      <span className="text-[10px] text-[#0A192F] bg-[#F4E8C1] px-1.5 py-0.5 rounded font-mono font-bold">คิว {idx + 1}</span>
                     </div>
                   ))
                 )}
@@ -639,12 +639,12 @@ export default function App() {
         </div>
 
         {isPinModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-            <div className="bg-[#0e1628] border-2 border-[#d4af37] rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
-              <h3 className="text-base font-black text-[#f3e5ab] flex items-center justify-center gap-2">
-                <Lock className="w-4 h-4 text-[#d4af37]" /> ยืนยันรหัสสตาฟ
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+            <div className="bg-[#FFFFFF] border-2 border-[#C5A059] rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
+              <h3 className="text-base font-black text-[#0A192F] flex items-center justify-center gap-2">
+                <Lock className="w-4 h-4 text-[#C5A059]" /> ยืนยันรหัสสตาฟ
               </h3>
-              <p className="text-xs text-[#d1c7bd]">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการสตาฟ</p>
+              <p className="text-xs text-[#52606D]">กรุณากรอกรหัส PIN 6 หลักเพื่อเข้าสู่ระบบจัดการสตาฟ</p>
               <form onSubmit={handleStaffLogin} className="space-y-3">
                 <input 
                   type="password" 
@@ -652,13 +652,13 @@ export default function App() {
                   value={pinInput}
                   onChange={(e) => setPinInput(e.target.value)}
                   placeholder="••••••"
-                  style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '12px', border: '1px solid #d4af37', background: '#070b19', color: '#fdfbf7', outline: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', padding: '12px', fontSize: '24px', textAlign: 'center', letterSpacing: '8px', borderRadius: '12px', border: '1px solid #C5A059', background: '#FDFBF7', color: '#0A192F', outline: 'none', boxSizing: 'border-box' }}
                   autoFocus
                 />
-                {errorMsg && <p className="text-red-400 text-xs font-bold">{errorMsg}</p>}
+                {errorMsg && <p className="text-red-500 text-xs font-bold">{errorMsg}</p>}
                 <div className="flex gap-2 pt-2">
-                  <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-xl text-xs border border-[#d4af37]/30">ยกเลิก</button>
-                  <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl text-xs shadow-md">ยืนยัน</button>
+                  <button type="button" onClick={() => setIsPinModalOpen(false)} className="flex-1 py-2.5 bg-[#FDFBF7] hover:bg-[#F4E8C1] text-[#0A192F] font-bold rounded-xl text-xs border border-[#C5A059]">ยกเลิก</button>
+                  <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#C5A059] to-[#997A35] text-[#0A192F] font-black rounded-xl text-xs shadow-md">ยืนยัน</button>
                 </div>
               </form>
             </div>
@@ -669,26 +669,26 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#070b19] text-[#fdfbf7] font-sans pb-20 md:pb-0">
-      <header className="bg-[#0e1628] border-b border-[#d4af37]/30 sticky top-0 z-40 px-4 py-3 shadow-md">
+    <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-[#0A192F] font-sans pb-20 md:pb-0">
+      <header className="bg-[#0A192F] border-b border-[#C5A059] sticky top-0 z-40 px-4 py-3 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-tr from-[#d4af37] to-[#aa7c11] rounded-2xl flex items-center justify-center font-bold text-[#070b19] shadow-md"><Award className="w-6 h-6" /></div>
+            <div className="w-10 h-10 bg-gradient-to-tr from-[#C5A059] to-[#997A35] rounded-2xl flex items-center justify-center font-bold text-[#0A192F] shadow-md"><Award className="w-6 h-6" /></div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-black text-[#f3e5ab]">ระบบจัดการสตาฟ</h1>
-                <span className="px-2 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-[10px] font-bold rounded-full border border-[#d4af37]/40">Staff</span>
+                <h1 className="text-base font-black text-[#F4E8C1]">ระบบจัดการสตาฟ</h1>
+                <span className="px-2 py-0.5 bg-[#C5A059]/20 text-[#F4E8C1] text-[10px] font-bold rounded-full border border-[#C5A059]/40">Staff</span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <nav className="hidden md:flex items-center bg-[#070b19] p-1 rounded-2xl border border-[#d4af37]/30">
-              <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
-              <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
-              <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
+            <nav className="hidden md:flex items-center bg-[#FFFFFF] p-1 rounded-2xl border border-[#C5A059]/40 shadow-xs">
+              <button onClick={() => setActiveTab('scan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-[#0A192F] text-[#F4E8C1] shadow-md font-black' : 'text-[#52606D] hover:text-[#0A192F]'}`}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
+              <button onClick={() => setActiveTab('queue')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-[#0A192F] text-[#F4E8C1] shadow-md font-black' : 'text-[#52606D] hover:text-[#0A192F]'}`}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
+              <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-[#0A192F] text-[#F4E8C1] shadow-md font-black' : 'text-[#52606D] hover:text-[#0A192F]'}`}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#52606D] hover:text-[#0A192F] transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
             </nav>
-            <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
+            <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white text-xs font-bold rounded-xl border border-red-300 transition-all">ออกจากระบบ</button>
           </div>
         </div>
       </header>
@@ -698,24 +698,24 @@ export default function App() {
         {/* TAB 1: เช็กชื่อหน้างาน */}
         {activeTab === 'scan' && (
           <div className="max-w-lg mx-auto space-y-4">
-            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 text-center shadow-xl">
-              <h2 className="text-lg font-black text-[#f3e5ab] flex items-center justify-center gap-2">
-                <ScanLine className="w-5 h-5 text-[#d4af37]" /> เช็กชื่อผู้เข้าร่วมหน้างาน
+            <div className="bg-[#FFFFFF] border-2 border-[#C5A059] rounded-3xl p-5 text-center shadow-xl">
+              <h2 className="text-lg font-black text-[#0A192F] flex items-center justify-center gap-2">
+                <ScanLine className="w-5 h-5 text-[#C5A059]" /> เช็กชื่อผู้เข้าร่วมหน้างาน
               </h2>
-              <p className="text-xs text-[#d1c7bd] mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
+              <p className="text-xs text-[#52606D] mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
 
-              <div className="mt-4 bg-[#fdfbf7] rounded-2xl overflow-hidden border-2 border-[#d4af37] relative min-h-[220px] flex items-center justify-center">
+              <div className="mt-4 bg-[#0A192F] rounded-2xl overflow-hidden border-2 border-[#C5A059] relative min-h-[220px] flex items-center justify-center shadow-inner">
                 <div id="camera-scanner-view" className="w-full h-full"></div>
                 {!isCameraActive && (
-                  <div className="absolute text-center text-slate-500 p-4">
-                    <Camera className="w-8 h-8 mx-auto mb-1 opacity-50 text-[#d4af37]" />
-                    <p className="text-xs text-[#070b19] font-bold">กล้องสแกนพร้อมใช้งาน</p>
+                  <div className="absolute text-center p-4">
+                    <Camera className="w-8 h-8 mx-auto mb-1 opacity-65 text-[#C5A059]" />
+                    <p className="text-xs text-[#F4E8C1] font-bold">กล้องสแกนพร้อมใช้งาน</p>
                   </div>
                 )}
               </div>
 
-              <div className="mt-4 pt-4 border-t border-[#d4af37]/30 text-left">
-                <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
+              <div className="mt-4 pt-4 border-t border-[#E5DCC3] text-left">
+                <label className="text-xs font-bold text-[#0A192F] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -723,9 +723,9 @@ export default function App() {
                     onChange={(e) => setManualCodeInput(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleInspectQrCode(manualCodeInput)}
                     placeholder="พิมพ์ชื่อ หรือ รหัสนักศึกษา..."
-                    className="flex-1 px-3 py-2.5 bg-[#070b19] border border-[#d4af37]/50 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
+                    className="flex-1 px-3 py-2.5 bg-[#FDFBF7] border border-[#C5A059] rounded-xl text-xs text-[#0A192F] outline-none font-bold"
                   />
-                  <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e6c252] text-[#070b19] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
+                  <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#0A192F] hover:bg-[#132B4F] text-[#F4E8C1] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
                 </div>
               </div>
             </div>
@@ -735,14 +735,14 @@ export default function App() {
         {/* TAB 2: จัดคิวเวที */}
         {activeTab === 'queue' && (
           <div className="space-y-6">
-            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
+            <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#d4af37]/20 text-[#d4af37] flex items-center justify-center font-bold border border-[#d4af37]/40">
+                <div className="w-10 h-10 rounded-2xl bg-[#F4E8C1] text-[#735A1E] flex items-center justify-center font-bold border border-[#C5A059]">
                   <Sliders className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-[#f3e5ab]">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
-                  <p className="text-xs text-[#d1c7bd]">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
+                  <h3 className="text-sm font-black text-[#0A192F]">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
+                  <p className="text-xs text-[#52606D]">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
                 </div>
               </div>
 
@@ -754,82 +754,82 @@ export default function App() {
                   step="1"
                   value={batchSize}
                   onChange={(e) => setBatchSize(Number(e.target.value))}
-                  className="w-full md:w-48 accent-[#d4af37] cursor-pointer h-2 bg-slate-800 rounded-lg"
+                  className="w-full md:w-48 accent-[#C5A059] cursor-pointer h-2 bg-[#E5DCC3] rounded-lg"
                 />
-                <span className="px-3.5 py-1.5 bg-[#d4af37] text-[#070b19] rounded-xl text-sm font-black shadow-md min-w-[75px] text-center">
+                <span className="px-3.5 py-1.5 bg-[#0A192F] text-[#F4E8C1] rounded-xl text-sm font-black shadow-md min-w-[75px] text-center">
                   {batchSize} คน
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
-                <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/30 mb-3">
-                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#d4af37]" /> พร้อมเรียกคิว</h3>
-                  <span className="px-2.5 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">{readyQueue.length} คน</span>
+              <div className="bg-[#FFFFFF] border border-[#C5A059]/60 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-md">
+                <div className="flex justify-between items-center pb-3 border-b border-[#E5DCC3] mb-3">
+                  <h3 className="font-black text-[#0A192F] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#735A1E]" /> พร้อมเรียกคิว</h3>
+                  <span className="px-2.5 py-0.5 bg-[#0A192F] text-[#F4E8C1] text-xs font-bold rounded-full">{readyQueue.length} คน</span>
                 </div>
 
                 {readyQueue.length > 0 && (
                   <button
                     onClick={handleMoveToStandbyBatch}
-                    className="w-full mb-3 py-2.5 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                    className="w-full mb-3 py-2.5 bg-[#0A192F] hover:bg-[#132B4F] text-[#F4E8C1] rounded-2xl text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
                   >
                     <span>🚀 ดึงเข้าสแตนด์บายเซตละ {batchSize} คน</span>
                   </button>
                 )}
 
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
-                  {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
-                    <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
+                  {readyQueue.length === 0 ? <p className="text-center text-xs text-[#8492A6] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
+                    <div key={g.id} className="bg-[#FDFBF7] border border-[#E5DCC3] rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-xs">
+                      <div className="flex items-center justify-between"><span className="text-xs font-black text-[#735A1E]">#{g.badgeNumber}</span><span className="text-[10px] text-[#52606D]">{g.year}</span></div>
                       <div>
-                        <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
-                        <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
+                        <div className="text-sm font-bold text-[#0A192F] truncate">{g.name}</div>
+                        <div className="text-xs font-mono text-[#52606D]">{g.studentId || '-'}</div>
                       </div>
-                      <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-400 text-left hover:underline">ข้ามคิวนี้</button>
+                      <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-700 text-left hover:underline font-bold">ข้ามคิวนี้</button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-[#0e1628] border border-amber-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
-                <div className="flex justify-between items-center pb-3 border-b border-amber-500/30 mb-3">
-                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-400" /> แสตนบายหลังเวที</h3>
-                  <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 text-xs font-bold rounded-full border border-amber-500/40">{standbyQueue.length} คน</span>
+              <div className="bg-[#FFFFFF] border border-amber-500/50 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-md">
+                <div className="flex justify-between items-center pb-3 border-b border-amber-200 mb-3">
+                  <h3 className="font-black text-[#0A192F] text-sm flex items-center gap-2"><Users className="w-4 h-4 text-amber-600" /> แสตนบายหลังเวที</h3>
+                  <span className="px-2.5 py-0.5 bg-amber-100 text-amber-800 text-xs font-bold rounded-full border border-amber-300">{standbyQueue.length} คน</span>
                 </div>
 
                 {standbyQueue.length > 0 && (
                   <button
                     onClick={handleMoveBatchToOnStage}
-                    className="w-full mb-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
+                    className="w-full mb-3 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-black rounded-2xl text-xs transition-all shadow-md flex items-center justify-center gap-1.5"
                   >
                     <span>🎯 ประกาศขึ้นเวทีเซตนี้ ({Math.min(batchSize, standbyQueue.length)} คน) →</span>
                   </button>
                 )}
 
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
-                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
-                    <div key={g.id} className="bg-[#121f38] border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between gap-2">
+                  {standbyQueue.length === 0 ? <p className="text-center text-xs text-[#8492A6] py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
+                    <div key={g.id} className="bg-[#FDFBF7] border border-amber-200 rounded-2xl p-3 flex items-center justify-between gap-2 shadow-xs">
                       <div>
-                        <span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
-                        <span className="text-xs font-bold text-[#fdfbf7]">{g.name}</span>
-                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
+                        <span className="text-xs font-black text-amber-700 mr-2">#{g.badgeNumber}</span>
+                        <span className="text-xs font-bold text-[#0A192F]">{g.name}</span>
+                        <div className="text-[10px] text-[#52606D] font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-[#0e1628] border border-emerald-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
-                <div className="flex justify-between items-center pb-3 border-b border-emerald-500/30 mb-3">
-                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-400" /> กำลังขึ้นเวที</h3>
-                  <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-xs font-bold rounded-full border border-emerald-500/40">{currentStageGroup.length} คน</span>
+              <div className="bg-[#FFFFFF] border border-emerald-500/50 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-md">
+                <div className="flex justify-between items-center pb-3 border-b border-emerald-200 mb-3">
+                  <h3 className="font-black text-[#0A192F] text-sm flex items-center gap-2"><Mic2 className="w-4 h-4 text-emerald-600" /> กำลังขึ้นเวที</h3>
+                  <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full border border-emerald-300">{currentStageGroup.length} คน</span>
                 </div>
 
                 {currentStageGroup.length > 0 && (
                   <button
                     onClick={handleCompleteStageBatch}
-                    className="w-full mb-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs transition-all shadow-md"
+                    className="w-full mb-3 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-2xl text-xs transition-all shadow-md"
                   >
                     ✓ ลงเวทีแล้วทั้งหมด ({currentStageGroup.length} คน)
                   </button>
@@ -837,15 +837,15 @@ export default function App() {
 
                 <div className="flex-1 space-y-2 overflow-y-auto">
                   {currentStageGroup.length === 0 ? (
-                    <p className="text-center text-xs text-[#d1c7bd] py-12">ยังไม่มีชุดขึ้นเวที</p>
+                    <p className="text-center text-xs text-[#8492A6] py-12">ยังไม่มีชุดขึ้นเวที</p>
                   ) : (
                     currentStageGroup.map((g) => (
-                      <div key={g.id} className="bg-[#121f38] border-2 border-emerald-500/60 rounded-xl p-2.5 flex items-center justify-between">
+                      <div key={g.id} className="bg-[#FDFBF7] border-2 border-emerald-600 rounded-xl p-2.5 flex items-center justify-between shadow-xs">
                         <div>
-                          <span className="text-xs font-black text-emerald-400">#{g.badgeNumber}</span>
-                          <span className="text-xs font-bold text-[#fdfbf7] ml-2">{g.name}</span>
+                          <span className="text-xs font-black text-emerald-700">#{g.badgeNumber}</span>
+                          <span className="text-xs font-bold text-[#0A192F] ml-2">{g.name}</span>
                         </div>
-                        <span className="text-[10px] text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded">{g.year}</span>
+                        <span className="text-[10px] text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">{g.year}</span>
                       </div>
                     ))
                   )}
@@ -859,16 +859,16 @@ export default function App() {
         {/* TAB 3: แดชบอร์ด */}
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
-            <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg">
+            <div className="bg-[#FFFFFF] p-4 rounded-3xl border border-[#C5A059] flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-md">
               <div>
-                <h2 className="text-lg font-black text-[#f3e5ab]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
-                <p className="text-xs text-[#d1c7bd]">คนมาสาย / ผิดระเบียบ / สั่งของไม่ทัน ระบบจะซิงค์เป็นเครื่องหมาย "-" ไม่มีเลขลำดับ และไม่นำมาคิดรวมคิวขึ้นเวที</p>
+                <h2 className="text-lg font-black text-[#0A192F]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
+                <p className="text-xs text-[#52606D]">คนมาสาย / ผิดระเบียบ / สั่งของไม่ทัน ระบบจะซิงค์เป็นเครื่องหมาย "-" ไม่มีเลขลำดับ และไม่นำมาคิดรวมคิวขึ้นเวที</p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setIsSummaryModalOpen(true)}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                  className="px-3 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
                 >
                   <Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน
                 </button>
@@ -881,9 +881,9 @@ export default function App() {
                     <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
                   </button>
                 )}
-                <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
-                <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
-                <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR Code</button>
+                <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#FDFBF7] hover:bg-[#F4E8C1] text-[#0A192F] border border-[#C5A059] rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#735A1E]" /> นำเข้า Excel</button>
+                <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-[#0A192F] hover:bg-[#132B4F] text-[#F4E8C1] rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Sheets</button>
+                <button disabled={isSendingEmails} onClick={handleSendQrCodeEmails} className="px-3 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">{isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR</button>
                 
                 <button
                   onClick={() => {
@@ -898,19 +898,19 @@ export default function App() {
                     });
                     setIsEditModalOpen(true);
                   }}
-                  className="px-3 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md"
+                  className="px-3 py-2 bg-gradient-to-r from-[#C5A059] to-[#997A35] text-[#0A192F] rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md"
                 >
                   <Plus className="w-3.5 h-3.5" /> เพิ่มผู้เข้าร่วม
                 </button>
 
-                <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
+                <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-100 text-red-700 border border-red-300 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ต</button>
               </div>
             </div>
 
-            <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 overflow-hidden shadow-xl">
+            <div className="bg-[#FFFFFF] rounded-3xl border border-[#C5A059] overflow-hidden shadow-md">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-[#070b19] text-[#f3e5ab] font-bold border-b border-[#d4af37]/30">
+                  <thead className="bg-[#0A192F] text-[#F4E8C1] font-bold border-b border-[#C5A059]">
                     <tr>
                       <th className="p-3.5 w-10 text-center">
                         <input
@@ -920,7 +920,7 @@ export default function App() {
                             paginatedGuests.every((g) => selectedGuestIds.includes(g.id))
                           }
                           onChange={handleToggleSelectAll}
-                          className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
+                          className="rounded bg-[#FDFBF7] border-[#C5A059] text-[#0A192F] cursor-pointer"
                         />
                       </th>
                       <th className="p-3.5">ลำดับคิวเวที</th>
@@ -932,40 +932,40 @@ export default function App() {
                       <th className="p-3.5 text-right">การจัดการ</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#d4af37]/15">
+                  <tbody className="divide-y divide-[#E5DCC3]">
                     {paginatedGuests.map((g) => (
-                      <tr key={g.id} className={`hover:bg-[#121f38] transition-colors ${selectedGuestIds.includes(g.id) ? 'bg-[#121f38]/60' : ''}`}>
+                      <tr key={g.id} className={`hover:bg-[#FDFBF7] transition-colors ${selectedGuestIds.includes(g.id) ? 'bg-[#F4E8C1]/30' : ''}`}>
                         <td className="p-3.5 text-center">
                           <input
                             type="checkbox"
                             checked={selectedGuestIds.includes(g.id)}
                             onChange={() => handleToggleSelectGuest(g.id)}
-                            className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
+                            className="rounded bg-[#FDFBF7] border-[#C5A059] text-[#0A192F] cursor-pointer"
                           />
                         </td>
                         <td className="p-3.5 font-bold">
                           {g.badgeNumber && g.status !== 'no_item_ordered' && g.status !== 'late_receive_after' && g.status !== 'dress_violation_receive_after' ? (
-                            <span className="text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30">#{g.badgeNumber}</span>
+                            <span className="text-[#735A1E] bg-[#F4E8C1] px-2 py-0.5 rounded border border-[#C5A059]">#{g.badgeNumber}</span>
                           ) : (
-                            <span className="text-[#d1c7bd] bg-[#070b19] px-2 py-0.5 rounded border border-[#d4af37]/20">- (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)</span>
+                            <span className="text-[#8492A6] bg-[#FDFBF7] px-2 py-0.5 rounded border border-[#E5DCC3]">- (ไม่ขึ้นรับบ่า)</span>
                           )}
                         </td>
-                        <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
-                        <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
-                        <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
+                        <td className="p-3.5 font-mono text-[#52606D]">{g.studentId || '-'}</td>
+                        <td className="p-3.5 font-bold text-[#0A192F]">{g.name}</td>
+                        <td className="p-3.5 text-[#52606D]">{g.year}</td>
                         <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : g.status.includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : g.status.includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-gray-100 text-gray-600'}`}>
                             {getStatusLabel(g.status)}
                           </span>
                         </td>
                         <td className="p-3.5 space-x-1">
-                          <button onClick={() => handleConfirmCheckIn(g, 'checked_in')} className="px-2 py-1 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white rounded text-[11px] font-bold">มาปกติ</button>
-                          <button onClick={() => handleConfirmCheckIn(g, 'late_receive_after')} className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600 text-amber-300 hover:text-white rounded text-[11px] font-bold">มาสาย</button>
-                          <button onClick={() => handleConfirmCheckIn(g, 'dress_violation_receive_after')} className="px-2 py-1 bg-orange-600/30 hover:bg-orange-600 text-orange-300 hover:text-white rounded text-[11px] font-bold">ผิดระเบียบ</button>
+                          <button onClick={() => handleConfirmCheckIn(g, 'checked_in')} className="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-800 hover:text-white rounded text-[11px] font-bold transition-all border border-emerald-300">มาปกติ</button>
+                          <button onClick={() => handleConfirmCheckIn(g, 'late_receive_after')} className="px-2 py-1 bg-amber-600/20 hover:bg-amber-600 text-amber-800 hover:text-white rounded text-[11px] font-bold transition-all border border-amber-300">มาสาย</button>
+                          <button onClick={() => handleConfirmCheckIn(g, 'dress_violation_receive_after')} className="px-2 py-1 bg-orange-600/20 hover:bg-orange-600 text-orange-800 hover:text-white rounded text-[11px] font-bold transition-all border border-orange-300">ผิดระเบียบ</button>
                         </td>
                         <td className="p-3.5 text-right space-x-2">
-                          {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#d4af37] hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
-                          <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
+                          {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#735A1E] hover:underline font-bold"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
+                          <button onClick={() => handleDeleteGuest(g)} className="text-red-600 hover:bg-red-50 p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                         </td>
                       </tr>
                     ))}
@@ -980,29 +980,29 @@ export default function App() {
 
       {/* ================= MODAL สแกน QR แล้วเด้งขึ้นกลางจอ ================= */}
       {scannedPreviewGuest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#0e1628] border-2 border-[#d4af37] text-[#fdfbf7] rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-[#FFFFFF] border-2 border-[#C5A059] text-[#0A192F] rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
             
             <div className="flex justify-between items-start">
-              <span className={`px-3 py-1 rounded-xl text-xs font-black text-[#070b19] ${scannedPreviewGuest.badgeNumber ? 'bg-[#d4af37]' : 'bg-slate-400'}`}>
+              <span className={`px-3 py-1 rounded-xl text-xs font-black text-[#F4E8C1] ${scannedPreviewGuest.badgeNumber ? 'bg-[#0A192F]' : 'bg-slate-400'}`}>
                 {scannedPreviewGuest.badgeNumber ? `#${scannedPreviewGuest.badgeNumber}` : 'ไม่มีคิวเวที'}
               </span>
-              <span className="px-3 py-1 bg-[#121f38] border border-[#d4af37]/40 rounded-xl text-xs font-bold text-[#f3e5ab]">{getStatusLabel(scannedPreviewGuest.status)}</span>
+              <span className="px-3 py-1 bg-[#F4E8C1] rounded-xl text-xs font-bold text-[#0A192F] border border-[#C5A059]">{getStatusLabel(scannedPreviewGuest.status)}</span>
             </div>
 
             <div className="text-center py-2 space-y-1">
-              <h3 className="text-xl font-black text-[#fdfbf7]">{scannedPreviewGuest.name}</h3>
-              <p className="text-xs font-mono font-bold text-[#d4af37]">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
+              <h3 className="text-xl font-black text-[#0A192F]">{scannedPreviewGuest.name}</h3>
+              <p className="text-xs font-mono font-bold text-[#735A1E]">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
             </div>
 
-            <div className="pt-2 border-t border-[#d4af37]/30 space-y-2.5">
+            <div className="pt-2 border-t border-[#E5DCC3] space-y-2.5">
               {scannedPreviewGuest.status === 'pending' ? (
                 <>
-                  <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs shadow-md transition-transform active:scale-95">
+                  <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-2xl text-xs shadow-md transition-transform active:scale-95">
                     ✓ มาปกติ (เข้าคิวขึ้นรับบ่า)
                   </button>
                   <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-xl text-[11px] transition-transform active:scale-95">
+                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#0A192F] font-black rounded-xl text-[11px] transition-transform active:scale-95">
                       ⏰ มาสาย (ร่วมพิธี/ไม่รับบ่า)
                     </button>
                     <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
@@ -1011,11 +1011,11 @@ export default function App() {
                   </div>
                 </>
               ) : (
-                <div className="py-3 bg-[#121f38] border border-[#d4af37]/40 text-[#f3e5ab] font-bold rounded-2xl text-xs text-center">
+                <div className="py-3 bg-[#F4E8C1]/50 border border-[#C5A059] text-[#0A192F] font-bold rounded-2xl text-xs text-center">
                   สถานะปัจจุบัน: {getStatusLabel(scannedPreviewGuest.status)}
                 </div>
               )}
-              <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-2xl text-xs border border-[#d4af37]/30">
+              <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-2.5 bg-[#FDFBF7] hover:bg-[#F4E8C1] text-[#0A192F] font-bold rounded-2xl text-xs border border-[#C5A059]">
                 ปิดหน้าต่างนี้
               </button>
             </div>
@@ -1026,41 +1026,41 @@ export default function App() {
 
       {/* MODAL สรุปรายงานหลังจบงาน */}
       {isSummaryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
-            <div className="flex justify-between items-center border-b border-[#d4af37]/30 pb-3">
-              <h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2">
-                <Award className="w-5 h-5 text-emerald-400" /> สรุปผลพิธีมอบประดับบ่าเกียรติยศ
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-[#E5DCC3] pb-3">
+              <h3 className="text-base font-black text-[#0A192F] flex items-center gap-2">
+                <Award className="w-5 h-5 text-emerald-700" /> สรุปผลพิธีมอบประดับบ่าเกียรติยศ
               </h3>
-              <button onClick={() => setIsSummaryModalOpen(false)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
+              <button onClick={() => setIsSummaryModalOpen(false)} className="text-[#52606D] hover:text-[#0A192F]"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="bg-[#070b19] border border-[#d4af37]/30 rounded-2xl p-3">
-                <span className="text-[#d1c7bd]">รายชื่อทั้งหมด</span>
-                <p className="text-xl font-black text-[#fdfbf7] mt-1">{summaryStats.total} คน</p>
+              <div className="bg-[#FDFBF7] border border-[#C5A059]/40 rounded-2xl p-3 shadow-xs">
+                <span className="text-[#52606D]">รายชื่อทั้งหมด</span>
+                <p className="text-xl font-black text-[#0A192F] mt-1">{summaryStats.total} คน</p>
               </div>
-              <div className="bg-[#070b19] border border-emerald-900/50 rounded-2xl p-3">
-                <span className="text-emerald-400">เช็กชื่อเข้าร่วมแล้ว</span>
-                <p className="text-xl font-black text-emerald-300 mt-1">{summaryStats.checkedIn} คน</p>
+              <div className="bg-[#FDFBF7] border border-emerald-300 rounded-2xl p-3 shadow-xs">
+                <span className="text-emerald-800 font-bold">เช็กชื่อเข้าร่วมแล้ว</span>
+                <p className="text-xl font-black text-emerald-700 mt-1">{summaryStats.checkedIn} คน</p>
               </div>
-              <div className="bg-[#070b19] border border-amber-900/50 rounded-2xl p-3">
-                <span className="text-amber-400">มาสาย / ผิดระเบียบ</span>
-                <p className="text-xl font-black text-amber-300 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
+              <div className="bg-[#FDFBF7] border border-amber-300 rounded-2xl p-3 shadow-xs">
+                <span className="text-amber-800 font-bold">มาสาย / ผิดระเบียบ</span>
+                <p className="text-xl font-black text-amber-700 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
               </div>
-              <div className="bg-[#070b19] border border-rose-900/50 rounded-2xl p-3">
-                <span className="text-rose-400">ยังไม่มา (ขาด)</span>
-                <p className="text-xl font-black text-rose-300 mt-1">{summaryStats.pending} คน</p>
+              <div className="bg-[#FDFBF7] border border-rose-300 rounded-2xl p-3 shadow-xs">
+                <span className="text-rose-800 font-bold">ยังไม่มา (ขาด)</span>
+                <p className="text-xl font-black text-rose-700 mt-1">{summaryStats.pending} คน</p>
               </div>
             </div>
 
-            <div className="bg-[#070b19] border border-[#d4af37]/30 rounded-2xl p-3 text-xs space-y-1.5">
-              <span className="font-bold text-[#f3e5ab] block mb-1">สถิติแยกตามชั้นปี:</span>
-              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 1:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 1']} คน</span></div>
-              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 2:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 2']} คน</span></div>
-              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 3:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 3']} คน</span></div>
-              <div className="flex justify-between text-[#d1c7bd]"><span>ปี 4:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 4']} คน</span></div>
-              <div className="flex justify-between text-[#d1c7bd]"><span>บัณฑิต:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['บัณฑิต']} คน</span></div>
+            <div className="bg-[#FDFBF7] border border-[#C5A059]/40 rounded-2xl p-3 text-xs space-y-1.5">
+              <span className="font-bold text-[#735A1E] block mb-1">สถิติแยกตามชั้นปี:</span>
+              <div className="flex justify-between text-[#52606D]"><span>ปี 1:</span><span className="font-bold text-[#0A192F]">{summaryStats.byYear['ปี 1']} คน</span></div>
+              <div className="flex justify-between text-[#52606D]"><span>ปี 2:</span><span className="font-bold text-[#0A192F]">{summaryStats.byYear['ปี 2']} คน</span></div>
+              <div className="flex justify-between text-[#52606D]"><span>ปี 3:</span><span className="font-bold text-[#0A192F]">{summaryStats.byYear['ปี 3']} คน</span></div>
+              <div className="flex justify-between text-[#52606D]"><span>ปี 4:</span><span className="font-bold text-[#0A192F]">{summaryStats.byYear['ปี 4']} คน</span></div>
+              <div className="flex justify-between text-[#52606D]"><span>บัณฑิต:</span><span className="font-bold text-[#0A192F]">{summaryStats.byYear['บัณฑิต']} คน</span></div>
             </div>
 
             <div className="flex gap-2 pt-2">
@@ -1069,13 +1069,13 @@ export default function App() {
                   navigator.clipboard.writeText(generateSummaryText());
                   alert('📋 คัดลอกข้อความสรุปรายงานไปยังคลิปบอร์ดแล้ว!');
                 }}
-                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md"
+                className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl text-xs shadow-md"
               >
                 คัดลอกข้อความรายงานส่งไลน์
               </button>
               <button
                 onClick={() => setIsSummaryModalOpen(false)}
-                className="px-4 py-2.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] font-bold rounded-xl text-xs border border-[#d4af37]/30"
+                className="px-4 py-2.5 bg-[#FDFBF7] hover:bg-[#F4E8C1] text-[#0A192F] font-bold rounded-xl text-xs border border-[#C5A059]"
               >
                 ปิด
               </button>
@@ -1086,44 +1086,44 @@ export default function App() {
 
       {/* MODAL เพิ่ม/แก้ไข รายบุคคล */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-md w-full shadow-2xl">
-            <h3 className="text-base font-black text-[#f3e5ab] mb-4">เพิ่มผู้เข้าร่วมใหม่</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+          <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-md w-full shadow-2xl">
+            <h3 className="text-base font-black text-[#0A192F] mb-4">เพิ่มผู้เข้าร่วมใหม่</h3>
             <form onSubmit={handleSaveGuest} className="space-y-3.5 text-xs">
               <div>
-                <label className="font-bold text-[#d1c7bd] block mb-1">รหัสนักศึกษา</label>
+                <label className="font-bold text-[#52606D] block mb-1">รหัสนักศึกษา</label>
                 <input
                   type="text"
                   value={formData.studentId}
                   onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
+                  className="w-full px-3 py-2 bg-[#FDFBF7] border border-[#C5A059] rounded-xl text-[#0A192F] outline-none font-bold"
                   placeholder="เช่น 69014522"
                 />
               </div>
               <div>
-                <label className="font-bold text-[#d1c7bd] block mb-1">ชื่อ-นามสกุล *</label>
+                <label className="font-bold text-[#52606D] block mb-1">ชื่อ-นามสกุล *</label>
                 <input
                   type="text"
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
+                  className="w-full px-3 py-2 bg-[#FDFBF7] border border-[#C5A059] rounded-xl text-[#0A192F] outline-none font-bold"
                   placeholder="เช่น นายสมชาย ใจดี"
                 />
               </div>
               <div>
-                <label className="font-bold text-[#d1c7bd] block mb-1">อีเมล</label>
+                <label className="font-bold text-[#52606D] block mb-1">อีเมล</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
+                  className="w-full px-3 py-2 bg-[#FDFBF7] border border-[#C5A059] rounded-xl text-[#0A192F] outline-none font-bold"
                   placeholder="name@spumail.net"
                 />
               </div>
-              <div className="pt-3 border-t border-[#d4af37]/30 flex gap-2">
-                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 bg-[#121f38] text-[#d1c7bd] font-bold rounded-xl border border-[#d4af37]/30">ยกเลิก</button>
-                <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl">บันทึก</button>
+              <div className="pt-3 border-t border-[#E5DCC3] flex gap-2">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 bg-[#FDFBF7] text-[#0A192F] font-bold rounded-xl border border-[#C5A059]">ยกเลิก</button>
+                <button type="submit" className="flex-1 py-2.5 bg-gradient-to-r from-[#C5A059] to-[#997A35] text-[#0A192F] font-black rounded-xl">บันทึก</button>
               </div>
             </form>
           </div>
@@ -1132,9 +1132,9 @@ export default function App() {
 
       {/* MODAL นำเข้า Excel */}
       {isExcelModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-lg w-full space-y-4">
-            <h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-[#d4af37]" /> นำเข้ารายชื่อจาก Excel</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-lg w-full space-y-4">
+            <h3 className="text-base font-black text-[#0A192F] flex items-center gap-2"><FileSpreadsheet className="w-5 h-5 text-[#C5A059]" /> นำเข้ารายชื่อจาก Excel</h3>
             <input ref={fileInputRef} type="file" accept=".xlsx, .xls, .csv" onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
@@ -1149,10 +1149,10 @@ export default function App() {
                 setExcelPreviewData(parsed);
               };
               reader.readAsBinaryString(file);
-            }} className="text-xs text-[#d1c7bd] file:bg-[#d4af37] file:text-[#070b19] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
-            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
+            }} className="text-xs text-[#52606D] file:bg-[#C5A059] file:text-[#0A192F] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
+            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-700 font-bold">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#FDFBF7] text-[#0A192F] rounded-xl text-xs font-bold border border-[#C5A059]">ยกเลิก</button>
               <button disabled={excelPreviewData.length === 0} onClick={async () => {
                 const colRef = collection(db, COLLECTION_NAME);
                 const sorted = sortGuestsByCustomCriteria([...guests, ...excelPreviewData]).map((item, idx) => ({ ...item, badgeNumber: idx + 1 }));
@@ -1163,7 +1163,7 @@ export default function App() {
                 }
                 setIsExcelModalOpen(false);
                 alert('✅ นำเข้าสำเร็จ');
-              }} className="flex-1 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black">ยืนยันนำเข้า</button>
+              }} className="flex-1 py-2 bg-gradient-to-r from-[#C5A059] to-[#997A35] text-[#0A192F] rounded-xl text-xs font-black">ยืนยันนำเข้า</button>
             </div>
           </div>
         </div>
@@ -1171,12 +1171,12 @@ export default function App() {
 
       {/* MODAL รีเซ็ต */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
-            <h3 className="text-base font-black text-[#f3e5ab]">รีเซ็ตสถานะทั้งหมด</h3>
-            <input type="text" value={resetConfirmInput} onChange={(e) => setResetConfirmInput(e.target.value)} placeholder="พิมพ์ RESET" className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-center text-xs text-[#fdfbf7]" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-[#0A192F]">รีเซ็ตสถานะทั้งหมด</h3>
+            <input type="text" value={resetConfirmInput} onChange={(e) => setResetConfirmInput(e.target.value)} placeholder="พิมพ์ RESET" className="w-full px-3 py-2 bg-[#FDFBF7] border border-[#C5A059] rounded-xl text-center text-xs text-[#0A192F] font-bold" />
             <div className="flex gap-2">
-              <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-2 bg-[#FDFBF7] text-[#0A192F] rounded-xl text-xs font-bold border border-[#C5A059]">ยกเลิก</button>
               <button disabled={resetConfirmInput !== 'RESET'} onClick={handleResetAllStatuses} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-bold">รีเซ็ต</button>
             </div>
           </div>
@@ -1185,22 +1185,22 @@ export default function App() {
 
       {/* MODAL ยืนยันทั่วไป */}
       {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
-            <h3 className="text-base font-black text-[#f3e5ab]">{confirmModal.title}</h3>
-            <p className="text-xs text-[#d1c7bd]">{confirmModal.message}</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-[#0A192F]">{confirmModal.title}</h3>
+            <p className="text-xs text-[#52606D]">{confirmModal.message}</p>
             <div className="flex gap-2">
-              <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-[#FDFBF7] text-[#0A192F] rounded-xl text-xs font-bold border border-[#C5A059]">ยกเลิก</button>
               <button onClick={confirmModal.onConfirm} className={`flex-1 py-2 text-white rounded-xl text-xs font-bold ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
             </div>
           </div>
         </div>
       )}
 
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0e1628] border-t border-[#d4af37]/30 px-2 py-2 flex justify-around">
-        <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'scan' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
-        <button onClick={() => setActiveTab('queue')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'queue' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
-        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'dashboard' ? 'text-[#d4af37] font-bold' : 'text-[#d1c7bd]'}`}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0A192F] border-t border-[#C5A059] px-2 py-2 flex justify-around">
+        <button onClick={() => setActiveTab('scan')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'scan' ? 'text-[#F4E8C1] font-bold' : 'text-[#8492A6]'}`}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
+        <button onClick={() => setActiveTab('queue')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'queue' ? 'text-[#F4E8C1] font-bold' : 'text-[#8492A6]'}`}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center flex-1 py-1 ${activeTab === 'dashboard' ? 'text-[#F4E8C1] font-bold' : 'text-[#8492A6]'}`}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
       </nav>
     </div>
   );
