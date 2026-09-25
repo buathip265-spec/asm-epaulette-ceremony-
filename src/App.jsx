@@ -563,12 +563,10 @@ export default function App() {
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
 
-  // หากยังไม่ยืนยันตัวตนสตาฟ ให้แสดงหน้าจอ LED สาธารณะ
   if (!isAuthorized) {
     return (
       <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-8 flex flex-col justify-between font-sans">
         <div className="max-w-6xl w-full mx-auto space-y-6">
-          
           <div className="flex justify-between items-center bg-slate-900 border border-slate-800 rounded-2xl px-6 py-4 shadow-lg">
             <div>
               <h1 className="text-base font-black text-white flex items-center gap-2">
@@ -585,7 +583,6 @@ export default function App() {
           </div>
 
           <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border-2 border-blue-500/40 rounded-3xl p-6 sm:p-12 shadow-[0_0_50px_rgba(59,130,246,0.15)] relative overflow-hidden">
-            
             <div className="text-center mb-6">
               <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 text-sm font-bold tracking-wide shadow-inner">
                 <Sparkles className="w-4 h-4 animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
@@ -638,11 +635,9 @@ export default function App() {
                 )}
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* Modal ใส่รหัส PIN */}
         {isPinModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
             <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
@@ -673,7 +668,6 @@ export default function App() {
     );
   }
 
-  // หากยืนยันตัวตนสำเร็จแล้ว แสดงหน้าแดชบอร์ดจัดการสตาฟ
   return (
     <div className="min-h-screen flex flex-col bg-slate-900 text-slate-100 font-sans pb-20 md:pb-0">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40 px-4 py-3">
@@ -735,43 +729,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            {scannedPreviewGuest && (
-              <div className="bg-white text-slate-900 rounded-3xl p-5 shadow-2xl border-4 border-blue-500 animate-in zoom-in duration-200">
-                <div className="flex justify-between items-start mb-3">
-                  <span className={`px-2.5 py-1 rounded-xl text-xs font-black text-white ${scannedPreviewGuest.badgeNumber ? 'bg-slate-900' : 'bg-slate-400'}`}>
-                    {scannedPreviewGuest.badgeNumber ? `#${scannedPreviewGuest.badgeNumber}` : 'ไม่มีคิวเวที'}
-                  </span>
-                  <span className="px-2.5 py-1 bg-slate-100 rounded-xl text-xs font-bold text-slate-700">{getStatusLabel(scannedPreviewGuest.status)}</span>
-                </div>
-
-                <div className="text-center py-2 space-y-1">
-                  <h3 className="text-xl font-black text-slate-900">{scannedPreviewGuest.name}</h3>
-                  <p className="text-xs font-mono font-bold text-blue-600">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
-                  {scannedPreviewGuest.status === 'pending' ? (
-                    <>
-                      <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl text-xs shadow-md">
-                        ✓ มาปกติ (เข้าคิวขึ้นรับบ่า)
-                      </button>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px]">
-                          ⏰ มาสาย (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)
-                        </button>
-                        <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px]">
-                          ⚠️ ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="py-2 bg-slate-100 text-slate-500 font-bold rounded-xl text-xs text-center">จัดการสถานะคนนี้เรียบร้อยแล้ว</div>
-                  )}
-                  <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs">ปิดหน้าต่างนี้</button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1020,6 +977,52 @@ export default function App() {
         )}
 
       </main>
+
+      {/* ================= MODAL สแกน QR แล้วเด้งขึ้นกลางจอ ================= */}
+      {scannedPreviewGuest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white text-slate-900 rounded-3xl p-6 max-w-sm w-full shadow-2xl border-4 border-blue-500 scale-100 animate-in zoom-in-95 duration-200 space-y-4">
+            
+            <div className="flex justify-between items-start">
+              <span className={`px-3 py-1 rounded-xl text-xs font-black text-white ${scannedPreviewGuest.badgeNumber ? 'bg-slate-900' : 'bg-slate-400'}`}>
+                {scannedPreviewGuest.badgeNumber ? `#${scannedPreviewGuest.badgeNumber}` : 'ไม่มีคิวเวที'}
+              </span>
+              <span className="px-3 py-1 bg-slate-100 rounded-xl text-xs font-bold text-slate-700">{getStatusLabel(scannedPreviewGuest.status)}</span>
+            </div>
+
+            <div className="text-center py-2 space-y-1">
+              <h3 className="text-xl font-black text-slate-900">{scannedPreviewGuest.name}</h3>
+              <p className="text-xs font-mono font-bold text-blue-600">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 space-y-2.5">
+              {scannedPreviewGuest.status === 'pending' ? (
+                <>
+                  <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs shadow-md transition-transform active:scale-95">
+                    ✓ มาปกติ (เข้าคิวขึ้นรับบ่า)
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-[11px] transition-transform active:scale-95">
+                      ⏰ มาสาย (ร่วมพิธี/ไม่รับบ่า)
+                    </button>
+                    <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
+                      ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่รับบ่า)
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="py-3 bg-slate-100 text-slate-600 font-bold rounded-2xl text-xs text-center">
+                  สถานะปัจจุบัน: {getStatusLabel(scannedPreviewGuest.status)}
+                </div>
+              )}
+              <button onClick={() => setScannedPreviewGuest(null)} className="w-full py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-2xl text-xs">
+                ปิดหน้าต่างนี้
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* MODAL สรุปรายงานหลังจบงาน */}
       {isSummaryModalOpen && (
