@@ -49,6 +49,7 @@ if (yearStr.includes(key)) return weight;
 }
 return 50;
 };
+// 2. เรียงหญิงก่อนค่อยชาย (หญิง = 0, ชาย = 1, อื่นๆ = 2)
 const getGenderOrderWeight = (fullName) => {
 if (!fullName) return 2;
 const name = fullName.trim();
@@ -60,6 +61,7 @@ const getSortableCleanName = (fullName) => {
 if (!fullName) return '';
 return fullName.replace(/^(นาย|นางสาว|นาง|น.ส.|ด.ช.|ด.ญ.|ผศ.|รศ.|ดร.)\s*/, '').trim();
 };
+// จัดเรียงตามกฎ: 1. เรียงปี 1-4, 2. เรียงหญิงก่อนชาย, 3. เรียง ก-ฮ
 const sortGuestsByCustomCriteria = (list) => {
 return [...list].sort((a, b) => {
 const yearA = getYearOrderWeight(a.year);
