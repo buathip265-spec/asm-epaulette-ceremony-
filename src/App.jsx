@@ -91,6 +91,7 @@ const [isCameraActive, setIsCameraActive] = useState(false);
 const [cameraError, setCameraError] = useState('');
 const [manualCodeInput, setManualCodeInput] = useState('');
 const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
+const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
 const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 const isProcessingScanRef = useRef(false);
 const html5QrCodeRef = useRef(null);
@@ -159,7 +160,7 @@ await qrCode.start(
 if (!isProcessingScanRef.current) {
 isProcessingScanRef.current = true;
 handleInspectQrCode(decodedText);
-setTimeout(() => { isProcessingScanRef.current = false; }, 1200);
+setTimeout(() => { isProcessingScanRef.current = false; }, 1500);
 }
 },
 () => {}
@@ -228,7 +229,11 @@ String(g.badgeNumber || '') === String(target).replace('#', '').trim() ||
 String(g.studentId || '').trim() === String(clean).trim()
 );
 if (found) {
+if (found.status && found.status !== 'pending') {
+setDuplicateAlertModal({ isOpen: true, guest: found });
+} else {
 setScannedPreviewGuest(found);
+}
 setManualCodeInput('');
 } else {
 const partialFound = guests.find((g) =>
@@ -236,7 +241,11 @@ String(g.name || '').toLowerCase().includes(clean.toLowerCase()) ||
 String(g.studentId || '').includes(clean)
 );
 if (partialFound) {
+if (partialFound.status && partialFound.status !== 'pending') {
+setDuplicateAlertModal({ isOpen: true, guest: partialFound });
+} else {
 setScannedPreviewGuest(partialFound);
+}
 }
 }
 };
@@ -814,11 +823,9 @@ className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs f
 )}
 <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#FDFBF7] hover:bg-[#F4E8C1] text-[#0A192F] border border-[#C5A059] rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#735A1E]" /> นำเข้า Excel</button>
 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-[#0A192F] hover:bg-[#132B4F] text-[#F4E8C1] rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Sheets</button>
-{/* ปุ่มส่งอีเมลรอบวันซ้อม */}
 <button disabled={isSendingRehearsalEmails} onClick={handleSendRehearsalEmails} className="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
 {isSendingRehearsalEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล (วันซ้อม)
 </button>
-{/* ปุ่มส่งอีเมลรอบวันงานจริง */}
 <button disabled={isSendingRealEmails} onClick={handleSendRealEmails} className="px-3 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
 {isSendingRealEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล (วันงานจริง)
 </button>
@@ -949,6 +956,35 @@ className="rounded bg-[#FDFBF7] border-[#C5A059] text-[#0A192F] cursor-pointer"
 ปิดหน้าต่างนี้
 </button>
 </div>
+</div>
+</div>
+)}
+{/* MODAL แจ้งเตือนสแกนซ้ำ (เช็กชื่อไปแล้ว) */}
+{duplicateAlertModal.isOpen && duplicateAlertModal.guest && (
+<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+<div className="bg-[#FFFFFF] border-4 border-amber-500 text-[#0A192F] rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+<div className="w-16 h-16 bg-amber-100 border-2 border-amber-500 text-amber-700 rounded-full flex items-center justify-center mx-auto shadow-inner">
+<AlertTriangle className="w-8 h-8 animate-bounce" />
+</div>
+<div>
+<span className="px-3 py-0.5 bg-amber-100 text-amber-800 text-xs font-black rounded-full border border-amber-300">
+⚠️ แจ้งเตือน: เช็กชื่อไปแล้ว!
+</span>
+<h3 className="text-xl font-black text-[#0A192F] mt-2">{duplicateAlertModal.guest.name}</h3>
+<p className="text-xs font-mono text-[#735A1E] font-bold mt-0.5">รหัส {duplicateAlertModal.guest.studentId || '-'} • {duplicateAlertModal.guest.year}</p>
+</div>
+<div className="bg-[#FDFBF7] border border-[#C5A059] rounded-2xl p-3 text-xs space-y-1">
+<p className="font-bold text-[#0A192F]">สถานะปัจจุบัน: <span className="text-emerald-700">{getStatusLabel(duplicateAlertModal.guest.status)}</span></p>
+{duplicateAlertModal.guest.checkInTime && (
+<p className="text-[#52606D]">เวลาเช็กชื่อ: {duplicateAlertModal.guest.checkInTime} น.</p>
+)}
+</div>
+<button
+onClick={() => setDuplicateAlertModal({ isOpen: false, guest: null })}
+className="w-full py-3 bg-[#0A192F] hover:bg-[#132B4F] text-[#F4E8C1] font-black rounded-2xl text-xs shadow-md"
+>
+รับทราบ (สแกนคนถัดไป)
+</button>
 </div>
 </div>
 )}
@@ -1106,7 +1142,7 @@ alert('✅ นำเข้าสำเร็จ');
 )}
 {/* MODAL ยืนยันทั่วไป */}
 {confirmModal.isOpen && (
-<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+<div className="fixed items-center justify-center p-4 bg-black/70">
 <div className="bg-[#FFFFFF] border border-[#C5A059] rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
 <h3 className="text-base font-black text-[#0A192F]">{confirmModal.title}</h3>
 <p className="text-xs text-[#52606D]">{confirmModal.message}</p>
