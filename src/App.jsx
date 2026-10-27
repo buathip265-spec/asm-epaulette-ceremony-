@@ -222,7 +222,7 @@ export default function App() {
 
   const handleStaffLogin = (e) => {
     e.preventDefault();
-    if (pinInput === '121069') {
+    if (pinInput === '121169') {
       sessionStorage.setItem('staff_auth', 'true');
       setIsAuthorized(true);
       setIsPinModalOpen(false);
