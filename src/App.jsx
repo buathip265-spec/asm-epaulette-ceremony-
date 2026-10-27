@@ -222,7 +222,7 @@ export default function App() {
 
   const handleStaffLogin = (e) => {
     e.preventDefault();
-    if (pinInput === '111169') {
+    if (pinInput === '121069') {
       sessionStorage.setItem('staff_auth', 'true');
       setIsAuthorized(true);
       setIsPinModalOpen(false);
@@ -1050,7 +1050,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ================= MODAL สแกน QR แล้วเด้งขึ้นกลางจอ ================= */}
+      {/* MODAL สแกน QR แล้วเด้งขึ้นกลางจอ */}
       {scannedPreviewGuest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#0e1628] border-2 border-[#d4af37] text-[#fdfbf7] rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200 space-y-4">
