@@ -15,7 +15,7 @@ import {
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
 
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwdCucN15exfJzY30fpQJ0Uawom3e39uRA8mvMwqWv7Yi0oJydoESRQJ6Q8UxSKOookYg/exec"; 
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyFS-CziZMWd66TU4Wt1ZQzFFcFZoHYhW-Ma5ZCjztcLtAyqw3PcBSWgPWY8E54QrDJGw/exec"; 
 
 const CUSTOM_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBj539S9o8t92HzmPqQ6PiCLKCdHFswRNA",
@@ -109,6 +109,7 @@ export default function App() {
   const [manualCodeInput, setManualCodeInput] = useState('');
   const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
 
   const isProcessingScanRef = useRef(false);
   const html5QrCodeRef = useRef(null);
@@ -266,7 +267,11 @@ export default function App() {
     );
 
     if (found) {
-      setScannedPreviewGuest(found);
+      if (found.status && found.status !== 'pending') {
+        setDuplicateAlertModal({ isOpen: true, guest: found });
+      } else {
+        setScannedPreviewGuest(found);
+      }
       setManualCodeInput('');
     } else {
       const partialFound = guests.find((g) => 
@@ -274,7 +279,11 @@ export default function App() {
         String(g.studentId || '').includes(clean)
       );
       if (partialFound) {
-        setScannedPreviewGuest(partialFound);
+        if (partialFound.status && partialFound.status !== 'pending') {
+          setDuplicateAlertModal({ isOpen: true, guest: partialFound });
+        } else {
+          setScannedPreviewGuest(partialFound);
+        }
       }
     }
   };
@@ -1014,6 +1023,32 @@ export default function App() {
         )}
 
       </main>
+
+      {/* MODAL เตือนสแกนซ้ำ */}
+      {duplicateAlertModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#0e1628] border-2 border-amber-500 text-[#fdfbf7] rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 bg-amber-500/20 border border-amber-500/50 rounded-2xl flex items-center justify-center mx-auto text-amber-400 animate-bounce">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <div>
+              <span className="px-3 py-1 bg-amber-500/20 text-amber-300 font-black text-xs rounded-full border border-amber-500/40">
+                แจ้งเตือน: สแกนซ้ำ!
+              </span>
+              <h3 className="text-lg font-black text-[#fdfbf7] mt-2">{duplicateAlertModal.guest?.name}</h3>
+              <p className="text-xs text-amber-300 mt-1 font-bold">
+                บุคคลนี้ได้ทำการเช็กชื่อไปแล้ว ({getStatusLabel(duplicateAlertModal.guest?.status)})
+              </p>
+            </div>
+            <button 
+              onClick={() => setDuplicateAlertModal({ isOpen: false, guest: null })} 
+              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-2xl text-xs shadow-md transition-all"
+            >
+              รับทราบ / สแกนคนถัดไป
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ================= MODAL สแกน QR แล้วเด้งขึ้นกลางจอ ================= */}
       {scannedPreviewGuest && (
