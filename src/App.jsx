@@ -106,8 +106,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('scan');
   const [batchSize, setBatchSize] = useState(14);
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
-  const [isSendingRehearsalEmails, setIsSendingRehearsalEmails] = useState(false);
-  const [isSendingRealEmails, setIsSendingRealEmails] = useState(false);
+  const [isSendingEmails, setIsSendingEmails] = useState(false);
   
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
@@ -513,36 +512,20 @@ export default function App() {
     finally { setIsSyncingSheets(false); }
   };
 
-  const handleSendRehearsalEmails = async () => {
-    if (!window.confirm(`ต้องการส่งอีเมลการ์ดดิจิทัล "รอบวันซ้อม" ให้ผู้เข้าร่วมทุกคนจาก Google Sheets ใช่หรือไม่?`)) return;
-    setIsSendingRehearsalEmails(true);
+  const handleSendEmails = async () => {
+    if (!window.confirm(`ต้องการส่งอีเมลการ์ดดิจิทัลให้ผู้เข้าร่วมทุกคนจาก Google Sheets ใช่หรือไม่?`)) return;
+    setIsSendingEmails(true);
     try {
       await fetch(GOOGLE_APPS_SCRIPT_URL, { 
         method: "POST", 
         mode: "no-cors", 
         headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-        body: JSON.stringify({ action: "send_emails_rehearsal" }) 
+        body: JSON.stringify({ action: "send_emails" }) 
       });
       await new Promise((r) => setTimeout(r, 5000));
-      alert('✅ ส่งอีเมลรอบวันซ้อมเรียบร้อยแล้ว!');
+      alert('✅ ส่งอีเมลเรียบร้อยแล้ว!');
     } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
-    finally { setIsSendingRehearsalEmails(false); }
-  };
-
-  const handleSendRealEmails = async () => {
-    if (!window.confirm(`ต้องการส่งอีเมลการ์ดดิจิทัล "รอบวันงานจริง" ให้ผู้เข้าร่วมทุกคนจาก Google Sheets ใช่หรือไม่?`)) return;
-    setIsSendingRealEmails(true);
-    try {
-      await fetch(GOOGLE_APPS_SCRIPT_URL, { 
-        method: "POST", 
-        mode: "no-cors", 
-        headers: { "Content-Type": "text/plain;charset=utf-8" }, 
-        body: JSON.stringify({ action: "send_emails_real" }) 
-      });
-      await new Promise((r) => setTimeout(r, 5000));
-      alert('✅ ส่งอีเมลรอบวันงานจริงเรียบร้อยแล้ว!');
-    } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
-    finally { setIsSendingRealEmails(false); }
+    finally { setIsSendingEmails(false); }
   };
 
   const summaryStats = useMemo(() => {
@@ -939,12 +922,8 @@ export default function App() {
                 <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
                 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
                 
-                <button disabled={isSendingRehearsalEmails} onClick={handleSendRehearsalEmails} className="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                  {isSendingRehearsalEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล (วันซ้อม)
-                </button>
-
-                <button disabled={isSendingRealEmails} onClick={handleSendRealEmails} className="px-3 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-                  {isSendingRealEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล (วันงานจริง)
+                <button disabled={isSendingEmails} onClick={handleSendEmails} className="px-3 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+                  {isSendingEmails ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล
                 </button>
                 
                 <button
