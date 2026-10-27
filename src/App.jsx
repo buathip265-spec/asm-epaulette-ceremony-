@@ -15,7 +15,7 @@ import {
   onSnapshot, collection, writeBatch 
 } from "firebase/firestore";
 
-const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyFS-CziZMWd66TU4Wt1ZQzFFcFZoHYhW-Ma5ZCjztcLtAyqw3PcBSWgPWY8E54QrDJGw/exec"; 
+const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwysvLP_ut21ut-kIIOxA0aBYS_LbqQHbUaw0n1tRig0O6IJQpyqKfFPERO-zDlEnpX9Q/exec"; 
 
 const CUSTOM_FIREBASE_CONFIG = {
   apiKey: "AIzaSyBj539S9o8t92HzmPqQ6PiCLKCdHFswRNA",
