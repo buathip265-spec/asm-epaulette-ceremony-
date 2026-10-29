@@ -69,8 +69,33 @@ const getSortableCleanName = (fullName) => {
   return fullName.replace(/^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.|ผศ\.|รศ\.|ดร\.)\s*/, '').trim();
 };
 
+// ไม่ขึ้นรับบ่า (ร่วมพิธีเฉยๆ): ผิดระเบียบ / ของไม่พร้อม
 const isDisqualifiedStatus = (status) =>
-  status === 'no_item_ordered' || status === 'late_receive_after' || status === 'dress_violation_receive_after';
+  status === 'no_item_ordered' || status === 'dress_violation_receive_after';
+
+// มาสาย = ยังขึ้นรับบ่าตามปกติ แต่ต่อท้ายแถวของชั้นปีตัวเอง
+// (isLate จะคงอยู่แม้สถานะเปลี่ยนเป็น standby / on_stage / completed)
+const isLateGuest = (g) => !!g && (g.isLate === true || g.status === 'late_receive_after');
+
+// 0 = ปกติ, 1 = มาสาย (ท้ายแถว), 2 = ไม่ขึ้นรับบ่า
+const getQueueRank = (g) => {
+  if (isDisqualifiedStatus(g.status)) return 2;
+  if (isLateGuest(g)) return 1;
+  return 0;
+};
+
+// ลำดับที่นั่ง: ชั้นปี → เพศ(หญิงก่อน) → ชื่อ  (ไม่ขึ้นกับสถานะเช็กชื่อ เพื่อให้ที่นั่งไม่เปลี่ยน)
+const compareSeating = (a, b) => {
+  const yearA = getYearOrderWeight(a.year);
+  const yearB = getYearOrderWeight(b.year);
+  if (yearA !== yearB) return yearA - yearB;
+  const genderA = getGenderOrderWeight(a.name);
+  const genderB = getGenderOrderWeight(b.name);
+  if (genderA !== genderB) return genderA - genderB;
+  const nameCmp = getSortableCleanName(a.name).localeCompare(getSortableCleanName(b.name), 'th');
+  if (nameCmp !== 0) return nameCmp;
+  return String(a.id).localeCompare(String(b.id));
+};
 
 const sortGuestsByCustomCriteria = (list) => {
   const sorted = [...list].sort((a, b) => {
@@ -78,11 +103,9 @@ const sortGuestsByCustomCriteria = (list) => {
     const yearB = getYearOrderWeight(b.year);
     if (yearA !== yearB) return yearA - yearB;
 
-    const isLateA = isDisqualifiedStatus(a.status);
-    const isLateB = isDisqualifiedStatus(b.status);
-    if (isLateA !== isLateB) {
-      return isLateA ? 1 : -1;
-    }
+    const rankA = getQueueRank(a);
+    const rankB = getQueueRank(b);
+    if (rankA !== rankB) return rankA - rankB;
 
     const genderA = getGenderOrderWeight(a.name);
     const genderB = getGenderOrderWeight(b.name);
@@ -93,6 +116,17 @@ const sortGuestsByCustomCriteria = (list) => {
     return cleanNameA.localeCompare(cleanNameB, 'th');
   });
   return sorted;
+};
+
+// เรียงแถวสแตนด์บาย: ชั้นปี → คนมาสายต่อท้าย → ลำดับที่ถูกดึงเข้า
+const compareStandby = (a, b) => {
+  const yearA = getYearOrderWeight(a.year);
+  const yearB = getYearOrderWeight(b.year);
+  if (yearA !== yearB) return yearA - yearB;
+  const lateA = isLateGuest(a) ? 1 : 0;
+  const lateB = isLateGuest(b) ? 1 : 0;
+  if (lateA !== lateB) return lateA - lateB;
+  return (a.standbyOrder || 0) - (b.standbyOrder || 0);
 };
 
 const app = initializeApp(CUSTOM_FIREBASE_CONFIG);
@@ -119,6 +153,41 @@ export default function App() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
+
+  // ---------- ระบบแจ้งเตือน (Toast) ----------
+  const [toasts, setToasts] = useState([]);
+  const toastTimers = useRef({});
+  const toastIdRef = useRef(0);
+
+  const dismissToast = (id) => {
+    clearTimeout(toastTimers.current[id]);
+    delete toastTimers.current[id];
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const scheduleToast = (id, duration) => {
+    clearTimeout(toastTimers.current[id]);
+    if (duration) toastTimers.current[id] = setTimeout(() => dismissToast(id), duration);
+  };
+
+  const defaultToastDuration = (type) => (type === 'loading' ? 0 : type === 'error' ? 5000 : 3000);
+
+  // type: 'success' | 'error' | 'warning' | 'info' | 'loading'  (loading จะค้างจนกว่าจะ updateToast)
+  const showToast = (type, message, duration) => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev.slice(-3), { id, type, message }]);
+    scheduleToast(id, duration !== undefined ? duration : defaultToastDuration(type));
+    return id;
+  };
+
+  const updateToast = (id, type, message, duration) => {
+    setToasts((prev) =>
+      prev.some((t) => t.id === id)
+        ? prev.map((t) => (t.id === id ? { ...t, type, message } : t))
+        : [...prev, { id, type, message }]
+    );
+    scheduleToast(id, duration !== undefined ? duration : defaultToastDuration(type));
+  };
 
   const isProcessingScanRef = useRef(false);
   const html5QrCodeRef = useRef(null);
@@ -159,26 +228,23 @@ export default function App() {
       }
       const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       setGuests(sortGuestsByCustomCriteria(items));
+    }, (err) => {
+      console.error(err);
+      showToast('error', 'เชื่อมต่อฐานข้อมูลไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
     });
     return () => unsubscribe();
   }, []);
 
+  // เลขที่นั่งคำนวณจากรายชื่อปัจจุบัน เรียง ชั้นปี → เพศ (หญิงก่อน) → ชื่อ โดยไม่ขึ้นกับสถานะเช็กชื่อ
+  // คนมาสายยังใช้เลขที่นั่งเดิม (แค่ถูกเรียกขึ้นรับบ่าท้ายแถวของชั้นปี) ส่วนการเพิ่ม/ลบรายชื่อจะทำให้เลขที่นั่งคำนวณใหม่
   const guestsWithComputedBadges = useMemo(() => {
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const normalGuests = guests.filter((item) => !isDisqualifiedStatus(item.status));
-    return guests.map((g, index) => {
-      if (isDisqualifiedStatus(g.status)) {
-        return { ...g, badgeNumber: '-' };
-      }
-      const normalIndex = normalGuests.findIndex((item) => item.id === g.id);
-      const rowIdx = normalIndex >= 0 ? Math.floor(normalIndex / seatsPerRow) : Math.floor(index / seatsPerRow);
-      const seatNum = normalIndex >= 0 ? (normalIndex % seatsPerRow) + 1 : (index % seatsPerRow) + 1;
-      const prefix = rowIdx < letters.length ? letters[rowIdx] : 'Z';
-      return {
-        ...g,
-        badgeNumber: `${prefix}${seatNum}`
-      };
+    const rowLabel = (r) => (r < 26 ? letters[r] : letters[Math.floor(r / 26) - 1] + letters[r % 26]);
+    const seatMap = new Map();
+    [...guests].sort(compareSeating).forEach((g, i) => {
+      seatMap.set(g.id, `${rowLabel(Math.floor(i / seatsPerRow))}${(i % seatsPerRow) + 1}`);
     });
+    return guests.map((g) => ({ ...g, badgeNumber: seatMap.get(g.id) }));
   }, [guests, seatsPerRow]);
 
   useEffect(() => {
@@ -247,11 +313,17 @@ export default function App() {
     }
   }, [isAuthorized, activeTab]);
 
+  // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรกของตาราง
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, filterYear]);
+
   const handleStaffLogin = (e) => {
     e.preventDefault();
     if (pinInput === '121169') {
       sessionStorage.setItem('staff_auth', 'true');
       setIsAuthorized(true);
+      showToast('success', 'เข้าสู่ระบบสตาฟสำเร็จ');
       setIsPinModalOpen(false);
       setPinInput('');
       setErrorMsg('');
@@ -265,6 +337,7 @@ export default function App() {
     sessionStorage.removeItem('staff_auth');
     setIsAuthorized(false);
     setActiveTab('scan');
+    showToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
   };
 
   const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
@@ -311,6 +384,8 @@ export default function App() {
         } else {
           setScannedPreviewGuest(partialFound);
         }
+      } else {
+        showToast('warning', `ไม่พบรายชื่อ "${clean}" ในระบบ`);
       }
     }
   };
@@ -331,27 +406,47 @@ export default function App() {
         status: finalStatus,
         checkInTime: timeStr,
         prevStatus: guest.status,
+        isLate: finalStatus === 'late_receive_after',
         skipped: false
       });
-    } catch (e) { console.error(e); }
+      showToast('success', `เช็กชื่อ ${guest.name} เรียบร้อย: ${getStatusLabel(finalStatus)}`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', `บันทึกสถานะของ ${guest.name} ไม่สำเร็จ กรุณาลองอีกครั้ง`);
+    }
   };
 
   const handleUndoStatus = async (guest) => {
     if (!guest.prevStatus) return;
     try {
-      await updateDoc(getGuestDocRef(guest.id), { status: guest.prevStatus, prevStatus: null, ...(guest.prevStatus === 'pending' ? { checkInTime: null } : {}) });
-    } catch (e) { console.error(e); }
+      const lateFlag = guest.prevStatus === 'late_receive_after'
+        ? { isLate: true }
+        : (['pending', 'checked_in', 'dress_violation_receive_after', 'no_item_ordered'].includes(guest.prevStatus) ? { isLate: false } : {});
+      await updateDoc(getGuestDocRef(guest.id), { status: guest.prevStatus, prevStatus: null, ...lateFlag, ...(guest.prevStatus === 'pending' ? { checkInTime: null } : {}) });
+      showToast('info', `ย้อนสถานะของ ${guest.name} กลับเป็น "${getStatusLabel(guest.prevStatus)}" แล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'ย้อนสถานะไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleToggleSkip = async (guest) => {
     try {
       await updateDoc(getGuestDocRef(guest.id), { skipped: !guest.skipped });
-    } catch (e) { console.error(e); }
+      showToast('info', guest.skipped ? `นำ ${guest.name} กลับเข้าคิวแล้ว` : `ข้ามคิวของ ${guest.name} แล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'ข้ามคิวไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
-  const handleMoveToStandbyBatch = async () => {
-    const readyList = guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped);
-    if (readyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
+  const handleMoveToStandbyBatch = async (kind = 'ready') => {
+    const isLateKind = kind === 'late';
+    const readyList = guestsWithComputedBadges.filter((g) => g.status === (isLateKind ? 'late_receive_after' : 'checked_in') && !g.skipped);
+    if (readyList.length === 0) {
+      showToast('warning', isLateKind ? 'ไม่มีผู้เข้าร่วมที่มาสายรอเรียกคิว' : 'ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
+      return;
+    }
 
     const takeCount = Math.min(Number(batchSize), readyList.length);
     const batchList = readyList.slice(0, takeCount);
@@ -361,21 +456,29 @@ export default function App() {
       batchList.forEach((g, idx) => {
         batch.update(getGuestDocRef(g.id), {
           status: 'standby',
-          prevStatus: 'checked_in',
+          prevStatus: g.status,
+          isLate: isLateGuest(g),
           standbyOrder: Date.now() + idx,
           skipped: false
         });
       });
       await batch.commit();
-    } catch (e) { console.error(e); }
+      showToast('success', `ดึง ${batchList.length} คน${isLateKind ? 'ที่มาสาย' : ''}เข้าแถวสแตนด์บายเรียบร้อยแล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'ดึงเข้าสแตนด์บายไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleMoveBatchToOnStage = async () => {
     const standbyList = guestsWithComputedBadges
       .filter((g) => g.status === 'standby' && !g.skipped)
-      .sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0));
+      .sort(compareStandby);
 
-    if (standbyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในแถวสแตนด์บาย');
+    if (standbyList.length === 0) {
+      showToast('warning', 'ไม่มีผู้เข้าร่วมในแถวสแตนด์บาย');
+      return;
+    }
 
     const takeCount = Math.min(Number(batchSize), standbyList.length);
     const batchList = standbyList.slice(0, takeCount);
@@ -394,7 +497,11 @@ export default function App() {
         });
       });
       await batch.commit();
-    } catch (e) { console.error(e); }
+      showToast('success', `ประกาศ ${batchList.length} คนขึ้นเวทีแล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'ประกาศขึ้นเวทีไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleCompleteStageBatch = async () => {
@@ -407,7 +514,11 @@ export default function App() {
         batch.update(getGuestDocRef(g.id), { status: 'completed', prevStatus: 'on_stage' });
       });
       await batch.commit();
-    } catch (e) { console.error(e); }
+      showToast('success', `ลงเวที ${onStageList.length} คนเรียบร้อยแล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'บันทึกการลงเวทีไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleDeleteGuest = (guest) => {
@@ -420,10 +531,15 @@ export default function App() {
       onConfirm: async () => {
         setGuests((prev) => prev.filter((g) => g.id !== guest.id));
         setSelectedGuestIds((prev) => prev.filter((id) => id !== guest.id));
+        setConfirmModal((p) => ({ ...p, isOpen: false }));
+        const tid = showToast('loading', `กำลังลบ ${guest.name}...`);
         try {
           await deleteDoc(getGuestDocRef(guest.id));
-        } catch (e) {}
-        setConfirmModal((p) => ({ ...p, isOpen: false }));
+          updateToast(tid, 'success', `ลบ ${guest.name} เรียบร้อยแล้ว`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'ลบรายชื่อไม่สำเร็จ กรุณาลองอีกครั้ง');
+        }
       }
     });
   };
@@ -454,6 +570,8 @@ export default function App() {
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
         const idsToDelete = [...selectedGuestIds];
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const tid = showToast('loading', `กำลังลบ ${idsToDelete.length} รายชื่อ...`);
         setGuests((prev) => prev.filter((g) => !idsToDelete.includes(g.id)));
         setSelectedGuestIds([]);
         try {
@@ -464,19 +582,67 @@ export default function App() {
             });
             await batch.commit();
           }
-        } catch (e) {}
+          updateToast(tid, 'success', `ลบ ${idsToDelete.length} รายชื่อเรียบร้อยแล้ว`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'ลบรายชื่อไม่สำเร็จ บางรายการอาจยังไม่ถูกลบ');
+        }
+      }
+    });
+  };
+
+  // หลังวันซ้อม: ลบคนที่ยังไม่เช็กชื่อ (ไม่มาซ้อม = ไม่ให้เข้าร่วมวันจริง) เลขที่นั่งของคนที่เหลือจะคำนวณใหม่
+  const handleDeletePendingGuests = (year = 'all') => {
+    const yearLabel = year === 'all' ? 'ทุกชั้นปี' : year;
+    const ids = guestsWithComputedBadges
+      .filter((g) => g.status === 'pending' && (year === 'all' || g.year === year))
+      .map((g) => g.id);
+    if (ids.length === 0) {
+      showToast('info', `ไม่มีผู้ที่ยังไม่เช็กชื่อใน${year === 'all' ? 'ระบบ' : year}`);
+      return;
+    }
+    setConfirmModal({
+      isOpen: true,
+      title: `ลบคนที่ไม่มาซ้อม (${yearLabel})`,
+      message: `จะลบรายชื่อที่ "ยังไม่เช็กชื่อ" ของ${yearLabel} จำนวน ${ids.length} คน ออกจากระบบ เลขที่นั่งของคนที่เหลือจะคำนวณใหม่ และกู้คืนไม่ได้`,
+      confirmText: `ลบ ${ids.length} คน`,
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        setSelectedGuestIds([]);
+        const tid = showToast('loading', `กำลังลบ ${ids.length} รายชื่อที่ไม่มาซ้อม (${yearLabel})...`);
+        try {
+          for (let i = 0; i < ids.length; i += 400) {
+            const batch = writeBatch(db);
+            ids.slice(i, i + 400).forEach((id) => batch.delete(getGuestDocRef(id)));
+            await batch.commit();
+          }
+          updateToast(tid, 'success', `ลบคนที่ไม่มาซ้อม (${yearLabel}) ${ids.length} คนแล้ว เลขที่นั่งคำนวณใหม่เรียบร้อย`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'ลบรายชื่อไม่สำเร็จ บางรายการอาจยังไม่ถูกลบ');
+        }
       }
     });
   };
 
   const handleSaveGuest = async (e) => {
     e.preventDefault();
-    if (!formData.name.trim()) return;
+    if (!formData.name.trim()) {
+      showToast('warning', 'กรุณากรอกชื่อ-นามสกุล');
+      return;
+    }
+    const sid = formData.studentId.trim();
+    if (!editingGuest && sid && guests.some((g) => String(g.studentId || '').trim() === sid)) {
+      showToast('warning', `รหัสนักศึกษา ${sid} มีอยู่ในระบบแล้ว`);
+      return;
+    }
 
     const calculatedYear = detectYearFromStudentId(formData.studentId);
     const qrToken = formData.studentId.trim() || `K${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
+    const tid = showToast('loading', editingGuest ? 'กำลังบันทึกการแก้ไข...' : 'กำลังเพิ่มรายชื่อ...');
+    try {
     if (editingGuest) {
       await updateDoc(getGuestDocRef(editingGuest.id), {
         name: formData.name.trim(),
@@ -504,29 +670,45 @@ export default function App() {
       };
       await setDoc(getGuestDocRef(newGuest.id), newGuest);
     }
+    updateToast(tid, 'success', editingGuest ? `แก้ไขข้อมูล ${formData.name.trim()} เรียบร้อยแล้ว` : `เพิ่มรายชื่อ ${formData.name.trim()} เรียบร้อยแล้ว`);
     setIsEditModalOpen(false);
     setEditingGuest(null);
+    } catch (err) {
+      console.error(err);
+      updateToast(tid, 'error', 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleResetAllStatuses = async () => {
-    if (resetConfirmInput !== 'RESET') return alert('กรุณาพิมพ์ RESET ให้ถูกต้อง');
+    if (resetConfirmInput !== 'RESET') {
+      showToast('warning', 'กรุณาพิมพ์ RESET ให้ถูกต้อง');
+      return;
+    }
+    const tid = showToast('loading', 'กำลังรีเซ็ตสถานะทั้งหมด...');
     try {
       const batch = writeBatch(db);
       guestsWithComputedBadges.forEach((g) => {
-        batch.update(getGuestDocRef(g.id), { status: 'pending', checkInTime: null, prevStatus: null, standbyOrder: null, skipped: false });
+        batch.update(getGuestDocRef(g.id), { status: 'pending', checkInTime: null, prevStatus: null, standbyOrder: null, skipped: false, isLate: false });
       });
       await batch.commit();
       setIsResetModalOpen(false);
       setResetConfirmInput('');
-      alert('✅ รีเซ็ตสถานะทั้งหมดเรียบร้อยแล้ว');
-    } catch (e) {}
+      updateToast(tid, 'success', 'รีเซ็ตสถานะทั้งหมดเรียบร้อยแล้ว');
+    } catch (e) {
+      console.error(e);
+      updateToast(tid, 'error', 'รีเซ็ตสถานะไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   const handleExportQrToGoogleSheets = async () => {
-    if (!guestsWithComputedBadges || guestsWithComputedBadges.length === 0) return alert('⚠️ ไม่มีรายชื่อในระบบ');
-    if (!window.confirm('ต้องการซิงค์ข้อมูลลง Google Sheets ใช่หรือไม่?')) return;
+    if (!guestsWithComputedBadges || guestsWithComputedBadges.length === 0) {
+      showToast('warning', 'ไม่มีรายชื่อในระบบให้ซิงค์');
+      return;
+    }
+    if (!window.confirm('ต้องการซิงค์ข้อมูลลง Google Sheets ใช่หรือไม่?\n(เลขที่นั่งจะคำนวณตามรายชื่อปัจจุบัน)')) return;
 
     setIsSyncingSheets(true);
+    const tid = showToast('loading', 'กำลังซิงค์ข้อมูลไป Google Sheets...');
     try {
       await fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: "POST",
@@ -535,14 +717,15 @@ export default function App() {
         body: JSON.stringify({ guests: guestsWithComputedBadges })
       });
       await new Promise((r) => setTimeout(r, 3000));
-      alert('✅ ซิงค์ข้อมูลเข้า Google Sheets เรียบร้อยแล้ว!');
-    } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
+      updateToast(tid, 'success', 'ส่งข้อมูลเข้า Google Sheets เรียบร้อยแล้ว');
+    } catch (err) { updateToast(tid, 'error', 'ซิงค์ไม่สำเร็จ: ' + err.message); }
     finally { setIsSyncingSheets(false); }
   };
 
   const handleSendEmail = async () => {
     if (!window.confirm('ต้องการส่งอีเมลพร้อม QR Code ให้ผู้เข้าร่วมทั้งหมดใช่หรือไม่?')) return;
     setIsSendingEmail(true);
+    const tid = showToast('loading', 'กำลังส่งอีเมล QR Code ให้ผู้เข้าร่วม...');
     try {
       await fetch(GOOGLE_APPS_SCRIPT_URL, {
         method: "POST",
@@ -551,16 +734,16 @@ export default function App() {
         body: JSON.stringify({ action: "send_emails" })
       });
       await new Promise((r) => setTimeout(r, 5000));
-      alert('✅ ส่งอีเมลเรียบร้อยแล้ว!');
-    } catch (err) { alert('เกิดข้อผิดพลาด: ' + err.message); }
+      updateToast(tid, 'success', 'ส่งคำสั่งส่งอีเมลเรียบร้อยแล้ว');
+    } catch (err) { updateToast(tid, 'error', 'ส่งอีเมลไม่สำเร็จ: ' + err.message); }
     finally { setIsSendingEmail(false); }
   };
 
   const summaryStats = useMemo(() => {
     const total = guestsWithComputedBadges.length;
-    const checkedIn = guestsWithComputedBadges.filter(g => g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby').length;
+    const checkedIn = guestsWithComputedBadges.filter(g => (g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby') && !isLateGuest(g)).length;
     const pending = guestsWithComputedBadges.filter(g => g.status === 'pending').length;
-    const late = guestsWithComputedBadges.filter(g => g.status === 'late_receive_after').length;
+    const late = guestsWithComputedBadges.filter(g => isLateGuest(g) && !isDisqualifiedStatus(g.status) && g.status !== 'pending').length;
     const dressViolation = guestsWithComputedBadges.filter(g => g.status === 'dress_violation_receive_after').length;
     const noItem = guestsWithComputedBadges.filter(g => g.status === 'no_item_ordered').length;
 
@@ -580,7 +763,7 @@ export default function App() {
 👥 รายชื่อทั้งหมด: ${summaryStats.total} คน
 ✅ เข้าร่วมและเช็กชื่อแล้ว: ${summaryStats.checkedIn} คน
 ❌ ยังไม่มา / ขาด: ${summaryStats.pending} คน
-⏰ มาสาย (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.late} คน
+⏰ มาสาย (ขึ้นรับบ่าท้ายแถว): ${summaryStats.late} คน
 ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.dressViolation} คน
 📦 สั่งของไม่ทัน / ไม่ขึ้นรับบ่า: ${summaryStats.noItem} คน
 
@@ -597,7 +780,7 @@ export default function App() {
       case 'pending': return 'ยังไม่มา';
       case 'checked_in': return 'เช็กชื่อแล้ว (มาปกติ)';
       case 'no_item_ordered': return 'เข้าร่วมพิธี (ไม่ขึ้นรับบ่า)';
-      case 'late_receive_after': return 'มาสาย (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
+      case 'late_receive_after': return 'มาสาย (ขึ้นรับบ่าท้ายแถว)';
       case 'dress_violation_receive_after': return 'ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
       case 'standby': return 'สแตนด์บาย';
       case 'on_stage': return 'กำลังขึ้นเวที';
@@ -606,9 +789,17 @@ export default function App() {
     }
   };
 
+  // ป้ายสถานะของคนหนึ่งคน (คนมาสายที่ถูกดึงเข้าสแตนด์บาย/ขึ้นเวทีแล้ว จะมีคำว่า "มาสาย" ต่อท้าย)
+  const getGuestStatusLabel = (g) => {
+    if (!g) return '';
+    const base = getStatusLabel(g.status);
+    return isLateGuest(g) && ['standby', 'on_stage', 'completed'].includes(g.status) ? `${base} • มาสาย` : base;
+  };
+
   const currentStageGroup = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'on_stage'), [guestsWithComputedBadges]);
-  const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guestsWithComputedBadges]);
+  const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort(compareStandby), [guestsWithComputedBadges]);
   const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped), [guestsWithComputedBadges]);
+  const lateQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped), [guestsWithComputedBadges]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guestsWithComputedBadges.filter((g) => {
@@ -625,9 +816,41 @@ export default function App() {
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
 
+  // ถ้าลบรายชื่อจนหน้าปัจจุบันว่าง ให้ถอยกลับมาหน้าสุดท้าย
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const pendingCount = guestsWithComputedBadges.filter((g) => g.status === 'pending').length;
+
+  const toastStyles = {
+    success: { box: 'bg-emerald-950 border-emerald-500/60 text-emerald-100', Icon: CheckCircle2, icon: 'text-emerald-400' },
+    error: { box: 'bg-red-950 border-red-500/60 text-red-100', Icon: Ban, icon: 'text-red-400' },
+    warning: { box: 'bg-amber-950 border-amber-500/60 text-amber-100', Icon: AlertTriangle, icon: 'text-amber-400' },
+    info: { box: 'bg-[#0e1628] border-[#d4af37]/60 text-[#fdfbf7]', Icon: Sparkles, icon: 'text-[#d4af37]' },
+    loading: { box: 'bg-[#0e1628] border-blue-400/60 text-blue-100', Icon: Loader2, icon: 'text-blue-400 animate-spin' },
+  };
+
+  const toastEl = (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[92vw] max-w-sm pointer-events-none">
+      {toasts.map((t) => {
+        const st = toastStyles[t.type] || toastStyles.info;
+        const Icon = st.Icon;
+        return (
+          <div key={t.id} className={`pointer-events-auto flex items-start gap-2.5 px-4 py-3 rounded-2xl border shadow-2xl backdrop-blur-sm ${st.box}`}>
+            <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${st.icon}`} />
+            <p className="flex-1 text-xs font-bold leading-snug">{t.message}</p>
+            <button onClick={() => dismissToast(t.id)} className="opacity-60 hover:opacity-100 shrink-0"><X className="w-4 h-4" /></button>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   if (!isAuthorized) {
     return (
       <div className="min-h-screen bg-[#070b19] text-[#fdfbf7] p-4 sm:p-8 flex flex-col justify-between font-sans">
+        {toastEl}
         <div className="max-w-6xl w-full mx-auto space-y-6">
           <div className="flex justify-between items-center bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl px-6 py-4 shadow-[0_4px_20px_rgba(212,175,55,0.15)]">
             <div>
@@ -736,6 +959,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#070b19] text-[#fdfbf7] font-sans pb-20 md:pb-0">
+      {toastEl}
       <header className="bg-[#0e1628] border-b border-[#d4af37]/30 sticky top-0 z-40 px-4 py-3 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -831,7 +1055,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
                 <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/30 mb-3">
                   <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#d4af37]" /> พร้อมเรียกคิว</h3>
@@ -839,7 +1063,7 @@ export default function App() {
                 </div>
                 {readyQueue.length > 0 && (
                   <button
-                    onClick={handleMoveToStandbyBatch}
+                    onClick={() => handleMoveToStandbyBatch('ready')}
                     className="w-full mb-3 py-2.5 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
                   >
                     <span>🚀 ดึงเข้าสแตนด์บายเซตละ {batchSize} คน</span>
@@ -849,6 +1073,33 @@ export default function App() {
                   {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
                     <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
                       <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
+                      <div>
+                        <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
+                        <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
+                      </div>
+                      <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-400 text-left hover:underline">ข้ามคิวนี้</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-[#0e1628] border border-orange-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
+                <div className="flex justify-between items-center pb-3 border-b border-orange-500/30 mb-3">
+                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-orange-400" /> มาสาย (ต่อท้ายแถว)</h3>
+                  <span className="px-2.5 py-0.5 bg-orange-500/20 text-orange-300 text-xs font-bold rounded-full border border-orange-500/40">{lateQueue.length} คน</span>
+                </div>
+                {lateQueue.length > 0 && (
+                  <button
+                    onClick={() => handleMoveToStandbyBatch('late')}
+                    className="w-full mb-3 py-2.5 bg-orange-500/20 hover:bg-orange-500 text-orange-200 hover:text-[#070b19] border border-orange-500/50 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
+                  >
+                    <span>⏰ ดึงคนมาสายเข้าสแตนด์บาย ({Math.min(batchSize, lateQueue.length)} คน)</span>
+                  </button>
+                )}
+                <div className="flex-1 space-y-2.5 overflow-y-auto">
+                  {lateQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมที่มาสาย</p> : lateQueue.map((g) => (
+                    <div key={g.id} className="bg-[#121f38] border border-orange-500/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
+                      <div className="flex items-center justify-between"><span className="text-xs font-black text-orange-400">ที่นั่งเดิม #{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
                       <div>
                         <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
                         <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
@@ -878,7 +1129,7 @@ export default function App() {
                       <div>
                         <span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
                         <span className="text-xs font-bold text-[#fdfbf7]">{g.name}</span>
-                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
+                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}{isLateGuest(g) ? ' • มาสาย' : ''}</div>
                       </div>
                     </div>
                   ))}
@@ -925,7 +1176,7 @@ export default function App() {
                 <Grid className="w-6 h-6 text-[#d4af37]" />
                 <div>
                   <h3 className="font-black text-[#f3e5ab] text-sm">ตั้งค่าผังแถวที่นั่ง (Dynamic Seating Grid)</h3>
-                  <p className="text-xs text-[#d1c7bd]">กำหนดจำนวนที่นั่งต่อแถว (ระบบจะรันตัวอักษร A, B, C... อัตโนมัติ)</p>
+                  <p className="text-xs text-[#d1c7bd]">กำหนดจำนวนที่นั่งต่อแถว (A, B, C... อัตโนมัติ) เลขที่นั่งไม่เปลี่ยนตามสถานะเช็กชื่อ แต่จะคำนวณใหม่เมื่อเพิ่ม/ลบรายชื่อ</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -990,6 +1241,67 @@ export default function App() {
               </div>
             </div>
 
+            <div className="bg-[#0e1628] p-3 rounded-3xl border border-[#d4af37]/30 flex flex-col lg:flex-row gap-2 lg:items-center shadow-lg">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-[#d4af37] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่อ / รหัสนักศึกษา / เลขที่นั่ง"
+                  className="w-full pl-9 pr-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
+                />
+              </div>
+              <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7]">
+                <option value="all">ทุกสถานะ</option>
+                <option value="pending">ยังไม่มา</option>
+                <option value="checked_in">เช็กชื่อแล้ว (มาปกติ)</option>
+                <option value="late_receive_after">มาสาย (รอเรียกคิว)</option>
+                <option value="dress_violation_receive_after">ผิดระเบียบ</option>
+                <option value="no_item_ordered">ของไม่พร้อม</option>
+                <option value="standby">สแตนด์บาย</option>
+                <option value="on_stage">กำลังขึ้นเวที</option>
+                <option value="completed">ลงเวทีแล้ว</option>
+              </select>
+              <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7]">
+                <option value="all">ทุกชั้นปี</option>
+                <option value="ปี 1">ปี 1</option>
+                <option value="ปี 2">ปี 2</option>
+                <option value="ปี 3">ปี 3</option>
+                <option value="ปี 4">ปี 4</option>
+                <option value="บัณฑิต">บัณฑิต</option>
+              </select>
+              {filteredDashboardGuests.length > paginatedGuests.length && (
+                <button onClick={() => setSelectedGuestIds(filteredDashboardGuests.map((g) => g.id))} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#f3e5ab] border border-[#d4af37]/40 rounded-xl text-xs font-bold whitespace-nowrap">
+                  เลือกทั้งหมดที่กรอง ({filteredDashboardGuests.length})
+                </button>
+              )}
+            </div>
+
+            <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
+              <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ลบคนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
+              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].map((y) => {
+                const n = guestsWithComputedBadges.filter((g) => g.status === 'pending' && g.year === y).length;
+                return (
+                  <button
+                    key={y}
+                    disabled={n === 0}
+                    onClick={() => handleDeletePendingGuests(y)}
+                    className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+                  >
+                    {y} ({n})
+                  </button>
+                );
+              })}
+              <button
+                disabled={pendingCount === 0}
+                onClick={() => handleDeletePendingGuests('all')}
+                className="px-3 py-1.5 bg-red-700/40 hover:bg-red-700 text-red-100 border border-red-600 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+              >
+                ทุกชั้นปี ({pendingCount})
+              </button>
+            </div>
+
             <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
@@ -1028,7 +1340,10 @@ export default function App() {
                         </td>
                         <td className="p-3.5 font-bold">
                           {g.badgeNumber !== '-' ? (
-                            <span className="text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30">#{g.badgeNumber}</span>
+                            <>
+                              <span className="text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30">#{g.badgeNumber}</span>
+                              {isDisqualifiedStatus(g.status) && <span className="ml-1.5 text-[10px] font-bold text-rose-300">ไม่ขึ้นรับบ่า</span>}
+                            </>
                           ) : (
                             <span className="text-[#d1c7bd] bg-[#070b19] px-2 py-0.5 rounded border border-[#d4af37]/20">- (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)</span>
                           )}
@@ -1037,8 +1352,8 @@ export default function App() {
                         <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
                         <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
                         <td className="p-3.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : (g.status || '').includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
-                            {getStatusLabel(g.status)}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLateGuest(g) ? 'bg-amber-900/40 text-amber-300 border border-amber-500/30' : g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : isDisqualifiedStatus(g.status) ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
+                            {getGuestStatusLabel(g)}
                           </span>
                         </td>
                         <td className="p-3.5 space-x-1">
@@ -1110,7 +1425,7 @@ export default function App() {
                       <td className="border border-gray-300 p-2.5 font-bold">{g.name}</td>
                       <td className="border border-gray-300 p-2.5 text-center">{g.year}</td>
                       <td className="border border-gray-300 p-2.5 text-center text-[11px]">
-                        {g.status === 'checked_in' ? 'มาปกติ' : g.status === 'late_receive_after' ? 'มาสาย (ไม่รับบ่า)' : g.status === 'dress_violation_receive_after' ? 'ผิดระเบียบ (ไม่รับบ่า)' : g.status === 'no_item_ordered' ? 'ของไม่พร้อม (ไม่รับบ่า)' : 'รอเช็กชื่อ'}
+                        {g.status === 'pending' ? 'รอเช็กชื่อ' : getGuestStatusLabel(g)}
                       </td>
                     </tr>
                   ))}
@@ -1133,7 +1448,7 @@ export default function App() {
               </span>
               <h3 className="text-lg font-black text-[#fdfbf7] mt-2">{duplicateAlertModal.guest?.name}</h3>
               <p className="text-xs text-amber-300 mt-1 font-bold">
-                บุคคลนี้ได้ทำการเช็กชื่อแล้ว ({getStatusLabel(duplicateAlertModal.guest?.status)})<br />กรุณาสแกน QR Code ใหม่
+                บุคคลนี้ได้ทำการเช็กชื่อแล้ว ({getGuestStatusLabel(duplicateAlertModal.guest)})<br />กรุณาสแกน QR Code ใหม่
               </p>
             </div>
             <button
@@ -1153,7 +1468,7 @@ export default function App() {
               <span className={`px-3 py-1 rounded-xl text-xs font-black text-[#070b19] ${scannedPreviewGuest.badgeNumber !== '-' ? 'bg-[#d4af37]' : 'bg-slate-400'}`}>
                 {scannedPreviewGuest.badgeNumber !== '-' ? `#${scannedPreviewGuest.badgeNumber}` : 'ไม่มีคิวเวที'}
               </span>
-              <span className="px-3 py-1 bg-[#121f38] border border-[#d4af37]/40 rounded-xl text-xs font-bold text-[#f3e5ab]">{getStatusLabel(scannedPreviewGuest.status)}</span>
+              <span className="px-3 py-1 bg-[#121f38] border border-[#d4af37]/40 rounded-xl text-xs font-bold text-[#f3e5ab]">{getGuestStatusLabel(scannedPreviewGuest)}</span>
             </div>
 
             <div className="text-center py-2 space-y-1">
@@ -1169,7 +1484,7 @@ export default function App() {
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-xl text-[11px] transition-transform active:scale-95">
-                      ⏰ มาสาย (ร่วมพิธี/ไม่รับบ่า)
+                      ⏰ มาสาย (ขึ้นรับบ่าท้ายแถว)
                     </button>
                     <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
                       ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่รับบ่า)
@@ -1178,7 +1493,7 @@ export default function App() {
                 </>
               ) : (
                 <div className="py-3 bg-[#121f38] border border-[#d4af37]/40 text-[#f3e5ab] font-bold rounded-2xl text-xs text-center">
-                  สถานะปัจจุบัน: {getStatusLabel(scannedPreviewGuest.status)}
+                  สถานะปัจจุบัน: {getGuestStatusLabel(scannedPreviewGuest)}
                 </div>
               )}
 
@@ -1231,8 +1546,9 @@ export default function App() {
             <div className="flex gap-2 pt-2">
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(generateSummaryText());
-                  alert('📋 คัดลอกข้อความสรุปรายงานไปยังคลิปบอร์ดแล้ว!');
+                  navigator.clipboard.writeText(generateSummaryText())
+                    .then(() => showToast('success', 'คัดลอกข้อความสรุปแล้ว นำไปวางในไลน์ได้เลย'))
+                    .catch(() => showToast('error', 'คัดลอกไม่สำเร็จ กรุณาลองอีกครั้ง'));
                 }}
                 className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md"
               >
@@ -1321,8 +1637,14 @@ export default function App() {
                   skipped: false,
                   standbyOrder: null
                 })).filter(g => g.name);
+                if (parsed.length === 0) {
+                  showToast('warning', 'ไม่พบรายชื่อในไฟล์ ตรวจสอบหัวคอลัมน์ "ชื่อ-นามสกุล" และ "รหัสนักศึกษา"');
+                } else {
+                  showToast('success', `อ่านไฟล์สำเร็จ พบ ${parsed.length} รายชื่อ`);
+                }
                 setExcelPreviewData(parsed);
               };
+              reader.onerror = () => showToast('error', 'อ่านไฟล์ไม่สำเร็จ กรุณาลองไฟล์อื่น');
               reader.readAsBinaryString(file);
             }} className="text-xs text-[#d1c7bd] file:bg-[#d4af37] file:text-[#070b19] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
             {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
@@ -1330,6 +1652,9 @@ export default function App() {
               <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button disabled={excelPreviewData.length === 0} onClick={async () => {
                 const colRef = collection(db, COLLECTION_NAME);
+                const total = excelPreviewData.length;
+                const tid = showToast('loading', `กำลังนำเข้า ${total} รายชื่อ...`);
+                try {
                 // เขียนเฉพาะรายชื่อใหม่ ไม่เขียนทับรายชื่อเดิม
                 for (let i = 0; i < excelPreviewData.length; i += 400) {
                   const b = writeBatch(db);
@@ -1338,7 +1663,11 @@ export default function App() {
                 }
                 setExcelPreviewData([]);
                 setIsExcelModalOpen(false);
-                alert('✅ นำเข้าสำเร็จ');
+                updateToast(tid, 'success', `นำเข้า ${total} รายชื่อสำเร็จ`);
+                } catch (err) {
+                  console.error(err);
+                  updateToast(tid, 'error', 'นำเข้ารายชื่อไม่สำเร็จ กรุณาลองอีกครั้ง');
+                }
               }} className="flex-1 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black">ยืนยันนำเข้า</button>
             </div>
           </div>
