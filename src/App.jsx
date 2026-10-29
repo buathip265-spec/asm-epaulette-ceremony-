@@ -60,7 +60,6 @@ const getSortableCleanName = (fullName) => {
 if (!fullName) return '';
 return fullName.replace(/^(นาย|นางสาว|นาง|น.ส.|ด.ช.|ด.ญ.|ผศ.|รศ.|ดร.)\s*/, '').trim();
 };
-// ฟังก์ชันจัดเรียง: เรียงตามชั้นปี ตามด้วยชื่อ, และผลักคนมาสาย/ผิดระเบียบ/ไม่มีของ ไปอยู่ท้ายสุดของแต่ละชั้นปี
 const sortGuestsByCustomCriteria = (list) => {
 const sorted = [...list].sort((a, b) => {
 const yearA = getYearOrderWeight(a.year);
@@ -69,7 +68,7 @@ if (yearA !== yearB) return yearA - yearB;
 const isLateA = a.status === 'late_receive_after' || a.status === 'dress_violation_receive_after' || a.status === 'no_item_ordered';
 const isLateB = b.status === 'late_receive_after' || b.status === 'dress_violation_receive_after' || b.status === 'no_item_ordered';
 if (isLateA !== isLateB) {
-return isLateA ? 1 : -1; // คนมาสายไปอยู่ท้ายสุดของปีนั้น
+return isLateA ? 1 : -1;
 }
 const genderA = getGenderOrderWeight(a.name);
 const genderB = getGenderOrderWeight(b.name);
@@ -91,7 +90,7 @@ const [errorMsg, setErrorMsg] = useState('');
 const [isAuthorized, setIsAuthorized] = useState(false);
 const [activeTab, setActiveTab] = useState('scan');
 const [batchSize, setBatchSize] = useState(14);
-const [seatsPerRow, setSeatsPerRow] = useState(10); // สำหรับตั้งค่าผังแถวที่นั่ง A, B, C...
+const [seatsPerRow, setSeatsPerRow] = useState(10);
 const [isSyncingSheets, setIsSyncingSheets] = useState(false);
 const [isSendingEmail, setIsSendingEmail] = useState(false);
 const [isCameraActive, setIsCameraActive] = useState(false);
@@ -100,7 +99,7 @@ const [manualCodeInput, setManualCodeInput] = useState('');
 const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
 const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
-const [isMcModalOpen, setIsMcModalOpen] = useState(false); // Modal ใบรายชื่อพิธีกร
+const [isMcModalOpen, setIsMcModalOpen] = useState(false);
 const isProcessingScanRef = useRef(false);
 const html5QrCodeRef = useRef(null);
 const [searchQuery, setSearchQuery] = useState('');
@@ -136,7 +135,6 @@ setGuests(sortGuestsByCustomCriteria(items));
 });
 return () => unsubscribe();
 }, []);
-// คำนวณรหัสป้ายที่นั่งตามผังแถว A, B, C... และจำนวนที่นั่งต่อแถว (seatsPerRow)
 const guestsWithComputedBadges = useMemo(() => {
 const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 return guests.map((g, index) => {
@@ -144,7 +142,6 @@ const isDisqualified = g.status === 'no_item_ordered' || g.status === 'late_rece
 if (isDisqualified) {
 return { ...g, badgeNumber: '-' };
 }
-// คำนวณเฉพาะคนปกติ
 const normalGuests = guests.filter(item => !(item.status === 'no_item_ordered' || item.status === 'late_receive_after' || item.status === 'dress_violation_receive_after'));
 const normalIndex = normalGuests.findIndex(item => item.id === g.id);
 const rowIdx = normalIndex >= 0 ? Math.floor(normalIndex / seatsPerRow) : Math.floor(index / seatsPerRow);
@@ -826,7 +823,6 @@ currentStageGroup.map((g) => (
 )}
 {activeTab === 'dashboard' && (
 <div className="space-y-4">
-{/* แผงควบคุมตั้งค่าจำนวนที่นั่งต่อแถว (Dynamic Seating Grid) */}
 <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
 <div className="flex items-center gap-3">
 <Grid className="w-6 h-6 text-[#d4af37]" />
