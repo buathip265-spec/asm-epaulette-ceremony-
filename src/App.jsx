@@ -35,6 +35,12 @@ const num = parseInt(prefix, 10);
 if (!isNaN(num) && num <= 65) return 'บัณฑิต';
 return 'ปี 1';
 };
+const checkIsItemNotReady = (guest) => {
+if (!guest) return false;
+const text = ⁠${guest.note || ''} ${guest.itemStatus || ''}⁠.toLowerCase();
+const keywords = ['สั่งของไม่ทัน', 'ไม่ได้รับของ', 'ยังไม่ได้รับของ', 'จ่ายช้า', 'สั่งไม่ทัน', 'ผลิตไม่ทัน', 'ค้างจ่าย', 'ยังไม่จ่าย', 'ไม่มีของ'];
+return keywords.some((kw) => text.includes(kw));
+};
 const YEAR_WEIGHTS = { 'ปี 1': 1, 'ปี 2': 2, 'ปี 3': 3, 'ปี 4': 4, 'บัณฑิต': 5 };
 const getYearOrderWeight = (yearStr) => {
 if (!yearStr) return 99;
@@ -54,14 +60,17 @@ const getSortableCleanName = (fullName) => {
 if (!fullName) return '';
 return fullName.replace(/^(นาย|นางสาว|นาง|น.ส.|ด.ช.|ด.ญ.|ผศ.|รศ.|ดร.)\s*/, '').trim();
 };
+// ฟังก์ชันจัดเรียง: เรียงตามชั้นปี ตามด้วยชื่อ, และผลักคนมาสาย/ผิดระเบียบ/ไม่มีของ ไปอยู่ท้ายสุดของแต่ละชั้นปี
 const sortGuestsByCustomCriteria = (list) => {
 const sorted = [...list].sort((a, b) => {
 const yearA = getYearOrderWeight(a.year);
 const yearB = getYearOrderWeight(b.year);
 if (yearA !== yearB) return yearA - yearB;
-const isLateA = (a.status === 'late_receive_after' || a.status === 'dress_violation_receive_after') ? 1 : 0;
-const isLateB = (b.status === 'late_receive_after' || b.status === 'dress_violation_receive_after') ? 1 : 0;
-if (isLateA !== isLateB) return isLateA - isLateB;
+const isLateA = a.status === 'late_receive_after' || a.status === 'dress_violation_receive_after' || a.status === 'no_item_ordered';
+const isLateB = b.status === 'late_receive_after' || b.status === 'dress_violation_receive_after' || b.status === 'no_item_ordered';
+if (isLateA !== isLateB) {
+return isLateA ? 1 : -1; // คนมาสายไปอยู่ท้ายสุดของปีนั้น
+}
 const genderA = getGenderOrderWeight(a.name);
 const genderB = getGenderOrderWeight(b.name);
 if (genderA !== genderB) return genderA - genderB;
@@ -82,6 +91,7 @@ const [errorMsg, setErrorMsg] = useState('');
 const [isAuthorized, setIsAuthorized] = useState(false);
 const [activeTab, setActiveTab] = useState('scan');
 const [batchSize, setBatchSize] = useState(14);
+const [seatsPerRow, setSeatsPerRow] = useState(10); // สำหรับตั้งค่าผังแถวที่นั่ง A, B, C...
 const [isSyncingSheets, setIsSyncingSheets] = useState(false);
 const [isSendingEmail, setIsSendingEmail] = useState(false);
 const [isCameraActive, setIsCameraActive] = useState(false);
@@ -90,10 +100,7 @@ const [manualCodeInput, setManualCodeInput] = useState('');
 const [scannedPreviewGuest, setScannedPreviewGuest] = useState(null);
 const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
-// Grid / Row Settings for Seating (e.g., Rows A, B, C... and seats per row)
-const [seatsPerRow, setSeatsPerRow] = useState(10); // จำนวนที่นั่งต่อแถว (เริ่มต้น 10 ที่นั่งต่อแถว)
-const [isGridModalOpen, setIsGridModalOpen] = useState(false);
-const [isMcPrintModalOpen, setIsMcPrintModalOpen] = useState(false);
+const [isMcModalOpen, setIsMcModalOpen] = useState(false); // Modal ใบรายชื่อพิธีกร
 const isProcessingScanRef = useRef(false);
 const html5QrCodeRef = useRef(null);
 const [searchQuery, setSearchQuery] = useState('');
@@ -104,7 +111,7 @@ const itemsPerPage = 15;
 const [selectedGuestIds, setSelectedGuestIds] = useState([]);
 const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 const [editingGuest, setEditingGuest] = useState(null);
-const [formData, setFormData] = useState({ studentId: '', name: '', email: '', role: 'ผู้เข้าร่วม', note: '' });
+const [formData, setFormData] = useState({ badgeNumber: '', studentId: '', name: '', email: '', role: 'ผู้เข้าร่วม', note: '' });
 const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 const [excelPreviewData, setExcelPreviewData] = useState([]);
 const fileInputRef = useRef(null);
@@ -129,18 +136,24 @@ setGuests(sortGuestsByCustomCriteria(items));
 });
 return () => unsubscribe();
 }, []);
-// คำนวณรหัสป้ายที่นั่งอัตโนมัติแบบผังเก้าอี้ (A1, A2... ตามจำนวน seatsPerRow)
+// คำนวณรหัสป้ายที่นั่งตามผังแถว A, B, C... และจำนวนที่นั่งต่อแถว (seatsPerRow)
 const guestsWithComputedBadges = useMemo(() => {
 const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 return guests.map((g, index) => {
-const rowIdx = Math.floor(index / seatsPerRow);
-const seatNum = (index % seatsPerRow) + 1;
+const isDisqualified = g.status === 'no_item_ordered' || g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after';
+if (isDisqualified) {
+return { ...g, badgeNumber: '-' };
+}
+// คำนวณเฉพาะคนปกติ
+const normalGuests = guests.filter(item => !(item.status === 'no_item_ordered' || item.status === 'late_receive_after' || item.status === 'dress_violation_receive_after'));
+const normalIndex = normalGuests.findIndex(item => item.id === g.id);
+const rowIdx = normalIndex >= 0 ? Math.floor(normalIndex / seatsPerRow) : Math.floor(index / seatsPerRow);
+const seatNum = normalIndex >= 0 ? (normalIndex % seatsPerRow) + 1 : (index % seatsPerRow) + 1;
 const prefix = rowIdx < letters.length ? letters[rowIdx] : 'Z';
 const computedBadge = ⁠${prefix}${seatNum}⁠;
 return {
 ...g,
-badgeNumber: computedBadge,
-numericalOrder: index + 1
+badgeNumber: computedBadge
 };
 });
 }, [guests, seatsPerRow]);
@@ -189,7 +202,7 @@ setCameraError('');
 console.error("Camera start error:", e);
 if (isMounted) {
 setIsCameraActive(false);
-setCameraError('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้อง');
+setCameraError('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้อง หรือใช้งานผ่าน HTTPS');
 }
 }
 }
@@ -265,19 +278,19 @@ setScannedPreviewGuest(partialFound);
 }
 }
 };
-const handleConfirmCheckIn = async (guest, targetStatus = 'checked_in') => {
+const handleConfirmCheckIn = async (guest, targetStatus = null) => {
 if (!guest) return;
+const isNoItem = checkIsItemNotReady(guest);
+const finalStatus = targetStatus || (isNoItem ? 'no_item_ordered' : 'checked_in');
 const timeStr = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-setScannedPreviewGuest(null);
+setScannedPreviewGuest(prev => prev ? { ...prev, status: finalStatus, checkInTime: timeStr, prevStatus: prev.status } : null);
 try {
 await updateDoc(getGuestDocRef(guest.id), {
-status: targetStatus,
+status: finalStatus,
 checkInTime: timeStr,
 prevStatus: guest.status,
 skipped: false
 });
-const updatedGuests = guests.map(g => g.id === guest.id ? { ...g, status: targetStatus, checkInTime: timeStr, prevStatus: guest.status } : g);
-setGuests(sortGuestsByCustomCriteria(updatedGuests));
 } catch (e) { console.error(e); }
 };
 const handleUndoStatus = async (guest) => {
@@ -292,7 +305,7 @@ await updateDoc(getGuestDocRef(guest.id), { skipped: !guest.skipped });
 } catch (e) { console.error(e); }
 };
 const handleMoveToStandbyBatch = async () => {
-const readyList = guestsWithComputedBadges.filter((g) => (g.status === 'checked_in' || g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after') && !g.skipped);
+const readyList = guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped);
 if (readyList.length === 0) return alert('ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
 const takeCount = Math.min(Number(batchSize), readyList.length);
 const batchList = readyList.slice(0, takeCount);
@@ -301,7 +314,7 @@ const batch = writeBatch(db);
 batchList.forEach((g, idx) => {
 batch.update(getGuestDocRef(g.id), {
 status: 'standby',
-prevStatus: g.status,
+prevStatus: 'checked_in',
 standbyOrder: Date.now() + idx,
 skipped: false
 });
@@ -437,7 +450,7 @@ const handleResetAllStatuses = async () => {
 if (resetConfirmInput !== 'RESET') return alert('กรุณาพิมพ์ RESET ให้ถูกต้อง');
 try {
 const batch = writeBatch(db);
-guests.forEach((g) => {
+guestsWithComputedBadges.forEach((g) => {
 batch.update(getGuestDocRef(g.id), { status: 'pending', checkInTime: null, prevStatus: null, standbyOrder: null, skipped: false });
 });
 await batch.commit();
@@ -451,15 +464,11 @@ if (!guestsWithComputedBadges || guestsWithComputedBadges.length === 0) return a
 if (!window.confirm(⁠ต้องการซิงค์ข้อมูลลง Google Sheets ใช่หรือไม่?⁠)) return;
 setIsSyncingSheets(true);
 try {
-const exportList = guestsWithComputedBadges.map(g => ({
-...g,
-badgeNumber: g.badgeNumber
-}));
 await fetch(GOOGLE_APPS_SCRIPT_URL, {
 method: "POST",
 mode: "no-cors",
 headers: { "Content-Type": "text/plain;charset=utf-8" },
-body: JSON.stringify({ action: "sync_guests", guests: exportList })
+body: JSON.stringify({ guests: guestsWithComputedBadges })
 });
 await new Promise((r) => setTimeout(r, 3000));
 alert('✅ ซิงค์ข้อมูลเข้า Google Sheets เรียบร้อยแล้ว!');
@@ -483,10 +492,11 @@ finally { setIsSendingEmail(false); }
 };
 const summaryStats = useMemo(() => {
 const total = guestsWithComputedBadges.length;
-const checkedIn = guestsWithComputedBadges.filter(g => g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby' || g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after').length;
+const checkedIn = guestsWithComputedBadges.filter(g => g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby').length;
 const pending = guestsWithComputedBadges.filter(g => g.status === 'pending').length;
 const late = guestsWithComputedBadges.filter(g => g.status === 'late_receive_after').length;
 const dressViolation = guestsWithComputedBadges.filter(g => g.status === 'dress_violation_receive_after').length;
+const noItem = guestsWithComputedBadges.filter(g => g.status === 'no_item_ordered').length;
 const byYear = {
 'ปี 1': guestsWithComputedBadges.filter(g => g.year === 'ปี 1').length,
 'ปี 2': guestsWithComputedBadges.filter(g => g.year === 'ปี 2').length,
@@ -494,15 +504,16 @@ const byYear = {
 'ปี 4': guestsWithComputedBadges.filter(g => g.year === 'ปี 4').length,
 'บัณฑิต': guestsWithComputedBadges.filter(g => g.year === 'บัณฑิต').length,
 };
-return { total, checkedIn, pending, late, dressViolation, byYear };
+return { total, checkedIn, pending, late, dressViolation, noItem, byYear };
 }, [guestsWithComputedBadges]);
 const generateSummaryText = () => {
 return `📊 สรุปผลพิธีมอบประดับบ่าเกียรติยศ SPU
 ￼ รายชื่อทั้งหมด: ${summaryStats.total} คน
-￼ เช็กชื่อเข้าร่วมแล้ว: ${summaryStats.checkedIn} คน
-￼ มาสาย (ท้ายชั้นปี): ${summaryStats.late} คน
-￼ ผิดระเบียบ (ท้ายชั้นปี): ${summaryStats.dressViolation} คน
+￼ เข้าร่วมและเช็กชื่อแล้ว: ${summaryStats.checkedIn} คน
 ￼ ยังไม่มา / ขาด: ${summaryStats.pending} คน
+￼ มาสาย (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.late} คน
+￼ ผิดระเบียบ (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.dressViolation} คน
+￼ สั่งของไม่ทัน / ไม่ขึ้นรับบ่า: ${summaryStats.noItem} คน
 📌 แยกตามชั้นปี:
 ￼ ปี 1: ${summaryStats.byYear['ปี 1']} คน
 ￼ ปี 2: ${summaryStats.byYear['ปี 2']} คน
@@ -514,8 +525,9 @@ const getStatusLabel = (st) => {
 switch (st) {
 case 'pending': return 'ยังไม่มา';
 case 'checked_in': return 'เช็กชื่อแล้ว (มาปกติ)';
-case 'late_receive_after': return 'มาสาย (ต่อท้ายชั้นปี)';
-case 'dress_violation_receive_after': return 'ผิดระเบียบ (ต่อท้ายชั้นปี)';
+case 'no_item_ordered': return 'เข้าร่วมพิธี (ไม่ขึ้นรับบ่า)';
+case 'late_receive_after': return 'มาสาย (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
+case 'dress_violation_receive_after': return 'ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
 case 'standby': return 'สแตนด์บาย';
 case 'on_stage': return 'กำลังขึ้นเวที';
 case 'completed': return 'ลงเวทีแล้ว';
@@ -524,14 +536,14 @@ default: return st;
 };
 const currentStageGroup = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'on_stage'), [guestsWithComputedBadges]);
 const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort((a, b) => (a.standbyOrder || 0) - (b.standbyOrder || 0)), [guestsWithComputedBadges]);
-const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => (g.status === 'checked_in' || g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after') && !g.skipped), [guestsWithComputedBadges]);
+const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped), [guestsWithComputedBadges]);
 const filteredDashboardGuests = useMemo(() => {
 return guestsWithComputedBadges.filter((g) => {
 if (filterStatus !== 'all' && g.status !== filterStatus) return false;
 if (filterYear !== 'all' && g.year !== filterYear) return false;
 if (searchQuery.trim()) {
 const q = searchQuery.toLowerCase().trim();
-return g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.toLowerCase().includes(q)) || String(g.badgeNumber).toLowerCase().includes(q);
+return g.name.toLowerCase().includes(q) || (g.studentId && g.studentId.toLowerCase().includes(q)) || String(g.badgeNumber) === q.replace('#', '');
 }
 return true;
 });
@@ -567,7 +579,7 @@ className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e
 {currentStageGroup.map((g) => (
 <div key={g.id} className="bg-[#121f38] border-2 border-[#d4af37]/70 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(212,175,55,0.25)] space-y-1">
 <span className="inline-block px-3 py-0.5 bg-[#d4af37] text-[#070b19] font-black text-sm rounded-xl">
-ป้าย {g.badgeNumber}
+#{g.badgeNumber}
 </span>
 <h4 className="text-base sm:text-lg font-black text-[#fdfbf7] truncate">{g.name}</h4>
 <p className="text-xs font-mono text-[#f3e5ab]">{g.studentId || '-'} • {g.year}</p>
@@ -598,7 +610,7 @@ className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e
 ) : (
 standbyQueue.map((g, idx) => (
 <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-sm">
-<span className="text-[11px] font-black text-[#d4af37]">ป้าย {g.badgeNumber}</span>
+<span className="text-[11px] font-black text-[#d4af37]">#{g.badgeNumber}</span>
 <span className="text-xs font-bold text-[#fdfbf7] truncate max-w-[120px]">{g.name}</span>
 <span className="text-[10px] text-[#f3e5ab] bg-[#d4af37]/10 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
 </div>
@@ -651,17 +663,18 @@ return (
 </div>
 </div>
 <div className="flex items-center gap-3">
-<nav className="hidden md:flex items-center bg-[#070b19] p-1 rounded-2xl border border-[#d4af37]/30">
+<nav className="hidden md:flex items-center bg-[#070b19] p-1 rounded-2xl border border-[#d4af37]/30 gap-1">
 <button onClick={() => setActiveTab('scan')} className={⁠px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'scan' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}⁠}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
 <button onClick={() => setActiveTab('queue')} className={⁠px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'queue' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}⁠}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
 <button onClick={() => setActiveTab('dashboard')} className={⁠px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-[#d4af37] text-[#070b19] shadow-md font-black' : 'text-[#d1c7bd] hover:text-white'}⁠}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+<button onClick={() => setIsMcModalOpen(true)} className="px-4 py-2 rounded-xl text-xs font-bold text-blue-300 hover:text-white bg-blue-900/40 border border-blue-500/30 transition-all flex items-center gap-1.5"><Printer className="w-4 h-4" /> สร้างใบรายชื่อพิธีกร</button>
 <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
 </nav>
 <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
 </div>
 </div>
 </header>
-<main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+<main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
 {activeTab === 'scan' && (
 <div className="max-w-lg mx-auto space-y-4">
 <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 text-center shadow-xl">
@@ -744,17 +757,7 @@ className="w-full mb-3 py-2.5 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#f3e5ab] 
 <div className="flex-1 space-y-2.5 overflow-y-auto">
 {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
 <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
-<div className="flex items-center justify-between">
-<span className="text-xs font-black text-[#d4af37]">ป้าย {g.badgeNumber}</span>
-<div className="flex items-center gap-1.5">
-{(g.status === 'late_receive_after' || g.status === 'dress_violation_receive_after') && (
-<span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] rounded border border-amber-500/30">
-{g.status === 'late_receive_after' ? 'มาสาย' : 'ผิดระเบียบ'}
-</span>
-)}
-<span className="text-[10px] text-[#d1c7bd]">{g.year}</span>
-</div>
-</div>
+<div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
 <div>
 <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
 <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
@@ -781,7 +784,7 @@ className="w-full mb-3 py-2.5 bg-amber-500 hover:bg-amber-600 text-[#070b19] fon
 {standbyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีคนในแถวสแตนด์บาย</p> : standbyQueue.map((g, idx) => (
 <div key={g.id} className="bg-[#121f38] border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between gap-2">
 <div>
-<span className="text-xs font-black text-amber-400 mr-2">ป้าย {g.badgeNumber}</span>
+<span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
 <span className="text-xs font-bold text-[#fdfbf7]">{g.name}</span>
 <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}</div>
 </div>
@@ -809,7 +812,7 @@ className="w-full mb-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white fon
 currentStageGroup.map((g) => (
 <div key={g.id} className="bg-[#121f38] border-2 border-emerald-500/60 rounded-xl p-2.5 flex items-center justify-between">
 <div>
-<span className="text-xs font-black text-emerald-400">ป้าย {g.badgeNumber}</span>
+<span className="text-xs font-black text-emerald-400">#{g.badgeNumber}</span>
 <span className="text-xs font-bold text-[#fdfbf7] ml-2">{g.name}</span>
 </div>
 <span className="text-[10px] text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded">{g.year}</span>
@@ -823,24 +826,33 @@ currentStageGroup.map((g) => (
 )}
 {activeTab === 'dashboard' && (
 <div className="space-y-4">
+{/* แผงควบคุมตั้งค่าจำนวนที่นั่งต่อแถว (Dynamic Seating Grid) */}
+<div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
+<div className="flex items-center gap-3">
+<Grid className="w-6 h-6 text-[#d4af37]" />
+<div>
+<h3 className="font-black text-[#f3e5ab] text-sm">ตั้งค่าผังแถวที่นั่ง (Dynamic Seating Grid)</h3>
+<p className="text-xs text-[#d1c7bd]">กำหนดจำนวนที่นั่งต่อแถว (ระบบจะรันตัวอักษร A, B, C... อัตโนมัติ)</p>
+</div>
+</div>
+<div className="flex items-center gap-3">
+<span className="text-xs text-[#d1c7bd] font-bold">ที่นั่งต่อแถว:</span>
+<input
+type="number"
+min="1"
+max="50"
+value={seatsPerRow}
+onChange={(e) => setSeatsPerRow(Math.max(1, parseInt(e.target.value) || 10))}
+className="bg-[#070b19] border border-[#d4af37]/60 text-white px-3 py-1.5 rounded-xl w-20 text-center font-bold text-xs"
+/>
+</div>
+</div>
 <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg">
 <div>
 <h2 className="text-lg font-black text-[#f3e5ab]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
-<p className="text-xs text-[#d1c7bd]">ตั้งค่าผังเก้าอี้ (A, B, C...) ซิงค์ชีต ส่งอีเมล หรือพิมพ์ใบรายชื่อสำหรับพิธีกร</p>
+<p className="text-xs text-[#d1c7bd]">กด "ซิงค์ Google Sheets" เพื่อส่งรายชื่อและคิวเข้า Google Sheets จากนั้นกดปุ่มส่งอีเมลเพื่อส่ง QR Code ให้ทุกคน</p>
 </div>
 <div className="flex flex-wrap items-center gap-2">
-<button
-onClick={() => setIsGridModalOpen(true)}
-className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
->
-<Grid className="w-3.5 h-3.5" /> ตั้งค่าผังที่นั่ง (A, B, C...)
-</button>
-<button
-onClick={() => setIsMcPrintModalOpen(true)}
-className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
->
-<Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF/Print)
-</button>
 <button
 onClick={() => setIsSummaryModalOpen(true)}
 className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
@@ -857,13 +869,14 @@ className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs f
 )}
 <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
-<button disabled={isSendingEmail} onClick={handleSendEmail} className="px-3 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
-{isSendingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล QR Code
+<button disabled={isSendingEmail} onClick={handleSendEmail} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs">
+{isSendingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล
 </button>
 <button
 onClick={() => {
 setEditingGuest(null);
 setFormData({
+badgeNumber: '',
 studentId: '',
 name: '',
 email: '',
@@ -895,7 +908,7 @@ onChange={handleToggleSelectAll}
 className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
 />
 </th>
-<th className="p-3.5">ป้ายที่นั่ง</th>
+<th className="p-3.5">ลำดับคิว / ป้าย</th>
 <th className="p-3.5">รหัสนักศึกษา</th>
 <th className="p-3.5">ชื่อ-นามสกุล</th>
 <th className="p-3.5">ชั้นปี</th>
@@ -916,13 +929,17 @@ className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
 />
 </td>
 <td className="p-3.5 font-bold">
-<span className="text-[#d4af37] bg-[#d4af37]/10 px-2.5 py-1 rounded border border-[#d4af37]/30">ป้าย {g.badgeNumber}</span>
+{g.badgeNumber !== '-' ? (
+<span className="text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded border border-[#d4af37]/30">#{g.badgeNumber}</span>
+) : (
+<span className="text-[#d1c7bd] bg-[#070b19] px-2 py-0.5 rounded border border-[#d4af37]/20">- (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)</span>
+)}
 </td>
 <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
 <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
 <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
 <td className="p-3.5">
-<span className={⁠px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : g.status === 'late_receive_after' ? 'bg-amber-900/40 text-amber-300 border border-amber-500/30' : g.status === 'dress_violation_receive_after' ? 'bg-orange-900/40 text-orange-300 border border-orange-500/30' : 'bg-slate-800 text-[#d1c7bd]'}⁠}>
+<span className={⁠px-2 py-0.5 rounded-full text-[10px] font-bold ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : g.status.includes('receive_after') || g.status === 'no_item_ordered' ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}⁠}>
 {getStatusLabel(g.status)}
 </span>
 </td>
@@ -944,102 +961,52 @@ className="rounded bg-slate-800 border-slate-700 text-[#d4af37] cursor-pointer"
 </div>
 )}
 </main>
-{/* Modal ตั้งค่าผังเก้าอี้และจำนวนที่นั่งต่อแถว */}
-{isGridModalOpen && (
-<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-<div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl text-center">
-<h3 className="text-base font-black text-[#f3e5ab] flex items-center justify-center gap-2">
-<Grid className="w-5 h-5 text-[#d4af37]" /> ตั้งค่าผังเก้าอี้ (A, B, C...)
-</h3>
-<p className="text-xs text-[#d1c7bd]">กำหนดจำนวนที่นั่งต่อแถว (เช่น 10 หรือ 12 ตัวต่อแถว) ระบบจะรันรหัส A1, A2... ไปเรื่อยๆ อัตโนมัติ</p>
-<div className="space-y-3 text-left">
-<div>
-<label className="text-xs font-bold text-[#f3e5ab] block mb-1">จำนวนที่นั่งต่อแถว (Seats Per Row):</label>
-<input
-type="number"
-min="1"
-max="50"
-value={seatsPerRow}
-onChange={(e) => setSeatsPerRow(Math.max(1, Number(e.target.value)))}
-className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7] outline-none"
-/>
-</div>
-</div>
-<button
-onClick={() => setIsGridModalOpen(false)}
-className="w-full py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl text-xs shadow-md"
->
-บันทึกการตั้งค่า
+{/* Modal ใบรายชื่อพิธีกร (MC Script Sheet) */}
+{isMcModalOpen && (
+<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+<div className="bg-white text-gray-900 w-full max-w-4xl p-8 rounded-3xl shadow-2xl space-y-6 my-8">
+<div className="flex justify-between items-center border-b pb-4 print:hidden">
+<h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+<Printer className="w-5 h-5 text-blue-600" /> ใบรายชื่อและสคริปต์สำหรับพิธีกร (MC Script)
+</h2>
+<div className="flex gap-2">
+<button onClick={() => window.print()} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
+<Printer className="w-4 h-4" /> สั่งพิมพ์เอกสาร
 </button>
+<button onClick={() => setIsMcModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold">ปิด</button>
 </div>
-</div>
-)}
-{/* Modal ใบรายชื่อสำหรับพิธีกร (MC Print Sheet) */}
-{isMcPrintModalOpen && (
-<div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-<div className="bg-[#0e1628] border-2 border-[#d4af37] rounded-3xl p-6 max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl text-[#fdfbf7]">
-<div className="flex justify-between items-center border-b border-[#d4af37]/30 pb-3 mb-4">
-<h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2">
-<Printer className="w-5 h-5 text-[#d4af37]" /> ใบรายชื่อสำหรับพิธีกร (MC Reader Script Sheet)
-</h3>
-<button onClick={() => setIsMcPrintModalOpen(false)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
-</div>
-<div className="flex-1 overflow-y-auto space-y-4 pr-1 bg-[#070b19] p-4 rounded-2xl border border-[#d4af37]/30 font-sans">
-<div className="text-center pb-3 border-b border-slate-800">
-<h2 className="text-lg font-black text-[#f3e5ab]">พิธีมอบประดับบ่าเกียรติยศ SPU</h2>
-<p className="text-xs text-slate-400">ลำดับรายชื่อสำหรับพิธีกรประกาศบนเวที (เรียงตามลำดับชั้นปีและป้ายที่นั่ง)</p>
 </div>
 <div className="space-y-6">
-{['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].map((yearGroup) => {
-const list = guestsWithComputedBadges.filter(g => g.year === yearGroup);
-if (list.length === 0) return null;
-return (
-<div key={yearGroup} className="space-y-2">
-<h4 className="text-xs font-black text-[#d4af37] bg-[#d4af37]/10 px-3 py-1.5 rounded-lg border border-[#d4af37]/30 inline-block">
-ชั้นปี: {yearGroup} ({list.length} คน)
-</h4>
-<table className="w-full text-left text-xs border-collapse">
+<div className="text-center space-y-1">
+<h1 className="text-2xl font-black text-gray-900">พิธีมอบประดับบ่าเกียรติยศ SPU</h1>
+<p className="text-xs text-gray-600">ลำดับรายชื่อผู้เข้าร่วมพิธีเรียงตามคิวป้ายและชั้นปี</p>
+</div>
+<table className="w-full border-collapse border border-gray-300 text-xs">
 <thead>
-<tr className="bg-[#121f38] text-[#f3e5ab] border-b border-slate-700">
-<th className="p-2 w-16 text-center">ป้าย</th>
-<th className="p-2 w-28">รหัสนักศึกษา</th>
-<th className="p-2">ชื่อ - นามสกุล</th>
-<th className="p-2 w-28 text-center">สถานะ</th>
+<tr className="bg-gray-100 text-gray-700">
+<th className="border border-gray-300 p-2.5 text-center w-20">คิวป้าย</th>
+<th className="border border-gray-300 p-2.5 text-center w-28">รหัสนักศึกษา</th>
+<th className="border border-gray-300 p-2.5 text-left">ชื่อ - นามสกุล</th>
+<th className="border border-gray-300 p-2.5 text-center w-20">ชั้นปี</th>
+<th className="border border-gray-300 p-2.5 text-center w-36">สถานะ</th>
 </tr>
 </thead>
-<tbody className="divide-y divide-slate-800">
-{list.map((g) => (
-<tr key={g.id} className="hover:bg-slate-900/50">
-<td className="p-2 font-black text-center text-[#d4af37]">ป้าย {g.badgeNumber}</td>
-<td className="p-2 font-mono text-slate-300">{g.studentId || '-'}</td>
-<td className="p-2 font-bold text-white">{g.name}</td>
-<td className="p-2 text-center">
-<span className={⁠text-[10px] px-2 py-0.5 rounded ${g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300' : 'bg-slate-800 text-slate-400'}⁠}>
-{getStatusLabel(g.status)}
-</span>
+<tbody>
+{guestsWithComputedBadges.map((g, idx) => (
+<tr key={idx} className="hover:bg-gray-50">
+<td className="border border-gray-300 p-2.5 text-center font-bold text-blue-600">
+{g.badgeNumber !== '-' ? ⁠#${g.badgeNumber}⁠ : '-'}
+</td>
+<td className="border border-gray-300 p-2.5 text-center font-mono">{g.studentId || '-'}</td>
+<td className="border border-gray-300 p-2.5 font-bold">{g.name}</td>
+<td className="border border-gray-300 p-2.5 text-center">{g.year}</td>
+<td className="border border-gray-300 p-2.5 text-center text-[11px]">
+{g.status === 'checked_in' ? 'มาปกติ' : g.status === 'late_receive_after' ? 'มาสาย (ไม่รับบ่า)' : g.status === 'dress_violation_receive_after' ? 'ผิดระเบียบ (ไม่รับบ่า)' : 'รอเช็กชื่อ'}
 </td>
 </tr>
 ))}
 </tbody>
 </table>
-</div>
-);
-})}
-</div>
-</div>
-<div className="flex gap-2 pt-4 border-t border-[#d4af37]/30 mt-2">
-<button
-onClick={() => window.print()}
-className="flex-1 py-2.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black rounded-xl text-xs shadow-md flex items-center justify-center gap-1.5"
->
-<Printer className="w-4 h-4" /> สั่งพิมพ์ / บันทึกเป็น PDF
-</button>
-<button
-onClick={() => setIsMcPrintModalOpen(false)}
-className="px-4 py-2.5 bg-[#121f38] text-[#d1c7bd] font-bold rounded-xl text-xs border border-[#d4af37]/30"
->
-ปิด
-</button>
 </div>
 </div>
 </div>
@@ -1056,7 +1023,7 @@ className="px-4 py-2.5 bg-[#121f38] text-[#d1c7bd] font-bold rounded-xl text-xs 
 </span>
 <h3 className="text-lg font-black text-[#fdfbf7] mt-2">{duplicateAlertModal.guest?.name}</h3>
 <p className="text-xs text-amber-300 mt-1 font-bold">
-บุคคลนี้ได้ทำการเช็กชื่อไปแล้ว ({getStatusLabel(duplicateAlertModal.guest?.status)})<br />กรุณาสแกน QR Code ใหม่
+บุคคลนี้ได้ทำการเช็กชื่อแล้ว ({getStatusLabel(duplicateAlertModal.guest?.status)})<br />กรุณาสแกน QR Code ใหม่
 </p>
 </div>
 <button
@@ -1072,8 +1039,8 @@ className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black
 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
 <div className="bg-[#0e1628] border-2 border-[#d4af37] text-[#fdfbf7] rounded-3xl p-6 max-w-sm w-full shadow-2xl scale-100 animate-in zoom-in-95 duration-200 space-y-4">
 <div className="flex justify-between items-start">
-<span className="px-3 py-1 rounded-xl text-xs font-black text-[#070b19] bg-[#d4af37]">
-ป้าย {scannedPreviewGuest.badgeNumber}
+<span className={⁠px-3 py-1 rounded-xl text-xs font-black text-[#070b19] ${scannedPreviewGuest.badgeNumber !== '-' ? 'bg-[#d4af37]' : 'bg-slate-400'}⁠}>
+{scannedPreviewGuest.badgeNumber !== '-' ? ⁠#${scannedPreviewGuest.badgeNumber}⁠ : 'ไม่มีคิวเวที'}
 </span>
 <span className="px-3 py-1 bg-[#121f38] border border-[#d4af37]/40 rounded-xl text-xs font-bold text-[#f3e5ab]">{getStatusLabel(scannedPreviewGuest.status)}</span>
 </div>
@@ -1085,14 +1052,14 @@ className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black
 {scannedPreviewGuest.status === 'pending' ? (
 <>
 <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'checked_in')} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl text-xs shadow-md transition-transform active:scale-95">
-✓ มาปกติ (จัดเรียงตามลำดับปกติ)
+✓ มาปกติ (เข้าคิวขึ้นรับบ่า)
 </button>
 <div className="grid grid-cols-2 gap-2">
 <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-xl text-[11px] transition-transform active:scale-95">
-⏰ มาสาย (ต่อท้ายชั้นปี)
+⏰ มาสาย (ร่วมพิธี/ไม่รับบ่า)
 </button>
 <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
-⚠️ ผิดระเบียบ (ต่อท้ายชั้นปี)
+⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่รับบ่า)
 </button>
 </div>
 </>
@@ -1127,7 +1094,7 @@ className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black
 <p className="text-xl font-black text-emerald-300 mt-1">{summaryStats.checkedIn} คน</p>
 </div>
 <div className="bg-[#070b19] border border-amber-900/50 rounded-2xl p-3">
-<span className="text-amber-400">มาสาย / ผิดระเบียบ (ต่อท้ายปี)</span>
+<span className="text-amber-400">มาสาย / ผิดระเบียบ</span>
 <p className="text-xl font-black text-amber-300 mt-1">{summaryStats.late + summaryStats.dressViolation} คน</p>
 </div>
 <div className="bg-[#070b19] border border-rose-900/50 rounded-2xl p-3">
@@ -1231,7 +1198,7 @@ reader.readAsBinaryString(file);
 <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
 <button disabled={excelPreviewData.length === 0} onClick={async () => {
 const colRef = collection(db, COLLECTION_NAME);
-const sorted = sortGuestsByCustomCriteria([...guests, ...excelPreviewData]);
+const sorted = sortGuestsByCustomCriteria([...guestsWithComputedBadges, ...excelPreviewData]);
 for (let i = 0; i < sorted.length; i += 400) {
 const b = writeBatch(db);
 sorted.slice(i, i + 400).forEach(g => b.set(doc(colRef, g.id), g));
