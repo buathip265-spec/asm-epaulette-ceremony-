@@ -27,6 +27,15 @@ const CUSTOM_FIREBASE_CONFIG = {
 };
 
 const COLLECTION_NAME = 'spu_guests';
+// เอกสารเก็บค่าตั้งค่าระบบ (เช่น จำนวนที่นั่งต่อแถว) ไว้ใน collection เดียวกัน เพื่อให้ทุกเครื่องใช้ค่าเดียวกันและจำไว้ตลอด
+const SETTINGS_DOC_ID = 'app_settings';
+const SEATS_LS_KEY = 'spu_seats_per_row';
+const readSavedSeatsPerRow = () => {
+  try {
+    const v = parseInt(localStorage.getItem(SEATS_LS_KEY), 10);
+    return !isNaN(v) && v >= 1 ? v : 10;
+  } catch (e) { return 10; }
+};
 
 const detectYearFromStudentId = (studentId) => {
   if (!studentId || String(studentId).trim().length < 2) return 'ปี 1';
@@ -152,7 +161,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('scan');
 
   const [batchSize, setBatchSize] = useState(14);
-  const [seatsPerRow, setSeatsPerRow] = useState(10);
+  const [seatsPerRow, setSeatsPerRow] = useState(readSavedSeatsPerRow);
+  const [seatsPerRowInput, setSeatsPerRowInput] = useState(() => String(readSavedSeatsPerRow())); // ข้อความในช่องกรอก (ปล่อยว่างระหว่างพิมพ์ได้)
+  const seatsEditingRef = useRef(false);
+  const seatsSaveTimerRef = useRef(null);
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
@@ -233,11 +245,19 @@ export default function App() {
     signInAnonymously(auth).catch(() => {});
     const guestsColRef = collection(db, COLLECTION_NAME);
     const unsubscribe = onSnapshot(guestsColRef, (snapshot) => {
-      if (snapshot.empty) {
-        setGuests([]);
-        return;
+      // ค่าตั้งค่าที่นั่งต่อแถวที่บันทึกไว้ (ไม่ใช่รายชื่อ) — ไม่ทับค่าตอนกำลังพิมพ์อยู่
+      const settingsSnap = snapshot.docs.find((d) => d.id === SETTINGS_DOC_ID);
+      if (settingsSnap && !seatsEditingRef.current) {
+        const v = parseInt(settingsSnap.data().seatsPerRow, 10);
+        if (!isNaN(v) && v >= 1) {
+          setSeatsPerRow(v);
+          setSeatsPerRowInput(String(v));
+          try { localStorage.setItem(SEATS_LS_KEY, String(v)); } catch (e) {}
+        }
       }
-      const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+      const items = snapshot.docs
+        .filter((d) => d.id !== SETTINGS_DOC_ID)
+        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       setGuests(sortGuestsByCustomCriteria(items));
     }, (err) => {
       console.error(err);
@@ -323,6 +343,18 @@ export default function App() {
       setIsCameraActive(false);
     }
   }, [isAuthorized, activeTab]);
+
+  // บันทึกจำนวนที่นั่งต่อแถว: เก็บในเครื่อง + ฐานข้อมูล (ทุกเครื่องใช้ค่าเดียวกัน) จนกว่าจะมีคนเปลี่ยนใหม่
+  const saveSeatsPerRow = async (n) => {
+    try { localStorage.setItem(SEATS_LS_KEY, String(n)); } catch (e) {}
+    try {
+      await setDoc(doc(db, COLLECTION_NAME, SETTINGS_DOC_ID), { seatsPerRow: n, isSettings: true }, { merge: true });
+      showToast('success', `บันทึกจำนวนที่นั่งต่อแถว = ${n} แล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'บันทึกค่าลงฐานข้อมูลไม่สำเร็จ (ยังจำไว้ในเครื่องนี้)');
+    }
+  };
 
   // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรกของตาราง
   useEffect(() => {
@@ -1259,11 +1291,33 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <span className="text-xs text-[#d1c7bd] font-bold">ที่นั่งต่อแถว:</span>
                 <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={seatsPerRow}
-                  onChange={(e) => setSeatsPerRow(Math.max(1, parseInt(e.target.value) || 10))}
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder={String(seatsPerRow)}
+                  value={seatsPerRowInput}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                    setSeatsPerRowInput(digits);
+                    const n = parseInt(digits, 10);
+                    if (!isNaN(n) && n >= 1) {
+                      setSeatsPerRow(n);
+                      clearTimeout(seatsSaveTimerRef.current);
+                      seatsSaveTimerRef.current = setTimeout(() => { seatsSaveTimerRef.current = null; saveSeatsPerRow(n); }, 800);
+                    }
+                  }}
+                  onFocus={() => { seatsEditingRef.current = true; }}
+                  onBlur={() => {
+                    seatsEditingRef.current = false;
+                    const n = parseInt(seatsPerRowInput, 10);
+                    if (isNaN(n) || n < 1) {
+                      setSeatsPerRowInput(String(seatsPerRow));
+                    } else if (seatsSaveTimerRef.current) {
+                      clearTimeout(seatsSaveTimerRef.current);
+                      seatsSaveTimerRef.current = null;
+                      saveSeatsPerRow(n);
+                    }
+                  }}
                   className="bg-[#070b19] border border-[#d4af37]/60 text-white px-3 py-1.5 rounded-xl w-20 text-center font-bold text-xs"
                 />
               </div>
