@@ -129,6 +129,16 @@ const compareStandby = (a, b) => {
   return (a.standbyOrder || 0) - (b.standbyOrder || 0);
 };
 
+// โหลดสคริปต์จาก CDN เฉพาะตอนที่ต้องใช้ (สร้าง PDF) เพื่อไม่ต้องเพิ่ม dependency ใน package.json
+const loadScript = (src, isReady) => new Promise((resolve, reject) => {
+  if (isReady()) { resolve(); return; }
+  const el = document.createElement('script');
+  el.src = src;
+  el.onload = () => (isReady() ? resolve() : reject(new Error('script not ready')));
+  el.onerror = () => reject(new Error('โหลดสคริปต์ไม่สำเร็จ: ' + src));
+  document.head.appendChild(el);
+});
+
 const app = initializeApp(CUSTOM_FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -153,6 +163,7 @@ export default function App() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
   // ---------- ระบบแจ้งเตือน (Toast) ----------
   const [toasts, setToasts] = useState([]);
@@ -626,6 +637,50 @@ export default function App() {
     });
   };
 
+  // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
+  const handleSaveMcPdf = async () => {
+    if (mcPages.length === 0) {
+      showToast('warning', 'ไม่มีรายชื่อให้สร้างเอกสาร');
+      return;
+    }
+    setIsPdfGenerating(true);
+    const tid = showToast('loading', 'กำลังสร้างไฟล์ PDF...');
+    let holder = null;
+    try {
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => !!window.html2canvas);
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pageEls = document.querySelectorAll('#mc-print-root .mc-page');
+
+      holder = document.createElement('div');
+      holder.style.cssText = 'position:fixed;left:-10000px;top:0;background:#ffffff;';
+      document.body.appendChild(holder);
+
+      for (let i = 0; i < pageEls.length; i++) {
+        holder.innerHTML = '';
+        const clone = pageEls[i].cloneNode(true);
+        clone.style.boxShadow = 'none';
+        clone.style.margin = '0';
+        holder.appendChild(clone);
+        const canvas = await window.html2canvas(clone, { scale: 2, backgroundColor: '#ffffff' });
+        if (i > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        updateToast(tid, 'loading', `กำลังสร้างไฟล์ PDF... (${i + 1}/${pageEls.length} หน้า)`);
+      }
+
+      pdf.save('รายชื่อพิธีกร.pdf');
+      updateToast(tid, 'success', `บันทึกไฟล์ PDF เรียบร้อยแล้ว (${pageEls.length} หน้า)`);
+    } catch (err) {
+      console.error(err);
+      updateToast(tid, 'error', 'สร้าง PDF ไม่สำเร็จ (อาจไม่มีอินเทอร์เน็ต) กำลังเปิดหน้าพิมพ์แทน เลือก "บันทึกเป็น PDF" ได้');
+      setTimeout(() => window.print(), 600);
+    } finally {
+      if (holder && holder.parentNode) holder.parentNode.removeChild(holder);
+      setIsPdfGenerating(false);
+    }
+  };
+
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -800,6 +855,29 @@ export default function App() {
   const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort(compareStandby), [guestsWithComputedBadges]);
   const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped), [guestsWithComputedBadges]);
   const lateQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped), [guestsWithComputedBadges]);
+
+  // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
+  const mcPages = useMemo(() => {
+    const ROWS_PER_PAGE = 25;
+    const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
+    const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
+    const pages = [];
+    [...knownYears, ...otherYears].forEach((y) => {
+      const list = guestsWithComputedBadges.filter((g) => g.year === y).sort(compareSeating);
+      if (list.length === 0) return;
+      const totalPages = Math.ceil(list.length / ROWS_PER_PAGE);
+      for (let i = 0; i < totalPages; i++) {
+        pages.push({
+          year: y,
+          page: i + 1,
+          totalPages,
+          total: list.length,
+          rows: list.slice(i * ROWS_PER_PAGE, (i + 1) * ROWS_PER_PAGE)
+        });
+      }
+    });
+    return pages;
+  }, [guestsWithComputedBadges]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guestsWithComputedBadges.filter((g) => {
@@ -976,7 +1054,6 @@ export default function App() {
               <button onClick={() => setActiveTab('scan')} className={navBtnClass('scan')}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
               <button onClick={() => setActiveTab('queue')} className={navBtnClass('queue')}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={navBtnClass('dashboard')}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-              <button onClick={() => setIsMcModalOpen(true)} className="px-4 py-2 rounded-xl text-xs font-bold text-blue-300 hover:text-white bg-blue-900/40 border border-blue-500/30 transition-all flex items-center gap-1.5"><Printer className="w-4 h-4" /> สร้างใบรายชื่อพิธีกร</button>
               <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
             </nav>
             <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
@@ -1199,6 +1276,12 @@ export default function App() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button
+                  onClick={() => setIsMcModalOpen(true)}
+                  className="px-3 py-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                >
+                  <Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF)
+                </button>
+                <button
                   onClick={() => setIsSummaryModalOpen(true)}
                   className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
                 >
@@ -1383,54 +1466,92 @@ export default function App() {
         )}
       </main>
 
-      {/* Modal ใบรายชื่อพิธีกร (MC Script Sheet) */}
+      {/* Modal ใบรายชื่อพิธีกร (บันทึกเป็น PDF แยกหน้าตามชั้นปี) */}
       {isMcModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
-          <div className="bg-white text-gray-900 w-full max-w-4xl p-8 rounded-3xl shadow-2xl space-y-6 my-8">
-            <div className="flex justify-between items-center border-b pb-4 print:hidden">
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <Printer className="w-5 h-5 text-blue-600" /> ใบรายชื่อและสคริปต์สำหรับพิธีกร (MC Script)
-              </h2>
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #mc-print-root, #mc-print-root * { visibility: visible !important; }
+              #mc-print-root { position: absolute; left: 0; top: 0; display: block !important; }
+              .mc-page { box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
+              .mc-page:last-child { break-after: auto; page-break-after: auto; }
+              @page { size: A4; margin: 0; }
+            }
+          `}</style>
+          <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-300 pb-4 print:hidden">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-blue-600" /> ใบรายชื่อสำหรับพิธีกร
+                </h2>
+                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี ไม่ปนกัน • ทั้งหมด {mcPages.length} หน้า • มีช่องติ๊ก มา / สาย</p>
+              </div>
               <div className="flex gap-2">
-                <button onClick={() => window.print()} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
-                  <Printer className="w-4 h-4" /> สั่งพิมพ์เอกสาร
+                <button
+                  disabled={isPdfGenerating}
+                  onClick={handleSaveMcPdf}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md"
+                >
+                  {isPdfGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} บันทึกเป็น PDF
                 </button>
                 <button onClick={() => setIsMcModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold">ปิด</button>
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="text-center space-y-1">
-                <h1 className="text-2xl font-black text-gray-900">พิธีมอบประดับบ่าเกียรติยศ SPU</h1>
-                <p className="text-xs text-gray-600">ลำดับรายชื่อผู้เข้าร่วมพิธีเรียงตามคิวป้ายและชั้นปี</p>
+            <div className="overflow-x-auto">
+              <div id="mc-print-root" className="flex flex-col items-center gap-4">
+                {mcPages.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-10">ยังไม่มีรายชื่อในระบบ</p>
+                ) : mcPages.map((pg, pIdx) => (
+                  <div
+                    key={pIdx}
+                    className="mc-page"
+                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 48px 40px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
+                  >
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.4 }}>พิธีมอบประดับบ่าเกียรติยศ SPU</div>
+                      <div style={{ fontSize: 15, marginTop: 2, lineHeight: 1.4 }}>รายชื่อ{pg.year} • ทั้งหมด {pg.total} คน</div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginTop: 16, fontSize: 13 }}>
+                      <colgroup>
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 120 }} />
+                        <col />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 70 }} />
+                      </colgroup>
+                      <thead>
+                        <tr style={{ background: '#f3f4f6', height: 36 }}>
+                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>ที่นั่ง</th>
+                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>รหัสนักศึกษา</th>
+                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'left' }}>ชื่อ - นามสกุล</th>
+                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>มา</th>
+                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>สาย</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pg.rows.map((g) => (
+                          <tr key={g.id} style={{ height: 34 }}>
+                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center', fontWeight: 700 }}>#{g.badgeNumber}</td>
+                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center', fontFamily: 'monospace' }}>{g.studentId || '-'}</td>
+                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</td>
+                            <td style={{ border: '1px solid #9ca3af', textAlign: 'center' }}>
+                              <span style={{ display: 'inline-block', width: 16, height: 16, border: '1.5px solid #374151', borderRadius: 3, verticalAlign: 'middle' }} />
+                            </td>
+                            <td style={{ border: '1px solid #9ca3af', textAlign: 'center' }}>
+                              <span style={{ display: 'inline-block', width: 16, height: 16, border: '1.5px solid #374151', borderRadius: 3, verticalAlign: 'middle' }} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div style={{ position: 'absolute', bottom: 18, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#6b7280' }}>
+                      {pg.year} • หน้า {pg.page}/{pg.totalPages}
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              <table className="w-full border-collapse border border-gray-300 text-xs">
-                <thead>
-                  <tr className="bg-gray-100 text-gray-700">
-                    <th className="border border-gray-300 p-2.5 text-center w-20">คิวป้าย</th>
-                    <th className="border border-gray-300 p-2.5 text-center w-28">รหัสนักศึกษา</th>
-                    <th className="border border-gray-300 p-2.5 text-left">ชื่อ - นามสกุล</th>
-                    <th className="border border-gray-300 p-2.5 text-center w-20">ชั้นปี</th>
-                    <th className="border border-gray-300 p-2.5 text-center w-36">สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {guestsWithComputedBadges.map((g, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 p-2.5 text-center font-bold text-blue-600">
-                        {g.badgeNumber !== '-' ? `#${g.badgeNumber}` : '-'}
-                      </td>
-                      <td className="border border-gray-300 p-2.5 text-center font-mono">{g.studentId || '-'}</td>
-                      <td className="border border-gray-300 p-2.5 font-bold">{g.name}</td>
-                      <td className="border border-gray-300 p-2.5 text-center">{g.year}</td>
-                      <td className="border border-gray-300 p-2.5 text-center text-[11px]">
-                        {g.status === 'pending' ? 'รอเช็กชื่อ' : getGuestStatusLabel(g)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>
