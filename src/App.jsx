@@ -86,10 +86,20 @@ const isDisqualifiedStatus = (status) =>
 // (isLate จะคงอยู่แม้สถานะเปลี่ยนเป็น standby / on_stage / completed)
 const isLateGuest = (g) => !!g && (g.isLate === true || g.status === 'late_receive_after');
 
-// 0 = ปกติ, 1 = มาสาย (ท้ายแถว), 2 = ไม่ขึ้นรับบ่า
+// ประเภทนักศึกษา: 'normal' (ค่าเริ่มต้น เมื่อไม่มีข้อมูล) หรือ 'staff'
+// Staff ไม่ถูกจัดที่นั่งในแถวปกติ (ที่นั่ง = L ไม่มีเลขย่อย) และอยู่ท้ายกลุ่มนักศึกษาปกติของชั้นปีตัวเองในคิวขึ้นรับบ่า
+const STAFF_SEAT_LABEL = 'L';
+const getStudentType = (g) => (g && g.studentType === 'staff' ? 'staff' : 'normal');
+const isStaffGuest = (g) => getStudentType(g) === 'staff';
+
+// ใช้เทียบรายชื่อซ้ำตอนนำเข้า Excel (ตัดช่องว่างส่วนเกิน ไม่สนตัวพิมพ์เล็ก/ใหญ่)
+const normKey = (v) => String(v === undefined || v === null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
+
+// 0 = ปกติ, 1 = Staff (ท้ายกลุ่มปกติของชั้นปี), 2 = มาสาย (ท้ายสุดของชั้นปี), 3 = ไม่ขึ้นรับบ่า
 const getQueueRank = (g) => {
-  if (isDisqualifiedStatus(g.status)) return 2;
-  if (isLateGuest(g)) return 1;
+  if (isDisqualifiedStatus(g.status)) return 3;
+  if (isLateGuest(g)) return 2;
+  if (isStaffGuest(g)) return 1;
   return 0;
 };
 
@@ -132,9 +142,10 @@ const compareStandby = (a, b) => {
   const yearA = getYearOrderWeight(a.year);
   const yearB = getYearOrderWeight(b.year);
   if (yearA !== yearB) return yearA - yearB;
-  const lateA = isLateGuest(a) ? 1 : 0;
-  const lateB = isLateGuest(b) ? 1 : 0;
-  if (lateA !== lateB) return lateA - lateB;
+  const rankOf = (g) => (isLateGuest(g) ? 2 : isStaffGuest(g) ? 1 : 0);
+  const rankA = rankOf(a);
+  const rankB = rankOf(b);
+  if (rankA !== rankB) return rankA - rankB;
   return (a.standbyOrder || 0) - (b.standbyOrder || 0);
 };
 
@@ -219,6 +230,8 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
+  const [filterType, setFilterType] = useState('all'); // all | normal | staff
+  const [filterGender, setFilterGender] = useState('all'); // all | female | male
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 15;
 
@@ -229,6 +242,7 @@ export default function App() {
 
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
+  const [excelDupCount, setExcelDupCount] = useState(0);
   const fileInputRef = useRef(null);
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
@@ -267,15 +281,22 @@ export default function App() {
   }, []);
 
   // เลขที่นั่งคำนวณจากรายชื่อปัจจุบัน เรียง ชั้นปี → เพศ (หญิงก่อน) → ชื่อ โดยไม่ขึ้นกับสถานะเช็กชื่อ
-  // คนมาสายยังใช้เลขที่นั่งเดิม (แค่ถูกเรียกขึ้นรับบ่าท้ายแถวของชั้นปี) ส่วนการเพิ่ม/ลบรายชื่อจะทำให้เลขที่นั่งคำนวณใหม่
+  // - นักศึกษา Normal: จัดที่นั่งตามแถว A, B, C... (ข้ามตัวอักษร L เพราะสงวนไว้ให้ Staff)
+  // - นักศึกษา Staff: ไม่เข้าแถวที่นั่ง ใช้ตำแหน่ง "L" โดยไม่มีเลขย่อย
+  // - คนมาสายยังใช้เลขที่นั่งเดิม ส่วนการเพิ่ม/ลบ/เปลี่ยนประเภทนักศึกษาจะทำให้เลขที่นั่งของ Normal คำนวณใหม่
   const guestsWithComputedBadges = useMemo(() => {
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const rowLabel = (r) => (r < 26 ? letters[r] : letters[Math.floor(r / 26) - 1] + letters[r % 26]);
+    const rowLetters = 'ABCDEFGHIJKMNOPQRSTUVWXYZ';
+    const n = rowLetters.length;
+    const rowLabel = (r) => (r < n ? rowLetters[r] : rowLetters[Math.floor(r / n) - 1] + rowLetters[r % n]);
     const seatMap = new Map();
-    [...guests].sort(compareSeating).forEach((g, i) => {
+    [...guests].filter((g) => !isStaffGuest(g)).sort(compareSeating).forEach((g, i) => {
       seatMap.set(g.id, `${rowLabel(Math.floor(i / seatsPerRow))}${(i % seatsPerRow) + 1}`);
     });
-    return guests.map((g) => ({ ...g, badgeNumber: seatMap.get(g.id) }));
+    return guests.map((g) => ({
+      ...g,
+      studentType: getStudentType(g),
+      badgeNumber: isStaffGuest(g) ? STAFF_SEAT_LABEL : seatMap.get(g.id)
+    }));
   }, [guests, seatsPerRow]);
 
   useEffect(() => {
@@ -359,7 +380,7 @@ export default function App() {
   // เปลี่ยนตัวกรองแล้วกลับไปหน้าแรกของตาราง
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterStatus, filterYear]);
+  }, [searchQuery, filterStatus, filterYear, filterType, filterGender]);
 
   const handleStaffLogin = (e) => {
     e.preventDefault();
@@ -713,6 +734,64 @@ export default function App() {
     }
   };
 
+  // เปลี่ยนประเภท Normal / Staff ของคนเดียว (บันทึกลงฐานข้อมูลจริง)
+  const handleSetStudentType = async (guest, type) => {
+    if (getStudentType(guest) === type) return;
+    try {
+      await updateDoc(getGuestDocRef(guest.id), { studentType: type });
+      showToast('success', type === 'staff'
+        ? `กำหนด ${guest.name} เป็น Staff แล้ว (ที่นั่ง ${STAFF_SEAT_LABEL})`
+        : `เปลี่ยน ${guest.name} กลับเป็น Normal แล้ว`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', `เปลี่ยนประเภทของ ${guest.name} ไม่สำเร็จ กรุณาลองอีกครั้ง`);
+    }
+  };
+
+  // เปลี่ยนประเภทหลายรายการ: ทำกับรายการที่เลือก "และยังอยู่ในผลค้นหา/ผลกรองปัจจุบัน" เท่านั้น
+  const handleBulkSetStudentType = (type) => {
+    const visible = new Set(filteredDashboardGuests.map((g) => g.id));
+    const ids = selectedGuestIds.filter((id) => visible.has(id));
+    if (ids.length === 0) {
+      showToast('warning', 'กรุณาเลือกรายชื่อก่อน');
+      return;
+    }
+    const byId = new Map(guestsWithComputedBadges.map((g) => [g.id, g]));
+    const changeIds = ids.filter((id) => byId.get(id) && getStudentType(byId.get(id)) !== type);
+    if (changeIds.length === 0) {
+      showToast('info', `รายชื่อที่เลือกเป็น ${type === 'staff' ? 'Staff' : 'Normal'} อยู่แล้วทั้งหมด`);
+      return;
+    }
+    const typeLabel = type === 'staff' ? 'Staff' : 'Normal';
+    const skipped = ids.length - changeIds.length;
+    const detail = type === 'staff'
+      ? `• ไม่จัดที่นั่งในแถวปกติ (ที่นั่ง ${STAFF_SEAT_LABEL} ไม่มีเลขย่อย)\n• ไปอยู่ท้ายกลุ่มนักศึกษาปกติของชั้นปีตัวเองในคิวขึ้นรับบ่า\n• เลขที่นั่งของนักศึกษา Normal ที่เหลือจะคำนวณใหม่`
+      : `• กลับเข้าการจัดที่นั่งและจัดคิวตามปกติ\n• เลขที่นั่งของนักศึกษา Normal จะคำนวณใหม่`;
+    setConfirmModal({
+      isOpen: true,
+      title: `กำหนดเป็น ${typeLabel} (${changeIds.length} รายชื่อ)`,
+      message: `ต้องการเปลี่ยนประเภทของ ${changeIds.length} รายชื่อที่เลือกเป็น ${typeLabel} ใช่หรือไม่?${skipped > 0 ? ` (ข้าม ${skipped} รายชื่อที่เป็น ${typeLabel} อยู่แล้ว)` : ''}\n${detail}`,
+      confirmText: `ยืนยัน ${typeLabel}`,
+      confirmColor: type === 'staff' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-600 hover:bg-slate-500',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const tid = showToast('loading', `กำลังเปลี่ยน ${changeIds.length} รายชื่อเป็น ${typeLabel}...`);
+        try {
+          for (let i = 0; i < changeIds.length; i += 400) {
+            const batch = writeBatch(db);
+            changeIds.slice(i, i + 400).forEach((id) => batch.update(getGuestDocRef(id), { studentType: type }));
+            await batch.commit();
+          }
+          setSelectedGuestIds([]);
+          updateToast(tid, 'success', `เปลี่ยน ${changeIds.length} รายชื่อเป็น ${typeLabel} เรียบร้อยแล้ว`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'เปลี่ยนประเภทไม่สำเร็จ บางรายการอาจยังไม่เปลี่ยน กรุณาลองอีกครั้ง');
+        }
+      }
+    });
+  };
+
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -753,7 +832,8 @@ export default function App() {
         checkInTime: null,
         prevStatus: null,
         skipped: false,
-        standbyOrder: null
+        standbyOrder: null,
+        studentType: 'normal'
       };
       await setDoc(getGuestDocRef(newGuest.id), newGuest);
     }
@@ -895,7 +975,7 @@ export default function App() {
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
-      const list = guestsWithComputedBadges.filter((g) => g.year === y).sort(compareSeating);
+      const list = guestsWithComputedBadges.filter((g) => g.year === y).sort((a, b) => (isStaffGuest(a) ? 1 : 0) - (isStaffGuest(b) ? 1 : 0) || compareSeating(a, b));
       if (list.length === 0) return;
       const totalPages = Math.ceil(list.length / ROWS_PER_PAGE);
       for (let i = 0; i < totalPages; i++) {
@@ -915,13 +995,19 @@ export default function App() {
     return guestsWithComputedBadges.filter((g) => {
       if (filterStatus !== 'all' && g.status !== filterStatus) return false;
       if (filterYear !== 'all' && g.year !== filterYear) return false;
+      if (filterType !== 'all' && getStudentType(g) !== filterType) return false;
+      if (filterGender !== 'all') {
+        const gw = getGenderOrderWeight(g.name);
+        if (filterGender === 'female' && gw !== 0) return false;
+        if (filterGender === 'male' && gw !== 1) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         return (g.name || '').toLowerCase().includes(q) || (g.studentId && g.studentId.toLowerCase().includes(q)) || String(g.badgeNumber) === q.replace('#', '');
       }
       return true;
     });
-  }, [guestsWithComputedBadges, filterStatus, filterYear, searchQuery]);
+  }, [guestsWithComputedBadges, filterStatus, filterYear, filterType, filterGender, searchQuery]);
 
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
@@ -931,7 +1017,26 @@ export default function App() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
+  // กันเลือกข้อมูลที่อยู่นอกผลค้นหา/ผลกรองโดยไม่ตั้งใจ: เมื่อผลลัพธ์เปลี่ยน ให้เหลือเฉพาะรายการที่ยังมองเห็นอยู่
+  useEffect(() => {
+    const visible = new Set(filteredDashboardGuests.map((g) => g.id));
+    setSelectedGuestIds((prev) => {
+      const next = prev.filter((id) => visible.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [filteredDashboardGuests]);
+
   const pendingCount = guestsWithComputedBadges.filter((g) => g.status === 'pending').length;
+
+  // สรุปจำนวนแบบอัปเดตอัตโนมัติ (คำนวณจากข้อมูลสดจากฐานข้อมูล)
+  const typeStats = useMemo(() => {
+    const staffList = guestsWithComputedBadges.filter(isStaffGuest);
+    const byYear = {};
+    ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].forEach((y) => {
+      byYear[y] = staffList.filter((g) => g.year === y).length;
+    });
+    return { total: guestsWithComputedBadges.length, normal: guestsWithComputedBadges.length - staffList.length, staff: staffList.length, byYear };
+  }, [guestsWithComputedBadges]);
 
   const toastStyles = {
     success: { box: 'bg-emerald-950 border-emerald-500/60 text-emerald-100', Icon: CheckCircle2, icon: 'text-emerald-400' },
@@ -1181,7 +1286,7 @@ export default function App() {
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
                   {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
                     <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
+                      <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}{isStaffGuest(g) ? ' • Staff' : ''}</span></div>
                       <div>
                         <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
                         <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
@@ -1208,7 +1313,7 @@ export default function App() {
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
                   {lateQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมที่มาสาย</p> : lateQueue.map((g) => (
                     <div key={g.id} className="bg-[#121f38] border border-orange-500/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-orange-400">ที่นั่งเดิม #{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}</span></div>
+                      <div className="flex items-center justify-between"><span className="text-xs font-black text-orange-400">ที่นั่งเดิม #{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}{isStaffGuest(g) ? ' • Staff' : ''}</span></div>
                       <div>
                         <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
                         <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
@@ -1238,7 +1343,7 @@ export default function App() {
                       <div>
                         <span className="text-xs font-black text-amber-400 mr-2">#{g.badgeNumber}</span>
                         <span className="text-xs font-bold text-[#fdfbf7]">{g.name}</span>
-                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}{isLateGuest(g) ? ' • มาสาย' : ''}</div>
+                        <div className="text-[10px] text-[#d1c7bd] font-mono pl-6">คิวที่ {idx + 1} • {g.year}{isStaffGuest(g) ? ' • Staff' : ''}{isLateGuest(g) ? ' • มาสาย' : ''}</div>
                       </div>
                     </div>
                   ))}
@@ -1378,6 +1483,29 @@ export default function App() {
               </div>
             </div>
 
+            <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 shadow-lg space-y-3">
+              <div className="grid grid-cols-3 gap-3 text-xs">
+                <div className="bg-[#070b19] border border-[#d4af37]/30 rounded-2xl p-3">
+                  <span className="text-[#d1c7bd]">นักศึกษาทั้งหมด</span>
+                  <p className="text-xl font-black text-[#fdfbf7] mt-1">{typeStats.total} คน</p>
+                </div>
+                <div className="bg-[#070b19] border border-slate-600/50 rounded-2xl p-3">
+                  <span className="text-slate-300">Normal</span>
+                  <p className="text-xl font-black text-slate-100 mt-1">{typeStats.normal} คน</p>
+                </div>
+                <div className="bg-[#070b19] border border-purple-500/40 rounded-2xl p-3">
+                  <span className="text-purple-300">Staff</span>
+                  <p className="text-xl font-black text-purple-200 mt-1">{typeStats.staff} คน</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-purple-300">Staff แยกตามชั้นปี:</span>
+                {Object.entries(typeStats.byYear).map(([y, n]) => (
+                  <span key={y} className="px-2.5 py-1 rounded-full bg-purple-900/30 border border-purple-500/30 text-purple-200 font-bold">{y}: {n}</span>
+                ))}
+              </div>
+            </div>
+
             <div className="bg-[#0e1628] p-3 rounded-3xl border border-[#d4af37]/30 flex flex-col lg:flex-row gap-2 lg:items-center shadow-lg">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-[#d4af37] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1385,12 +1513,22 @@ export default function App() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="ค้นหาชื่อ / รหัสนักศึกษา / เลขที่นั่ง"
+                  placeholder="ค้นหาชื่อ-นามสกุล / รหัสนักศึกษา / เลขที่นั่ง"
                   className="w-full pl-9 pr-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
                 />
               </div>
+              <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7]">
+                <option value="all">Normal + Staff</option>
+                <option value="normal">Normal</option>
+                <option value="staff">Staff</option>
+              </select>
+              <select value={filterGender} onChange={(e) => setFilterGender(e.target.value)} className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7]">
+                <option value="all">ทุกเพศ</option>
+                <option value="female">หญิง</option>
+                <option value="male">ชาย</option>
+              </select>
               <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-xs text-[#fdfbf7]">
-                <option value="all">ทุกสถานะ</option>
+                <option value="all">ทุกสถานะเช็กชื่อ</option>
                 <option value="pending">ยังไม่มา</option>
                 <option value="checked_in">เช็กชื่อแล้ว (มาปกติ)</option>
                 <option value="late_receive_after">มาสาย (รอเรียกคิว)</option>
@@ -1413,6 +1551,38 @@ export default function App() {
                   เลือกทั้งหมดที่กรอง ({filteredDashboardGuests.length})
                 </button>
               )}
+            </div>
+
+            <div className="bg-[#0e1628] p-3 rounded-3xl border border-purple-500/40 flex flex-wrap items-center gap-2 shadow-lg">
+              <span className="text-xs font-bold text-purple-200">เลือกอยู่ {selectedGuestIds.length} รายการ</span>
+              <button
+                disabled={paginatedGuests.length === 0}
+                onClick={() => setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...paginatedGuests.map((g) => g.id)])))}
+                className="px-3 py-1.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#f3e5ab] border border-[#d4af37]/40 rounded-xl text-xs font-bold disabled:opacity-35"
+              >
+                เลือกทั้งหมดในหน้านี้ ({paginatedGuests.length})
+              </button>
+              <button
+                disabled={selectedGuestIds.length === 0}
+                onClick={() => setSelectedGuestIds([])}
+                className="px-3 py-1.5 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] border border-[#d4af37]/30 rounded-xl text-xs font-bold disabled:opacity-35"
+              >
+                ยกเลิกการเลือก
+              </button>
+              <button
+                disabled={selectedGuestIds.length === 0}
+                onClick={() => handleBulkSetStudentType('staff')}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+              >
+                กำหนดเป็น Staff
+              </button>
+              <button
+                disabled={selectedGuestIds.length === 0}
+                onClick={() => handleBulkSetStudentType('normal')}
+                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+              >
+                กำหนดเป็น Normal
+              </button>
             </div>
 
             <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
@@ -1459,6 +1629,7 @@ export default function App() {
                       <th className="p-3.5">รหัสนักศึกษา</th>
                       <th className="p-3.5">ชื่อ-นามสกุล</th>
                       <th className="p-3.5">ชั้นปี</th>
+                      <th className="p-3.5">ประเภท</th>
                       <th className="p-3.5">สถานะหน้างาน</th>
                       <th className="p-3.5">การจัดการด่วน (สาย / ผิดระเบียบ)</th>
                       <th className="p-3.5 text-right">การจัดการ</th>
@@ -1488,6 +1659,18 @@ export default function App() {
                         <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
                         <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
                         <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
+                        <td className="p-3.5">
+                          <div className="inline-flex rounded-lg overflow-hidden border border-[#d4af37]/30 text-[11px] font-bold">
+                            <button
+                              onClick={() => handleSetStudentType(g, 'normal')}
+                              className={`px-2.5 py-1 ${getStudentType(g) === 'normal' ? 'bg-slate-600 text-white' : 'bg-[#070b19] text-[#d1c7bd] hover:bg-[#121f38]'}`}
+                            >Normal</button>
+                            <button
+                              onClick={() => handleSetStudentType(g, 'staff')}
+                              className={`px-2.5 py-1 ${getStudentType(g) === 'staff' ? 'bg-purple-600 text-white' : 'bg-[#070b19] text-[#d1c7bd] hover:bg-[#121f38]'}`}
+                            >Staff</button>
+                          </div>
+                        </td>
                         <td className="p-3.5">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLateGuest(g) ? 'bg-amber-900/40 text-amber-300 border border-amber-500/30' : g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : isDisqualifiedStatus(g.status) ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
                             {getGuestStatusLabel(g)}
@@ -1798,7 +1981,7 @@ export default function App() {
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
                 const parsed = raw.map((row, idx) => ({
-                  id: 'imp_' + Date.now() + '_' + idx,
+                  id: String(row['รหัสนักศึกษา'] || '').trim() ? 'imp_' + String(row['รหัสนักศึกษา']).trim() : 'imp_' + Date.now() + '_' + idx,
                   studentId: String(row['รหัสนักศึกษา'] || ''),
                   name: String(row['ชื่อ-นามสกุล'] || row['ชื่อ'] || ''),
                   email: String(row['อีเมล'] || ''),
@@ -1810,35 +1993,70 @@ export default function App() {
                   checkInTime: null,
                   prevStatus: null,
                   skipped: false,
-                  standbyOrder: null
+                  standbyOrder: null,
+                  studentType: 'normal'
                 })).filter(g => g.name);
+
+                // ตัดรายชื่อที่ซ้ำกับในระบบ/ซ้ำกันเองในไฟล์ออก — ไม่เขียนทับรายชื่อเดิม (จึงไม่ทำให้สถานะ Staff หาย)
+                const existingIds = new Set(guestsWithComputedBadges.map((g) => normKey(g.studentId)).filter(Boolean));
+                const existingNames = new Set(guestsWithComputedBadges.map((g) => normKey(g.name)));
+                const seenKeys = new Set();
+                const fresh = [];
+                let dupCount = 0;
+                parsed.forEach((g) => {
+                  const sid = normKey(g.studentId);
+                  const key = sid ? 'id:' + sid : 'nm:' + normKey(g.name);
+                  const exists = sid ? existingIds.has(sid) : existingNames.has(normKey(g.name));
+                  if (exists || seenKeys.has(key)) { dupCount++; return; }
+                  seenKeys.add(key);
+                  fresh.push(g);
+                });
+
                 if (parsed.length === 0) {
                   showToast('warning', 'ไม่พบรายชื่อในไฟล์ ตรวจสอบหัวคอลัมน์ "ชื่อ-นามสกุล" และ "รหัสนักศึกษา"');
+                } else if (fresh.length === 0) {
+                  showToast('warning', `รายชื่อทั้งหมดในไฟล์ (${parsed.length} รายการ) มีอยู่ในระบบแล้ว ไม่มีรายชื่อใหม่ให้นำเข้า`);
                 } else {
-                  showToast('success', `อ่านไฟล์สำเร็จ พบ ${parsed.length} รายชื่อ`);
+                  showToast('success', `อ่านไฟล์สำเร็จ พบรายชื่อใหม่ ${fresh.length} รายชื่อ${dupCount > 0 ? ` (ข้ามรายชื่อซ้ำ ${dupCount} รายการ)` : ''}`);
                 }
-                setExcelPreviewData(parsed);
+                setExcelDupCount(dupCount);
+                setExcelPreviewData(fresh);
               };
               reader.onerror = () => showToast('error', 'อ่านไฟล์ไม่สำเร็จ กรุณาลองไฟล์อื่น');
               reader.readAsBinaryString(file);
             }} className="text-xs text-[#d1c7bd] file:bg-[#d4af37] file:text-[#070b19] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
-            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ</p>}
+            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ{excelDupCount > 0 ? ` (ข้ามรายชื่อซ้ำ ${excelDupCount} รายการ)` : ''} — รายชื่อใหม่เป็น Normal</p>}
             <div className="flex gap-2 pt-2">
               <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button disabled={excelPreviewData.length === 0} onClick={async () => {
                 const colRef = collection(db, COLLECTION_NAME);
-                const total = excelPreviewData.length;
+                // เช็กซ้ำอีกรอบกับข้อมูลล่าสุดก่อนเขียน (กันนำเข้าซ้ำ/เขียนทับสถานะที่ผู้ดูแลตั้งไว้)
+                const latestIds = new Set(guestsWithComputedBadges.map((g) => normKey(g.studentId)).filter(Boolean));
+                const latestNames = new Set(guestsWithComputedBadges.map((g) => normKey(g.name)));
+                const toImport = excelPreviewData.filter((g) => {
+                  const sid = normKey(g.studentId);
+                  return sid ? !latestIds.has(sid) : !latestNames.has(normKey(g.name));
+                });
+                const total = toImport.length;
+                if (total === 0) {
+                  showToast('warning', 'ไม่มีรายชื่อใหม่ให้นำเข้า (ซ้ำกับในระบบทั้งหมด)');
+                  setExcelPreviewData([]);
+                  setExcelDupCount(0);
+                  return;
+                }
+                const skippedTotal = excelDupCount + (excelPreviewData.length - total);
                 const tid = showToast('loading', `กำลังนำเข้า ${total} รายชื่อ...`);
                 try {
                 // เขียนเฉพาะรายชื่อใหม่ ไม่เขียนทับรายชื่อเดิม
-                for (let i = 0; i < excelPreviewData.length; i += 400) {
+                for (let i = 0; i < toImport.length; i += 400) {
                   const b = writeBatch(db);
-                  excelPreviewData.slice(i, i + 400).forEach(g => b.set(doc(colRef, g.id), g));
+                  toImport.slice(i, i + 400).forEach(g => b.set(doc(colRef, g.id), g));
                   await b.commit();
                 }
                 setExcelPreviewData([]);
+                setExcelDupCount(0);
                 setIsExcelModalOpen(false);
-                updateToast(tid, 'success', `นำเข้า ${total} รายชื่อสำเร็จ`);
+                updateToast(tid, 'success', `นำเข้า ${total} รายชื่อสำเร็จ${skippedTotal > 0 ? ` (ข้ามรายชื่อซ้ำ ${skippedTotal} รายการ)` : ''}`);
                 } catch (err) {
                   console.error(err);
                   updateToast(tid, 'error', 'นำเข้ารายชื่อไม่สำเร็จ กรุณาลองอีกครั้ง');
@@ -1866,7 +2084,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
           <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
             <h3 className="text-base font-black text-[#f3e5ab]">{confirmModal.title}</h3>
-            <p className="text-xs text-[#d1c7bd]">{confirmModal.message}</p>
+            <p className="text-xs text-[#d1c7bd] whitespace-pre-line text-left">{confirmModal.message}</p>
             <div className="flex gap-2">
               <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button onClick={confirmModal.onConfirm} className={`flex-1 py-2 text-white rounded-xl text-xs font-bold ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
