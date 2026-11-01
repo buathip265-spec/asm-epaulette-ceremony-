@@ -179,6 +179,10 @@ export default function App() {
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [scannerRestartKey, setScannerRestartKey] = useState(0);
+  const [isLandscape, setIsLandscape] = useState(() => typeof window !== 'undefined' && window.innerWidth > window.innerHeight);
+  const scannerQueueRef = useRef(Promise.resolve());
+  const unhealthyRef = useRef(0);
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [manualCodeInput, setManualCodeInput] = useState('');
@@ -299,71 +303,147 @@ export default function App() {
     }));
   }, [guests, seatsPerRow]);
 
+  // ---------- กล้องสแกน QR (รองรับแนวตั้ง/แนวนอน และหมุนหน้าจอได้โดยไม่ต้องรีเฟรช) ----------
+  const stopScannerNow = async () => {
+    const inst = html5QrCodeRef.current;
+    html5QrCodeRef.current = null;
+    if (!inst) return;
+    try { if (inst.isScanning) await inst.stop(); } catch (err) { console.error('Failed to stop scanner', err); }
+    try { inst.clear(); } catch (err) { /* ignore */ }
+  };
+
+  // เปิด/ปิดกล้องทีละคำสั่งตามลำดับ กันเปิดซ้อนกันตอนหมุนจอเร็วๆ
+  const enqueueScanner = (fn) => {
+    scannerQueueRef.current = scannerQueueRef.current.then(fn).catch((err) => console.error(err));
+    return scannerQueueRef.current;
+  };
+
+  const restartScanner = () => {
+    unhealthyRef.current = 0;
+    setCameraError('');
+    setScannerRestartKey((k) => k + 1);
+  };
+
+  // ตรวจจับการหมุนจอ / เปลี่ยนขนาดหน้าต่าง → ปรับ layout และรีสตาร์ทกล้องให้อัตโนมัติ
   useEffect(() => {
-    let isMounted = true;
-
-    const stopScanner = async () => {
-      if (html5QrCodeRef.current) {
-        try {
-          if (html5QrCodeRef.current.isScanning) {
-            await html5QrCodeRef.current.stop();
-          }
-          html5QrCodeRef.current.clear();
-        } catch (err) {
-          console.error("Failed to stop scanner", err);
-        } finally {
-          html5QrCodeRef.current = null;
-        }
-      }
+    let timer = null;
+    let lastW = window.innerWidth;
+    const onChange = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        setIsLandscape(w > h);
+        if (Math.abs(w - lastW) / Math.max(lastW, 1) > 0.25) setScannerRestartKey((k) => k + 1);
+        lastW = w;
+      }, 350);
     };
+    window.addEventListener('resize', onChange);
+    window.addEventListener('orientationchange', onChange);
+    const so = window.screen && window.screen.orientation;
+    if (so && so.addEventListener) so.addEventListener('change', onChange);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', onChange);
+      window.removeEventListener('orientationchange', onChange);
+      if (so && so.removeEventListener) so.removeEventListener('change', onChange);
+    };
+  }, []);
 
-    if (isAuthorized && activeTab === 'scan') {
-      const timer = setTimeout(async () => {
-        const qrContainer = document.getElementById('camera-scanner-view');
-        const Html5QrcodeClass = window.Html5Qrcode;
-        if (Html5QrcodeClass && qrContainer && isMounted) {
-          await stopScanner();
-          try {
-            const qrCode = new Html5QrcodeClass("camera-scanner-view");
-            html5QrCodeRef.current = qrCode;
-            await qrCode.start(
-              { facingMode: "environment" },
-              { fps: 15, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
-              (decodedText) => {
-                if (!isProcessingScanRef.current) {
-                  isProcessingScanRef.current = true;
-                  if (inspectRef.current) inspectRef.current(decodedText);
-                  setTimeout(() => { isProcessingScanRef.current = false; }, 1500);
-                }
-              },
-              () => {}
-            );
-            if (isMounted) {
-              setIsCameraActive(true);
-              setCameraError('');
-            }
-          } catch (e) {
-            console.error("Camera start error:", e);
-            if (isMounted) {
-              setIsCameraActive(false);
-              setCameraError('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้อง หรือใช้งานผ่าน HTTPS');
-            }
-          }
-        } else if (isMounted && !Html5QrcodeClass) {
-          setCameraError('ไม่พบไลบรารีสแกน QR (html5-qrcode) กรุณาเพิ่ม script ใน index.html');
-        }
-      }, 400);
-
-      return () => {
-        isMounted = false;
-        clearTimeout(timer);
-        stopScanner();
-      };
-    } else {
-      stopScanner();
-      setIsCameraActive(false);
-    }
+  // กลับมาที่หน้าเว็บ (เช่น สลับแอป) → เปิดกล้องใหม่ กันภาพดำ/กล้องค้าง
+  useEffect(() => {
+    if (!(isAuthorized && activeTab === 'scan')) return undefined;
+    const onVis = () => { if (document.visibilityState === 'visible') setScannerRestartKey((k) => k + 1); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, [isAuthorized, activeTab]);
+
+  useEffect(() => {
+    if (!(isAuthorized && activeTab === 'scan')) {
+      enqueueScanner(stopScannerNow);
+      setIsCameraActive(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let watchdog = null;
+    setIsCameraActive(false);
+
+    const timer = setTimeout(() => {
+      enqueueScanner(async () => {
+        if (cancelled) return;
+        await stopScannerNow();
+        if (cancelled) return;
+        const container = document.getElementById('camera-scanner-view');
+        const Html5QrcodeClass = window.Html5Qrcode;
+        if (!container) return;
+        if (!Html5QrcodeClass) {
+          setCameraError('ไม่พบไลบรารีสแกน QR (html5-qrcode) กรุณาเพิ่ม script ใน index.html');
+          return;
+        }
+        try {
+          const qrCode = new Html5QrcodeClass('camera-scanner-view');
+          html5QrCodeRef.current = qrCode;
+          await qrCode.start(
+            { facingMode: 'environment' },
+            {
+              fps: 12,
+              // กรอบสแกนคำนวณจากขนาดภาพกล้องจริง จึงพอดีทั้งแนวตั้งและแนวนอน (ไม่บังคับสัดส่วนภาพ)
+              qrbox: (vw, vh) => {
+                const edge = Math.floor(Math.min(vw, vh) * 0.72);
+                const size = Math.max(120, Math.min(edge, 320, vw - 4, vh - 4));
+                return { width: size, height: size };
+              }
+            },
+            (decodedText) => {
+              if (!isProcessingScanRef.current) {
+                isProcessingScanRef.current = true;
+                if (inspectRef.current) inspectRef.current(decodedText);
+                setTimeout(() => { isProcessingScanRef.current = false; }, 1500);
+              }
+            },
+            () => {}
+          );
+          if (cancelled) return; // ถ้าถูกยกเลิกระหว่างเปิดกล้อง คำสั่งปิดที่รอคิวอยู่จะจัดการต่อ
+          setIsCameraActive(true);
+          setCameraError('');
+
+          // ตรวจสุขภาพภาพวิดีโอ: ถ้าภาพดำ/ค้างติดต่อกัน ให้เปิดกล้องใหม่เอง (ไม่เกิน 3 ครั้งติด)
+          let stalled = 0;
+          watchdog = setInterval(() => {
+            const v = document.querySelector('#camera-scanner-view video');
+            const unhealthy = !v || v.videoWidth === 0 || v.readyState < 2 || v.paused || v.ended;
+            if (!unhealthy) { stalled = 0; unhealthyRef.current = 0; return; }
+            stalled += 1;
+            if (stalled >= 2) {
+              stalled = 0;
+              unhealthyRef.current += 1;
+              if (unhealthyRef.current > 3) {
+                clearInterval(watchdog);
+                setIsCameraActive(false);
+                setCameraError('กล้องหยุดทำงานต่อเนื่อง กรุณากดปุ่ม "รีสตาร์ทกล้อง" หรือตรวจสอบสิทธิ์การใช้กล้อง');
+              } else {
+                setScannerRestartKey((k) => k + 1);
+              }
+            }
+          }, 2500);
+        } catch (err) {
+          console.error('Camera start error:', err);
+          if (!cancelled) {
+            setIsCameraActive(false);
+            setCameraError('ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบสิทธิ์การอนุญาตใช้กล้อง หรือใช้งานผ่าน HTTPS แล้วกด "รีสตาร์ทกล้อง"');
+          }
+        }
+      });
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      if (watchdog) clearInterval(watchdog);
+      enqueueScanner(stopScannerNow);
+    };
+  }, [isAuthorized, activeTab, scannerRestartKey, isLandscape]);
 
   // บันทึกจำนวนที่นั่งต่อแถว: เก็บในเครื่อง + ฐานข้อมูล (ทุกเครื่องใช้ค่าเดียวกัน) จนกว่าจะมีคนเปลี่ยนใหม่
   const saveSeatsPerRow = async (n) => {
@@ -1200,41 +1280,54 @@ export default function App() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
         {activeTab === 'scan' && (
-          <div className="max-w-lg mx-auto space-y-4">
-            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 text-center shadow-xl">
-              <h2 className="text-lg font-black text-[#f3e5ab] flex items-center justify-center gap-2">
-                <ScanLine className="w-5 h-5 text-[#d4af37]" /> เช็กชื่อผู้เข้าร่วมหน้างาน
-              </h2>
-              <p className="text-xs text-[#d1c7bd] mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
-
-              {cameraError && (
-                <div className="mt-3 p-3 bg-red-900/40 border border-red-500/50 text-red-300 rounded-xl text-xs font-bold">
-                  {cameraError}
-                </div>
-              )}
-
-              <div className="mt-4 bg-[#070b19] rounded-2xl overflow-hidden border-2 border-[#d4af37] relative min-h-[260px] flex items-center justify-center shadow-inner">
-                <div id="camera-scanner-view" className="w-full h-full"></div>
-                {!isCameraActive && !cameraError && (
-                  <div className="absolute text-center p-4">
-                    <Camera className="w-10 h-10 mx-auto mb-2 opacity-65 text-[#d4af37] animate-pulse" />
-                    <p className="text-xs text-[#f3e5ab] font-bold">กำลังเชื่อมต่อกล้องสแกน...</p>
-                  </div>
-                )}
+          <div className={`mx-auto ${isLandscape ? 'max-w-5xl' : 'max-w-lg'}`}>
+            <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-5 shadow-xl">
+              <div className="text-center">
+                <h2 className="text-lg font-black text-[#f3e5ab] flex items-center justify-center gap-2">
+                  <ScanLine className="w-5 h-5 text-[#d4af37]" /> เช็กชื่อผู้เข้าร่วมหน้างาน
+                </h2>
+                <p className="text-xs text-[#d1c7bd] mt-1">สแกน QR หรือค้นหาชื่อเพื่อบันทึกสถานะ</p>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-[#d4af37]/30 text-left">
-                <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualCodeInput}
-                    onChange={(e) => setManualCodeInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleInspectQrCode(manualCodeInput)}
-                    placeholder="พิมพ์ชื่อ หรือ รหัสนักศึกษา..."
-                    className="flex-1 px-3 py-2.5 bg-[#070b19] border border-[#d4af37]/50 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
-                  />
-                  <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e6c252] text-[#070b19] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
+              <div className={`mt-4 flex gap-5 ${isLandscape ? 'flex-row items-start' : 'flex-col'}`}>
+                <div className={isLandscape ? 'flex-1 min-w-0' : 'w-full'}>
+                  {cameraError && (
+                    <div className="mb-3 p-3 bg-red-900/40 border border-red-500/50 text-red-300 rounded-xl text-xs font-bold text-center">
+                      {cameraError}
+                    </div>
+                  )}
+
+                  <div className="bg-[#070b19] rounded-2xl overflow-hidden border-2 border-[#d4af37] relative min-h-[220px] flex items-center justify-center shadow-inner">
+                    <div id="camera-scanner-view" className="w-full"></div>
+                    {!isCameraActive && !cameraError && (
+                      <div className="absolute text-center p-4 pointer-events-none">
+                        <Camera className="w-10 h-10 mx-auto mb-2 opacity-65 text-[#d4af37] animate-pulse" />
+                        <p className="text-xs text-[#f3e5ab] font-bold">กำลังเชื่อมต่อกล้องสแกน...</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={restartScanner}
+                    className="mt-2 w-full py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#d1c7bd] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> รีสตาร์ทกล้อง
+                  </button>
+                </div>
+
+                <div className={`${isLandscape ? 'w-72 shrink-0' : 'w-full pt-4 border-t border-[#d4af37]/30'} text-left`}>
+                  <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
+                  <div className={isLandscape ? 'flex flex-col gap-2' : 'flex gap-2'}>
+                    <input
+                      type="text"
+                      value={manualCodeInput}
+                      onChange={(e) => setManualCodeInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleInspectQrCode(manualCodeInput)}
+                      placeholder="พิมพ์ชื่อ หรือ รหัสนักศึกษา..."
+                      className="flex-1 px-3 py-2.5 bg-[#070b19] border border-[#d4af37]/50 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
+                    />
+                    <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e6c252] text-[#070b19] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
+                  </div>
                 </div>
               </div>
             </div>
