@@ -408,6 +408,7 @@ export default function App() {
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const [emailData, setEmailData] = useState(null); // ผลสถานะจาก Apps Script: { rows, counts, quota, senders, stopped }
   const [emailBusy, setEmailBusy] = useState(''); // '' | 'load' | 'sync' | 'send' | 'test'
   const [emailFilter, setEmailFilter] = useState('all');
@@ -1095,6 +1096,43 @@ export default function App() {
         } catch (e) {
           console.error(e);
           updateToast(tid, 'error', 'ลบรายชื่อไม่สำเร็จ บางรายการอาจยังไม่ถูกลบ');
+        }
+      }
+    });
+  };
+
+  // ลบทั้งหมดที่ตรงกับตัวกรองปัจจุบัน (ถ้าไม่ได้กรองอะไร = ลบทุกรายชื่อในระบบ) ลบถาวร ต้องพิมพ์ยืนยัน
+  const handleDeleteAllFiltered = () => {
+    const ids = filteredDashboardGuests.map((g) => g.id);
+    if (ids.length === 0) return;
+    const typed = window.prompt(`จะลบ ${ids.length} รายชื่อ แบบถาวร กู้คืนไม่ได้\nพิมพ์คำว่า DELETE เพื่อยืนยัน`);
+    if (typed === null) return;
+    if (typed.trim() !== 'DELETE') {
+      showToast('warning', 'พิมพ์ยืนยันไม่ถูกต้อง ยังไม่ได้ลบอะไร');
+      return;
+    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'ยืนยันลบทั้งหมด',
+      message: `ลบ ${ids.length} รายชื่อถาวร กู้คืนไม่ได้ ใช่หรือไม่?`,
+      confirmText: `ลบทั้งหมด ${ids.length} รายชื่อ`,
+      confirmColor: 'bg-red-600 hover:bg-red-700',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const tid = showToast('loading', `กำลังลบ ${ids.length} รายชื่อ...`);
+        const idSet = new Set(ids);
+        setGuests((prev) => prev.filter((g) => !idSet.has(g.id)));
+        setSelectedGuestIds([]);
+        try {
+          for (let i = 0; i < ids.length; i += 400) {
+            const batch = writeBatch(db);
+            ids.slice(i, i + 400).forEach((id) => batch.delete(getGuestDocRef(id)));
+            await batch.commit();
+          }
+          updateToast(tid, 'success', `ลบ ${ids.length} รายชื่อเรียบร้อยแล้ว`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'ลบไม่สำเร็จ บางรายการอาจยังไม่ถูกลบ');
         }
       }
     });
@@ -2445,6 +2483,58 @@ export default function App() {
                 )}
               </div>
             ) : (<>
+            <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg">
+              <div>
+                <h2 className="text-lg font-black text-[#f3e5ab]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
+                <p className="text-xs text-[#d1c7bd]">กด "ส่งอีเมล" แล้วกด "ซิงค์รายชื่อล่าสุดเข้าชีต" ในหน้าต่างนั้นก่อน จากนั้นเลือกส่ง QR Code ให้ทุกคน</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+
+                {selectedGuestIds.length > 0 && (
+                  <button
+                    onClick={handleDeleteSelectedGuests}
+                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
+                  </button>
+                )}
+
+                <button onClick={openEmailModal} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                  <Award className="w-3.5 h-3.5" /> ส่งอีเมล
+                </button>
+
+                <button
+                  onClick={() => {
+                    setEditingGuest(null);
+                    setFormData({
+                      badgeNumber: '',
+                      studentId: '',
+                      name: '',
+                      email: '',
+                      role: 'ผู้เข้าร่วม',
+                      note: ''
+                    });
+                    setIsEditModalOpen(true);
+                  }}
+                  className="px-3 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md"
+                >
+                  <Plus className="w-3.5 h-3.5" /> เพิ่มผู้เข้าร่วม
+                </button>
+                <button onClick={() => setIsMoreOpen((v) => !v)} className={`px-3 py-2 border rounded-xl text-xs font-bold flex items-center gap-1.5 ${isMoreOpen ? 'bg-[#d4af37] text-[#070b19] border-[#d4af37]' : 'bg-[#121f38] text-[#f3e5ab] border-[#d4af37]/40'}`}>⚙ เพิ่มเติม {isMoreOpen ? '▲' : '▼'}</button>
+              </div>
+            </div>
+
+            {isMoreOpen && (
+              <div className="space-y-4 border-l-4 border-[#d4af37]/50 pl-3">
+                <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 shadow-lg">
+                  <h3 className="font-black text-[#f3e5ab] text-sm mb-3">เครื่องมือเพิ่มเติม</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={() => setIsSummaryModalOpen(true)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน</button>
+                    <button onClick={() => setIsMcModalOpen(true)} className="px-3 py-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF)</button>
+                    <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
+                    <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
+                  </div>
+                </div>
             <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
               <div className="flex items-center gap-3">
                 <Grid className="w-6 h-6 text-[#d4af37]" />
@@ -2516,60 +2606,32 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-lg">
-              <div>
-                <h2 className="text-lg font-black text-[#f3e5ab]">แดชบอร์ดจัดการผู้เข้าร่วม</h2>
-                <p className="text-xs text-[#d1c7bd]">กด "ซิงค์ Google Sheets" เพื่อส่งรายชื่อและคิวเข้า Google Sheets จากนั้นกดปุ่มส่งอีเมลเพื่อส่ง QR Code ให้ทุกคน</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setIsMcModalOpen(true)}
-                  className="px-3 py-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
-                >
-                  <Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF)
-                </button>
-                <button
-                  onClick={() => setIsSummaryModalOpen(true)}
-                  className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
-                >
-                  <Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน
-                </button>
-
-                {selectedGuestIds.length > 0 && (
+            <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
+              <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ตัดสิทธิ์คนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
+              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].map((y) => {
+                const n = guestsWithComputedBadges.filter((g) => g.status === 'pending' && g.year === y).length;
+                return (
                   <button
-                    onClick={handleDeleteSelectedGuests}
-                    className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
+                    key={y}
+                    disabled={n === 0}
+                    onClick={() => handleDeletePendingGuests(y)}
+                    className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
+                    {y} ({n})
                   </button>
-                )}
-
-                <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
-                <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
-                <button onClick={openEmailModal} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                  <Award className="w-3.5 h-3.5" /> ส่งอีเมล
-                </button>
-
-                <button
-                  onClick={() => {
-                    setEditingGuest(null);
-                    setFormData({
-                      badgeNumber: '',
-                      studentId: '',
-                      name: '',
-                      email: '',
-                      role: 'ผู้เข้าร่วม',
-                      note: ''
-                    });
-                    setIsEditModalOpen(true);
-                  }}
-                  className="px-3 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md"
-                >
-                  <Plus className="w-3.5 h-3.5" /> เพิ่มผู้เข้าร่วม
-                </button>
-                <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
-              </div>
+                );
+              })}
+              <button
+                disabled={pendingCount === 0}
+                onClick={() => handleDeletePendingGuests('all')}
+                className="px-3 py-1.5 bg-red-700/40 hover:bg-red-700 text-red-100 border border-red-600 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+              >
+                ทุกชั้นปี ({pendingCount})
+              </button>
             </div>
+              </div>
+            )}
+
 
             <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 shadow-lg space-y-3">
               <div className="grid grid-cols-3 gap-3 text-xs">
@@ -2657,6 +2719,13 @@ export default function App() {
                 ยกเลิกการเลือก
               </button>
               <button
+                disabled={filteredDashboardGuests.length === 0}
+                onClick={handleDeleteAllFiltered}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold disabled:opacity-35"
+              >
+                🗑 ลบทั้งหมดที่กรอง ({filteredDashboardGuests.length})
+              </button>
+              <button
                 disabled={selectedGuestIds.length === 0}
                 onClick={() => handleBulkSetStudentType('staff')}
                 className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
@@ -2672,29 +2741,6 @@ export default function App() {
               </button>
             </div>
 
-            <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
-              <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ตัดสิทธิ์คนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
-              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].map((y) => {
-                const n = guestsWithComputedBadges.filter((g) => g.status === 'pending' && g.year === y).length;
-                return (
-                  <button
-                    key={y}
-                    disabled={n === 0}
-                    onClick={() => handleDeletePendingGuests(y)}
-                    className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
-                  >
-                    {y} ({n})
-                  </button>
-                );
-              })}
-              <button
-                disabled={pendingCount === 0}
-                onClick={() => handleDeletePendingGuests('all')}
-                className="px-3 py-1.5 bg-red-700/40 hover:bg-red-700 text-red-100 border border-red-600 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
-              >
-                ทุกชั้นปี ({pendingCount})
-              </button>
-            </div>
 
             <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 overflow-hidden shadow-xl">
               <div className="overflow-x-auto">
