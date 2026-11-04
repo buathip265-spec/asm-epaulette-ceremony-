@@ -1566,7 +1566,7 @@ export default function App() {
           style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(212,175,55,0.16), transparent 55%), radial-gradient(ellipse at 50% 100%, rgba(30,58,138,0.40), transparent 60%), linear-gradient(180deg, #070b19 0%, #0b1530 55%, #070b19 100%)' }}
         >
           <div className="absolute inset-x-6 top-20 bottom-6 border border-[#d4af37]/15 rounded-[2rem] pointer-events-none" />
-          <div className="spu-fade absolute top-[6.25rem] left-1/2 -translate-x-1/2 lg:left-auto lg:translate-x-0 lg:right-14 z-20 w-max max-w-[calc(100vw-1.5rem)] flex items-center gap-2 sm:gap-3 lg:gap-4 rounded-2xl bg-gradient-to-b from-[#ffffff] to-[#f6f0de] px-3 sm:px-4 lg:px-5 py-2.5 border border-[#d4af37] shadow-[0_8px_28px_rgba(0,0,0,0.5),0_0_22px_rgba(212,175,55,0.3)]">
+          <div className="spu-fade absolute top-[6.25rem] inset-x-0 mx-auto lg:inset-x-auto lg:mx-0 lg:right-14 z-20 w-max max-w-[calc(100vw-1.5rem)] flex items-center gap-2 sm:gap-3 lg:gap-4 rounded-2xl bg-gradient-to-b from-[#ffffff] to-[#f6f0de] px-3 sm:px-4 lg:px-5 py-2.5 border border-[#d4af37] shadow-[0_8px_28px_rgba(0,0,0,0.5),0_0_22px_rgba(212,175,55,0.3)]">
             <img src={LOGO_SPU} alt="Sripatum University" className="h-6 min-[400px]:h-7 sm:h-9 lg:h-12 w-auto block" />
             <span className="w-px h-6 sm:h-8 lg:h-10 bg-[#d4af37]/60" aria-hidden="true" />
             <img src={LOGO_LAS} alt="College of Logistics, Aviation and Smart Mobility" className="h-6 min-[400px]:h-7 sm:h-9 lg:h-12 w-auto block" />
