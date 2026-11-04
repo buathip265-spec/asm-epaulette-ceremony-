@@ -173,8 +173,30 @@ const compareStandbyDefault = (a, b) => {
   return (a.standbyOrder || 0) - (b.standbyOrder || 0);
 };
 
-const compareStandby = compareManualFirst(compareStandbyDefault);
-const compareReadyQueue = compareManualFirst(compareCustomCriteria);
+// ลำดับที่จัดเองใช้กับ Staff เท่านั้น: Staff ยังอยู่ท้ายชั้นปีของตัวเอง แต่สลับกันเองได้ว่าใครขึ้นก่อน (ไม่ข้ามไปแทรกนักศึกษาปกติ)
+const reorderStaffSlots = (sorted) => {
+  const slotsByYear = new Map();
+  sorted.forEach((g, i) => {
+    if (!isStaffGuest(g)) return;
+    const k = g.year || '';
+    if (!slotsByYear.has(k)) slotsByYear.set(k, []);
+    slotsByYear.get(k).push(i);
+  });
+  const out = [...sorted];
+  slotsByYear.forEach((slots) => {
+    const members = slots.map((i) => sorted[i]);
+    const ranked = members.map((g, d) => ({ g, d })).sort((a, b) => {
+      const ha = hasManualOrder(a.g), hb = hasManualOrder(b.g);
+      if (ha && hb) return a.g.queueOrder - b.g.queueOrder;
+      if (ha !== hb) return ha ? -1 : 1;
+      return a.d - b.d;
+    });
+    slots.forEach((slot, j) => { out[slot] = ranked[j].g; });
+  });
+  return out;
+};
+const sortReady = (arr) => reorderStaffSlots([...arr].sort(compareCustomCriteria));
+const sortStandbyList = (arr) => reorderStaffSlots([...arr].sort(compareStandbyDefault));
 
 // โหลดสคริปต์จาก CDN เฉพาะตอนที่ต้องใช้ (สร้าง PDF) เพื่อไม่ต้องเพิ่ม dependency ใน package.json
 const loadScript = (src, isReady) => new Promise((resolve, reject) => {
@@ -805,7 +827,7 @@ export default function App() {
 
   const handleMoveToStandbyBatch = async (kind = 'ready') => {
     const isLateKind = kind === 'late';
-    const readyList = guestsWithComputedBadges.filter((g) => g.status === (isLateKind ? 'late_receive_after' : 'checked_in') && !g.skipped).sort(compareReadyQueue);
+    const readyList = sortReady(guestsWithComputedBadges.filter((g) => g.status === (isLateKind ? 'late_receive_after' : 'checked_in') && !g.skipped));
     if (readyList.length === 0) {
       showToast('warning', isLateKind ? 'ไม่มีผู้เข้าร่วมที่มาสายรอเรียกคิว' : 'ไม่มีผู้เข้าร่วมในคิวพร้อมเรียก');
       return;
@@ -835,7 +857,8 @@ export default function App() {
 
   // ---------- จัดลำดับคิวเรียกชื่อเอง (ขึ้น/ลง/บนสุด/ท้ายสุด) ----------
   // ใช้ฟิลด์ queueOrder (ตัวเลข) — เขียนเพียง 1 เอกสารต่อการย้าย 1 ครั้ง (ครั้งแรกของแต่ละแถวจะกำหนดเลขให้ทั้งแถวหนึ่งรอบ)
-  const handleMoveInQueue = async (list, guest, dir) => {
+  const handleMoveInQueue = async (fullList, guest, dir) => {
+    const list = fullList.filter((x) => isStaffGuest(x) && x.year === guest.year); // จัดลำดับในหมู่สตาฟชั้นปีเดียวกันเท่านั้น
     const idx = list.findIndex((g) => g.id === guest.id);
     if (idx < 0) return;
     const target = dir === 'up' ? idx - 1 : dir === 'down' ? idx + 1 : dir === 'top' ? 0 : list.length - 1;
@@ -884,22 +907,23 @@ export default function App() {
   // จัดลำดับเองได้เฉพาะคนที่เป็นประเภท Staff เท่านั้น (นักศึกษาปกติใช้ลำดับอัตโนมัติ) — Staff ย้ายแทรกขึ้น/ลงผ่านนักศึกษาได้
   const renderMoveControls = (list, g) => {
     if (!isStaffGuest(g)) return null;
-    const i = list.findIndex((x) => x.id === g.id);
+    const staffList = list.filter((x) => isStaffGuest(x) && x.year === g.year);
+    const i = staffList.findIndex((x) => x.id === g.id);
+    list = { full: list, len: staffList.length };
     const btn = 'min-w-[34px] px-2 py-1.5 rounded-lg border text-[11px] font-black disabled:opacity-30';
     return (
       <div className="flex items-center gap-1 shrink-0" aria-label="จัดลำดับคิว">
-        <button disabled={i <= 0} onClick={() => handleMoveInQueue(list, g, 'top')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ย้ายไปบนสุด">⤒</button>
-        <button disabled={i <= 0} onClick={() => handleMoveInQueue(list, g, 'up')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ขึ้น">▲</button>
-        <button disabled={i < 0 || i >= list.length - 1} onClick={() => handleMoveInQueue(list, g, 'down')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ลง">▼</button>
-        <button disabled={i < 0 || i >= list.length - 1} onClick={() => handleMoveInQueue(list, g, 'bottom')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ย้ายไปท้ายสุด">⤓</button>
+        <button disabled={i <= 0} onClick={() => handleMoveInQueue(list.full, g, 'top')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ย้ายไปบนสุด">⤒</button>
+        <button disabled={i <= 0} onClick={() => handleMoveInQueue(list.full, g, 'up')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ขึ้น">▲</button>
+        <button disabled={i < 0 || i >= list.len - 1} onClick={() => handleMoveInQueue(list.full, g, 'down')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ลง">▼</button>
+        <button disabled={i < 0 || i >= list.len - 1} onClick={() => handleMoveInQueue(list.full, g, 'bottom')} className={`${btn} border-[#d4af37]/40 text-[#f3e5ab]`} title="ย้ายไปท้ายสุด">⤓</button>
       </div>
     );
   };
 
   const handleMoveBatchToOnStage = async () => {
-    const standbyList = guestsWithComputedBadges
-      .filter((g) => g.status === 'standby' && !g.skipped)
-      .sort(compareStandby);
+    const standbyList = sortStandbyList(guestsWithComputedBadges
+      .filter((g) => g.status === 'standby' && !g.skipped));
 
     if (standbyList.length === 0) {
       showToast('warning', 'ไม่มีผู้เข้าร่วมในแถวสแตนด์บาย');
@@ -1433,12 +1457,12 @@ export default function App() {
   };
 
   const currentStageGroup = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'on_stage'), [guestsWithComputedBadges]);
-  const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort(compareStandby), [guestsWithComputedBadges]);
-  const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
+  const standbyQueue = useMemo(() => sortStandbyList(guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped)), [guestsWithComputedBadges]);
+  const readyQueue = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped)), [guestsWithComputedBadges]);
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
-  const callOrderList = useMemo(() => guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
-  const lateQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
+  const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
+  const lateQueue = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped)), [guestsWithComputedBadges]);
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
   const mcPages = useMemo(() => {
@@ -2548,7 +2572,7 @@ export default function App() {
                           </div>
                           {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (
                             <div className="mt-1.5 flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับเรียกที่ {callOrderList.findIndex((x) => x.id === g.id) + 1}/{callOrderList.length}</span>
+                              <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับสตาฟ {(() => { const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year); return `${sl.findIndex((x) => x.id === g.id) + 1}/${sl.length}`; })()}</span>
                               {renderMoveControls(callOrderList, g)}
                             </div>
                           )}
