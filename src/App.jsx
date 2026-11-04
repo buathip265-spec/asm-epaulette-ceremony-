@@ -208,7 +208,7 @@ const searchGuests = (guests, rawQuery, { exactOnly = false } = {}) => {
 };
 
 // คำแนะนำรายชื่อระหว่างพิมพ์ (ฝั่ง Staff เท่านั้น): ลำดับที่นั่งขึ้นต้นตรง / รหัสนักศึกษาบางส่วน / ชื่อ-นามสกุลบางส่วน
-const suggestGuests = (guests, rawQuery, limit = 8) => {
+const suggestGuests = (guests, rawQuery, limit = 30) => {
   const q = String(rawQuery === undefined || rawQuery === null ? '' : rawQuery).trim();
   if (!q) return { items: [], total: 0 };
   const sk = seatKey(q);
@@ -216,13 +216,13 @@ const suggestGuests = (guests, rawQuery, limit = 8) => {
   if (/^[A-Z]{1,2}\d{0,3}$/.test(sk) && /^[A-Za-z]/.test(q)) {
     list = guests.filter((g) => seatKey(g.badgeNumber).startsWith(sk));
   } else if (/^\d+$/.test(q)) {
-    list = q.length >= 2 ? guests.filter((g) => String(g.studentId || '').includes(q)) : [];
+    list = guests.filter((g) => String(g.studentId || '').includes(q));
   } else {
     const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
-    list = q.length >= 2 ? guests.filter((g) => {
+    list = guests.filter((g) => {
       const n = String(g.name || '').toLowerCase().replace(/\s+/g, ' ');
       return tokens.every((t) => n.includes(t));
-    }) : [];
+    });
   }
   const sorted = [...list].sort(compareSeatOrder);
   return { items: sorted.slice(0, limit), total: sorted.length };
@@ -1839,6 +1839,8 @@ export default function App() {
                   </div>
                   {qrSuggestions.items.length > 0 && (
                     <div className="mt-2 rounded-xl border border-[#d4af37]/40 bg-[#070b19] overflow-hidden">
+                      <p className="px-3 py-1.5 text-[10px] font-bold text-[#f3e5ab] bg-[#d4af37]/10 border-b border-[#d4af37]/20">พบ {qrSuggestions.total} รายการ — พิมพ์เพิ่มเพื่อกรองให้แคบลง</p>
+                      <div className="max-h-[50vh] overflow-y-auto">
                       {qrSuggestions.items.map((g) => (
                         <button
                           key={g.id}
@@ -1855,6 +1857,7 @@ export default function App() {
                       {qrSuggestions.total > qrSuggestions.items.length && (
                         <p className="px-3 py-1.5 text-[10px] text-[#d1c7bd]">และอีก {qrSuggestions.total - qrSuggestions.items.length} รายการ — พิมพ์ให้ละเอียดขึ้นเพื่อกรอง</p>
                       )}
+                      </div>
                     </div>
                   )}
                 </div>
