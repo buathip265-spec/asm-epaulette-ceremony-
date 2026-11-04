@@ -60,6 +60,42 @@ const fixEmailDomain = (v) => {
   const target = /gma|gam|mail\.net$/.test(d) && /gma|gam|gmi/.test(d) ? 'gmail.com' : 'spumail.net';
   return local + '@' + target;
 };
+// แยกคำนำหน้า+ชื่อ / นามสกุล สำหรับใบรายชื่อพิธีกร (คำนำหน้าอยู่กับชื่อ)
+const splitThaiName = (full) => {
+  const t = String(full || '').trim().replace(/\s+/g, ' ');
+  const m = t.match(/^(นางสาว|นาง|นาย|น\.ส\.|ด\.ช\.|ด\.ญ\.|ผศ\.|รศ\.|ดร\.)\s*(.*)$/);
+  const prefix = m ? m[1] : '';
+  const rest = m ? m[2] : t;
+  const i = rest.indexOf(' ');
+  return i < 0 ? { first: prefix + rest, last: '' } : { first: prefix + rest.slice(0, i), last: rest.slice(i + 1) };
+};
+// สรุปผลตรวจไฟล์นำเข้าเป็นข้อความธรรมดา (คัดลอกส่งไลน์ได้) พร้อมบอกว่าระบบจะแก้เป็นอะไร
+const buildImportReportText = (r, fileName) => {
+  const L = [];
+  L.push('สรุปผลตรวจไฟล์รายชื่อ' + (fileName ? ` (${fileName})` : ''));
+  L.push(`แถวข้อมูลทั้งหมด ${r.totalRows} • เพิ่มเข้าระบบ ${r.newCount} คน • ซ้ำ/ข้าม ${r.dupSystem.length + r.dupFile.length} คน • แจ้งไม่เข้าร่วม ${r.notAttend.length} คน`);
+  const sec = (title, items) => { if (items.length) { L.push(''); L.push(title); items.forEach((t) => L.push('- ' + t)); } };
+  sec(`ข้อมูลที่ระบบแก้ให้อัตโนมัติ — อีเมลโดเมนผิด ${r.emailFixed.length} คน`, r.emailFixed.map((x) => `แถว ${x.rowNo} ${x.name}: ${x.from} → ${x.to}`));
+  sec(`ข้อมูลที่ระบบแก้ให้อัตโนมัติ — ชั้นปีไม่ตรงรหัส ${r.yearMismatch.length} คน (ยึดตามรหัสนักศึกษา)`, r.yearMismatch.map((x) => `แถว ${x.rowNo} ${x.name} (${x.sid}): กรอก ${x.yearCol} → ระบบใช้ ${x.yearId}`));
+  sec(`ต้องตรวจ/แก้เอง — รหัสนักศึกษาผิดปกติ ${r.badId.length} คน`, r.badId.map((x) => `แถว ${x.rowNo} ${x.name}: “${x.sid}” ${x.note ? '(' + x.note + ' นำเข้าตามที่กรอก)' : '(ไม่ใช่ตัวเลข ระบบเว้นรหัสว่างไว้)'}`));
+  sec(`ต้องตรวจ/แก้เอง — อีเมลรูปแบบผิด ${r.badEmail.length} คน`, r.badEmail.map((x) => `แถว ${x.rowNo} ${x.name}: “${x.email}”`));
+  sec(`ไม่นำเข้า — ไม่มีชื่อ ${r.noName.length} แถว`, r.noName.map((x) => `แถว ${x.rowNo}`));
+  sec(`ไม่นำเข้า — แจ้งไม่เข้าร่วม ${r.notAttend.length} คน`, r.notAttend.map((x) => `แถว ${x.rowNo} ${x.name}${x.reason ? ' — ' + x.reason : ''}`));
+  sec(`ข้าม — ซ้ำกับที่มีในระบบ ${r.dupSystem.length} คน`, r.dupSystem.map((x) => `แถว ${x.rowNo} ${x.name}${x.sid ? ' (' + x.sid + ')' : ''}`));
+  sec(`ข้าม — ซ้ำกันเองในไฟล์ ${r.dupFile.length} คน (เก็บแถวแรก)`, r.dupFile.map((x) => `แถว ${x.rowNo} ${x.name}${x.sid ? ' (' + x.sid + ')' : ''}`));
+  if (r.noEmail) { L.push(''); L.push(`ไม่มีอีเมล ${r.noEmail} คน (นำเข้าได้ แต่ส่งอีเมลไม่ได้จนกว่าจะเพิ่ม)`); }
+  if (r.noId) { L.push(`ไม่มีรหัสนักศึกษา ${r.noId} คน (ใช้ชื่อเทียบซ้ำแทน)`); }
+  return L.join('\n');
+};
+const copyTextToClipboard = async (text) => {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) { /* fallthrough */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;'; ta.setAttribute('readonly', '');
+    document.body.appendChild(ta); ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+  } catch (e) { return false; }
+};
 const parseYearLabel = (v) => { const m = String(v || '').match(/(\d)/); return m ? 'ปี ' + m[1] : ''; };
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim());
 const YEAR_OPTIONS = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
@@ -365,7 +401,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('scan');
 
   const [batchSize, setBatchSize] = useState(14);
-  const [mcRows, setMcRows] = useState('auto'); // จำนวนคนต่อหน้าของใบรายชื่อพิธีกร: 'auto' (ตามชุด) | 30 | 40 | 50
   const [seatsPerRow, setSeatsPerRow] = useState(readSavedSeatsPerRow);
   const [seatsPerRowInput, setSeatsPerRowInput] = useState(() => String(readSavedSeatsPerRow())); // ข้อความในช่องกรอก (ปล่อยว่างระหว่างพิมพ์ได้)
   const seatsEditingRef = useRef(false);
@@ -447,6 +482,7 @@ export default function App() {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [excelDupCount, setExcelDupCount] = useState(0);
+  const [excelFileName, setExcelFileName] = useState('');
   const [excelReport, setExcelReport] = useState(null); // สรุปผลตรวจไฟล์ Excel ก่อนนำเข้า
   const fileInputRef = useRef(null);
 
@@ -1465,37 +1501,28 @@ export default function App() {
   const lateQueue = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped)), [guestsWithComputedBadges]);
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
+  const MC_ROWS_PER_PAGE = 20;
   const mcPages = useMemo(() => {
-    const setSize = Math.max(5, Math.min(25, Number(batchSize) || 10));
-    // จัดหน้าให้ชุด (ชุดละ N คน) ไม่ถูกตัดข้ามหน้า และแถวสูงพอให้อ่านง่าย
-    const fixedRows = mcRows === 'auto' ? 0 : Number(mcRows);
-    const ROWS_PER_PAGE = fixedRows > 0 ? fixedRows : Math.max(setSize, Math.floor(22 / setSize) * setSize);
-    const dense = fixedRows >= 40; // หน้าแน่น: ไม่ใช้แถบหัวชุด ใช้เส้นหนาและสีสลับแทนเพื่อประหยัดที่
-    const bandsPerPage = dense ? 0 : Math.ceil(ROWS_PER_PAGE / setSize) + (fixedRows > 0 ? 1 : 0);
-    const rowH = Math.max(15, Math.min(54, Math.floor((850 - bandsPerPage * 24) / ROWS_PER_PAGE)));
     const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
       const list = guestsWithComputedBadges.filter((g) => g.year === y).sort((a, b) => (isStaffGuest(a) ? 1 : 0) - (isStaffGuest(b) ? 1 : 0) || compareSeating(a, b));
       if (list.length === 0) return;
-      const totalPages = Math.ceil(list.length / ROWS_PER_PAGE);
+      const totalPages = Math.ceil(list.length / MC_ROWS_PER_PAGE);
       for (let i = 0; i < totalPages; i++) {
         pages.push({
           year: y,
           page: i + 1,
           totalPages,
           total: list.length,
-          setSize,
-          rowH,
-          dense,
-          startIndex: i * ROWS_PER_PAGE,
-          rows: list.slice(i * ROWS_PER_PAGE, (i + 1) * ROWS_PER_PAGE)
+          startIndex: i * MC_ROWS_PER_PAGE,
+          rows: list.slice(i * MC_ROWS_PER_PAGE, (i + 1) * MC_ROWS_PER_PAGE)
         });
       }
     });
     return pages;
-  }, [guestsWithComputedBadges, batchSize, mcRows]);
+  }, [guestsWithComputedBadges]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guestsWithComputedBadges.filter((g) => {
@@ -2631,18 +2658,9 @@ export default function App() {
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                   <Printer className="w-5 h-5 text-blue-600" /> ใบรายชื่อสำหรับพิธีกร
                 </h2>
-                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี ไม่ปนกัน • ทั้งหมด {mcPages.length} หน้า • มีช่องติ๊ก มา / สาย</p>
+                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี ไม่ปนกัน • 20 คนต่อหน้า • ทั้งหมด {mcPages.length} หน้า • มีช่องหมายเหตุ</p>
               </div>
               <div className="flex flex-wrap gap-2 items-center justify-end">
-                <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
-                  คนต่อหน้า
-                  <select value={mcRows} onChange={(e) => setMcRows(e.target.value)} className="px-2 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-800 text-xs font-bold">
-                    <option value="auto">ตามชุด (อ่านง่ายสุด)</option>
-                    <option value="30">30 คน</option>
-                    <option value="40">40 คน (แน่น)</option>
-                    <option value="50">50 คน (แน่นมาก)</option>
-                  </select>
-                </label>
                 <button
                   disabled={isPdfGenerating}
                   onClick={handleSaveMcPdf}
@@ -2662,71 +2680,46 @@ export default function App() {
                   <div
                     key={pIdx}
                     className="mc-page"
-                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '36px 48px 40px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
+                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '56px 48px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
                   >
-                    <div style={{ textAlign: 'center', borderBottom: '3px solid #111827', paddingBottom: 8 }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.5 }}>พิธีมอบประดับบ่าเกียรติยศ SPU</div>
-                      <div style={{ fontSize: 16, marginTop: 2, lineHeight: 1.5, fontWeight: 700 }}>รายชื่อ{pg.year} • ทั้งหมด {pg.total} คน • ชุดละ {pg.setSize} คน</div>
+                    <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                      <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.6 }}>รายชื่อนักศึกษาเข้ารับการประดับบ่า ในพิธีมอบประดับบ่าเกียรติยศ</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>สำหรับพิธีกรขานชื่อ — {pg.year === 'บัณฑิต' ? 'บัณฑิต' : `นักศึกษา${pg.year.replace('ปี ', 'ชั้นปีที่ ')}`} (ทั้งหมด {pg.total} คน)</div>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginTop: 10, fontSize: 14 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 16, color: '#000' }}>
                       <colgroup>
-                        <col style={{ width: 44 }} />
-                        <col style={{ width: 72 }} />
+                        <col style={{ width: 50 }} />
+                        <col style={{ width: 50 }} />
+                        <col style={{ width: 190 }} />
+                        <col style={{ width: 170 }} />
                         <col />
-                        <col style={{ width: 92 }} />
-                        <col style={{ width: 48 }} />
-                        <col style={{ width: 48 }} />
-                        <col style={{ width: 78 }} />
                       </colgroup>
                       <thead>
-                        <tr style={{ background: '#111827', color: '#ffffff', height: 34 }}>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>ลำดับ</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>ที่นั่ง</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 8px', textAlign: 'left' }}>ชื่อ - นามสกุล</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>รหัส</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>มา</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>สาย</th>
-                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>หมายเหตุ</th>
+                        <tr style={{ background: '#e5e7eb', height: 34 }}>
+                          {['ลำดับ', 'ชั้นปี', 'ชื่อ', 'นามสกุล', 'หมายเหตุ'].map((h) => (
+                            <th key={h} style={{ border: '1px solid #000', padding: '0 4px', textAlign: 'center', fontSize: 14, fontWeight: 700 }}>{h}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {pg.rows.map((g, i) => {
-                          const idx = pg.startIndex + i;
-                          const setNo = Math.floor(idx / pg.setSize) + 1;
-                          const startsSet = idx % pg.setSize === 0;
-                          const shade = setNo % 2 === 0 ? '#e5eaf2' : '#ffffff';
-                          const fs = Math.max(11, Math.min(17, Math.round(pg.rowH * 0.56)));
-                          const cb = Math.max(12, Math.min(22, pg.rowH - 8));
-                          const cell = { border: '1px solid #6b7280', padding: 0 };
+                        {Array.from({ length: MC_ROWS_PER_PAGE }).map((_, i) => {
+                          const g = pg.rows[i];
+                          const nm = g ? splitThaiName(g.name) : null;
+                          const td = { border: '1px solid #000', padding: '0 8px', height: 39, overflow: 'hidden', whiteSpace: 'nowrap' };
                           return (
-                            <React.Fragment key={g.id}>
-                              {startsSet && !pg.dense && (
-                                <tr style={{ height: 24 }}>
-                                  <td colSpan={7} style={{ background: '#374151', color: '#ffffff', fontSize: 12, fontWeight: 700, padding: '0 10px', border: '1px solid #111827' }}>
-                                    ชุดที่ {setNo} • เริ่มที่นั่ง #{g.badgeNumber}
-                                  </td>
-                                </tr>
-                              )}
-                              <tr style={{ height: pg.rowH, background: shade }}>
-                                <td style={{ ...cell, textAlign: 'center', fontSize: Math.max(10, fs - 4), color: '#4b5563', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{idx + 1}</td>
-                                <td style={{ ...cell, textAlign: 'center', fontWeight: 800, fontSize: Math.min(18, fs + 1), borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>#{g.badgeNumber}</td>
-                                <td style={{ ...cell, padding: '0 8px', fontWeight: 700, fontSize: fs, lineHeight: 1.15, whiteSpace: pg.dense ? 'nowrap' : 'normal', overflow: 'hidden', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{g.name}</td>
-                                <td style={{ ...cell, textAlign: 'center', fontFamily: 'monospace', fontSize: Math.max(9, fs - 5), color: '#6b7280', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{g.studentId || '-'}</td>
-                                <td style={{ ...cell, textAlign: 'center', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>
-                                  <span style={{ display: 'inline-block', width: cb, height: cb, border: '2px solid #111827', borderRadius: 3, background: '#ffffff', verticalAlign: 'middle' }} />
-                                </td>
-                                <td style={{ ...cell, textAlign: 'center', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>
-                                  <span style={{ display: 'inline-block', width: cb, height: cb, border: '2px solid #111827', borderRadius: 3, background: '#ffffff', verticalAlign: 'middle' }} />
-                                </td>
-                                <td style={{ ...cell, borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }} />
-                              </tr>
-                            </React.Fragment>
+                            <tr key={i}>
+                              <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? pg.startIndex + i + 1 : ''}</td>
+                              <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? String(g.year).replace('ปี ', '') : ''}</td>
+                              <td style={td}>{nm ? nm.first : ''}</td>
+                              <td style={td}>{nm ? nm.last : ''}</td>
+                              <td style={td} />
+                            </tr>
                           );
                         })}
                       </tbody>
                     </table>
-                    <div style={{ position: 'absolute', bottom: 18, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#6b7280' }}>
-                      {pg.year} • หน้า {pg.page}/{pg.totalPages}
+                    <div style={{ position: 'absolute', bottom: 30, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: '#000' }}>
+                      หน้า {pg.page} / {pg.totalPages}
                     </div>
                   </div>
                 ))}
@@ -2968,6 +2961,7 @@ export default function App() {
               const file = e.target.files?.[0];
               if (!file) return;
               setExcelReport(null);
+              setExcelFileName(file.name);
               const reader = new FileReader();
               reader.onload = (evt) => {
                 const workbook = XLSX.read(evt.target?.result, { type: 'binary' });
@@ -3015,8 +3009,8 @@ export default function App() {
                   else if (!isValidEmail(email)) report.badEmail.push({ rowNo, name, email });
                   else if (isSuspiciousEmailDomain(email)) { const fixed = fixEmailDomain(email); report.emailFixed.push({ rowNo, name, from: email, to: fixed }); email = fixed; }
                   const yearId = detectYearFromStudentId(sid);
-                  const year = yearCol || yearId;
-                  if (yearCol && sid.length === 8 && yearCol !== yearId) report.yearMismatch.push({ rowNo, name, sid, yearCol });
+                  const year = sid.length === 8 ? yearId : (yearCol || yearId); // ยึดตามรหัสนักศึกษา; ใช้ชั้นปีที่กรอกเฉพาะเมื่อรหัสไม่ปกติ
+                  if (yearCol && sid.length === 8 && yearCol !== yearId) report.yearMismatch.push({ rowNo, name, sid, yearCol, yearId });
                   fresh.push({
                     id: sid ? 'imp_' + sid : 'imp_' + Date.now() + '_' + idx,
                     studentId: sid,
@@ -3087,11 +3081,12 @@ export default function App() {
                     <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.emailFixed.slice(0, 50).map((r) => <li key={'d' + r.rowNo}>แถว {r.rowNo}: {r.name} — {r.from} → <span className="text-emerald-300">{r.to}</span></li>)}</ul></details>
                 )}
                 {excelReport.yearMismatch.length > 0 && (
-                  <details className="text-amber-300"><summary className="cursor-pointer font-bold">ชั้นปีไม่ตรงกับรหัส {excelReport.yearMismatch.length} คน (ใช้ชั้นปีที่กรอกในไฟล์)</summary>
-                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.yearMismatch.slice(0, 30).map((r) => <li key={'y' + r.rowNo}>แถว {r.rowNo}: {r.name} ({r.sid}) → {r.yearCol}</li>)}</ul></details>
+                  <details className="text-amber-300"><summary className="cursor-pointer font-bold">ชั้นปีที่กรอกไม่ตรงกับรหัส {excelReport.yearMismatch.length} คน (ใช้ชั้นปีตามรหัสนักศึกษา)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.yearMismatch.slice(0, 30).map((r) => <li key={'y' + r.rowNo}>แถว {r.rowNo}: {r.name} ({r.sid}) กรอก {r.yearCol} → ใช้ {r.yearId}</li>)}</ul></details>
                 )}
                 {excelReport.noEmail > 0 && <p className="text-amber-300 font-bold">ไม่มีอีเมล {excelReport.noEmail} คน (นำเข้าได้ ส่งอีเมลไม่ได้จนกว่าจะเพิ่ม)</p>}
                 {excelReport.noId > 0 && <p className="text-amber-300 font-bold">ไม่มีรหัสนักศึกษา {excelReport.noId} คน (ใช้ชื่อเทียบซ้ำแทน)</p>}
+                <button type="button" onClick={async () => { const ok = await copyTextToClipboard(buildImportReportText(excelReport, excelFileName)); showToast(ok ? 'success' : 'error', ok ? 'คัดลอกสรุปแล้ว วางในไลน์ได้เลย' : 'คัดลอกไม่สำเร็จ ลองกดค้างที่ข้อความแล้วคัดลอกเอง'); }} className="w-full py-2 rounded-xl border border-[#d4af37]/50 text-[#f3e5ab] font-black bg-[#121f38]">คัดลอกสรุปส่งไลน์</button>
                 {excelReport.newCount > 0 && <p className="text-emerald-400 font-bold">กดยืนยันเพื่อเพิ่ม {excelReport.newCount} คน เป็น Normal — คนเดิมไม่ถูกแก้ไข</p>}
               </div>
             )}
