@@ -877,8 +877,23 @@ export default function App() {
       return;
     }
 
-    const takeCount = Math.min(Number(batchSize), readyList.length);
-    const batchList = readyList.slice(0, takeCount);
+    let batchList;
+    let blockLabel = '';
+    if (isLateKind) {
+      batchList = readyList.slice(0, Math.min(Number(batchSize), readyList.length));
+    } else if (kind === 'staff') {
+      batchList = readyList.filter((g) => isStaffGuest(g));
+      blockLabel = 'สตาฟ ';
+    } else if (nextSeatBlock) {
+      batchList = nextSeatBlock.members;
+      blockLabel = `${nextSeatBlock.label} `;
+    } else {
+      batchList = readyList; // เหลือแต่คนที่ไม่มีที่นั่งปกติ (เช่น สตาฟ)
+    }
+    if (batchList.length === 0) {
+      showToast('warning', 'ไม่มีผู้เข้าร่วมให้ดึง');
+      return;
+    }
 
     try {
       const batch = writeBatch(db);
@@ -892,7 +907,7 @@ export default function App() {
         });
       });
       await batch.commit();
-      showToast('success', `ดึง ${batchList.length} คน${isLateKind ? 'ที่มาสาย' : ''}เข้าแถวสแตนด์บายเรียบร้อยแล้ว`);
+      showToast('success', `ดึง ${blockLabel}${batchList.length} คน${isLateKind ? 'ที่มาสาย' : ''}เข้าแถวสแตนด์บายเรียบร้อยแล้ว`);
     } catch (e) {
       console.error(e);
       showToast('error', 'ดึงเข้าสแตนด์บายไม่สำเร็จ กรุณาลองอีกครั้ง');
@@ -1614,6 +1629,29 @@ export default function App() {
   const currentStageGroup = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'on_stage'), [guestsWithComputedBadges]);
   const standbyQueue = useMemo(() => sortStandbyList(guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped)), [guestsWithComputedBadges]);
   const readyQueue = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped)), [guestsWithComputedBadges]);
+
+  // ---------- ดึงเข้าสแตนด์บายทีละบล็อกที่นั่ง (เช่น A1-25 = แถว A ฝั่งซ้าย, A26-50 = แถว A ฝั่งขวา) ----------
+  const halfRow = Math.ceil(seatsPerRow / 2);
+  const seatBlockOf = (g) => {
+    if (isStaffGuest(g)) return null;
+    const m = /^([A-Za-z]+)(\d+)$/.exec(String(g.badgeNumber || ''));
+    if (!m) return null;
+    const side = Number(m[2]) <= halfRow ? 'L' : 'R';
+    return { key: `${m[1].toUpperCase()}-${side}`, row: m[1].toUpperCase(), side };
+  };
+  const seatBlockLabel = (b) => (b.side === 'L' ? `${b.row}1–${halfRow}` : `${b.row}${halfRow + 1}–${seatsPerRow}`);
+  const nextSeatBlock = useMemo(() => {
+    let best = null;
+    for (const g of readyQueue) {
+      const b = seatBlockOf(g);
+      if (!b) continue;
+      if (!best || b.row.length < best.row.length || (b.row.length === best.row.length && (b.row < best.row || (b.row === best.row && b.side === 'L' && best.side === 'R')))) best = b;
+    }
+    if (!best) return null;
+    const members = readyQueue.filter((g) => seatBlockOf(g)?.key === best.key);
+    return { ...best, label: seatBlockLabel(best), members };
+  }, [readyQueue, seatsPerRow]);
+  const readyStaff = useMemo(() => readyQueue.filter((g) => isStaffGuest(g)), [readyQueue]);
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
@@ -2208,7 +2246,7 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-[#f3e5ab]">กำหนดจำนวนคนต่อเซต (10 - 20 คน)</h3>
-                  <p className="text-xs text-[#d1c7bd]">ใช้สำหรับดึงเข้าสแตนด์บายและประกาศขึ้นเวทีพร้อมกันทีละชุด</p>
+                  <p className="text-xs text-[#d1c7bd]">ใช้ตอนประกาศขึ้นเวทีพร้อมกันทีละชุด (การดึงเข้าสแตนด์บายจะดึงทีละบล็อกที่นั่ง เช่น A1–25)</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 w-full md:w-auto">
@@ -2233,12 +2271,20 @@ export default function App() {
                   <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#d4af37]" /> พร้อมเรียกคิว</h3>
                   <span className="px-2.5 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">{readyQueue.length} คน</span>
                 </div>
-                {readyQueue.length > 0 && (
+                {readyQueue.length > 0 && (nextSeatBlock || readyStaff.length === 0) && (
                   <button
                     onClick={() => handleMoveToStandbyBatch('ready')}
                     className="w-full mb-3 py-2.5 bg-[#d4af37]/20 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
                   >
-                    <span>🚀 ดึงเข้าสแตนด์บายเซตละ {batchSize} คน</span>
+                    <span>🚀 ดึงเข้าสแตนด์บาย{nextSeatBlock ? ` ${nextSeatBlock.label} (${nextSeatBlock.members.length} คน)` : ''}</span>
+                  </button>
+                )}
+                {readyStaff.length > 0 && (
+                  <button
+                    onClick={() => handleMoveToStandbyBatch('staff')}
+                    className="w-full mb-3 py-2 bg-transparent hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-dashed border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
+                  >
+                    <span>⭐ ดึงสตาฟเข้าสแตนด์บาย ({readyStaff.length} คน)</span>
                   </button>
                 )}
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
@@ -2950,7 +2996,7 @@ export default function App() {
                               <td className="p-2 text-[#fdfbf7]"><div className="font-bold">{r.name}</div><div className="text-[10px] text-[#d1c7bd]">{r.studentId} • {r.year}</div></td>
                               <td className={`p-2 font-mono ${badMail ? 'text-red-300' : 'text-[#d1c7bd]'}`}>{r.email || '-'}{badMail && <div className="text-[10px] font-sans text-red-300">อีเมลไม่ถูกต้อง — แก้ที่ปุ่มแก้ไขในแดชบอร์ด แล้วซิงค์ใหม่</div>}</td>
                               <td className="p-2"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold whitespace-nowrap ${color}`}>{r.status}</span>{r.error && <div className="text-[10px] text-red-300 mt-0.5 max-w-[180px]">{r.error}</div>}</td>
-                              <td className="p-2 text-[10px] text-[#d1c7bd]">{r.sender || ''}{r.sentAt ? <div>{r.sentAt}</div> : null}{r.attempts > 1 ? <div>ลองแล้ว {r.attempts} ครั้ง</div> : null}</td>
+                              <td className="p-2 text-[10px] text-[#d1c7bd]">{(r.status === 'ส่งแล้ว' || r.status === 'ยืนยันได้รับ' || r.status === 'ล้มเหลว') ? (r.sender || '') : ''}{(r.sentAt && r.status !== 'ยังไม่ส่ง') ? <div>{(() => { const d = new Date(r.sentAt); return isNaN(d) ? String(r.sentAt) : d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); })()}</div> : null}{r.attempts > 1 ? <div>ลองแล้ว {r.attempts} ครั้ง</div> : null}</td>
                             </tr>
                           );
                         })}
