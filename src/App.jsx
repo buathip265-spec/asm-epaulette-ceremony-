@@ -159,6 +159,122 @@ const loadScript = (src, isReady) => new Promise((resolve, reject) => {
   document.head.appendChild(el);
 });
 
+// ---------- ค้นหาข้อมูลนักศึกษา (ใช้ร่วมกันทั้งหน้า Staff และหน้า Public) ----------
+const seatKey = (v) => String(v === undefined || v === null ? '' : v).replace(/^#/, '').trim().toUpperCase();
+
+// เรียงตามลำดับที่นั่ง (A1, A2, ... แล้วต่อด้วย Staff ที่ L)
+const compareSeatOrder = (a, b) => (isStaffGuest(a) ? 1 : 0) - (isStaffGuest(b) ? 1 : 0) || compareSeating(a, b);
+
+// ตรวจประเภทคำค้นหาอัตโนมัติ: QR/รหัสนักศึกษา (ตรงทั้งหมด) → ลำดับที่นั่ง → รหัสนักศึกษาบางส่วน → ชื่อ-นามสกุล
+// exactOnly = true ใช้กับการสแกน QR (ไม่เดาแบบบางส่วน เพื่อไม่ให้ QR แปลกๆ เด้งรายชื่อ)
+const searchGuests = (guests, rawQuery, { exactOnly = false } = {}) => {
+  const q = String(rawQuery === undefined || rawQuery === null ? '' : rawQuery).trim();
+  if (!q) return { type: 'empty', items: [] };
+  const qLower = q.toLowerCase();
+
+  const exact = guests.filter((g) => [g.qrToken, g.studentId].some((v) => v && String(v).trim().toLowerCase() === qLower));
+  if (exact.length) return { type: 'id', items: [...exact].sort(compareSeatOrder) };
+
+  const sk = seatKey(q);
+  if (/^[A-Z]{1,2}\d{0,3}$/.test(sk)) {
+    const bySeat = guests.filter((g) => seatKey(g.badgeNumber) === sk);
+    if (bySeat.length) return { type: 'seat', items: [...bySeat].sort(compareSeatOrder) };
+  }
+  if (exactOnly) return { type: 'none', items: [] };
+
+  if (/^\d+$/.test(q)) {
+    const part = guests.filter((g) => String(g.studentId || '').includes(q));
+    return { type: part.length ? 'id' : 'none', items: [...part].sort(compareSeatOrder) };
+  }
+
+  const tokens = qLower.split(/\s+/).filter(Boolean);
+  const byName = guests.filter((g) => {
+    const n = String(g.name || '').toLowerCase().replace(/\s+/g, ' ');
+    return tokens.every((t) => n.includes(t));
+  });
+  return { type: byName.length ? 'name' : 'none', items: [...byName].sort(compareSeatOrder) };
+};
+
+// ---------- ระบบตรวจสอบลำดับที่นั่งสำหรับบุคคลทั่วไป (Public) ----------
+const PUBLIC_LOOKUP_MAX = 5;
+
+// ค้นด้วยรหัสนักศึกษา (ตรงทั้งหมด) หรือชื่อ-นามสกุล (ต้อง >= 3 ตัวอักษร) — ไม่แสดงรายชื่อทั้งหมด
+// ถ้าชื่อตรงกันเกิน PUBLIC_LOOKUP_MAX รายการ จะไม่แสดงรายชื่อ แต่ให้ระบุให้ละเอียดขึ้น
+const publicLookup = (guests, rawQuery) => {
+  const q = String(rawQuery === undefined || rawQuery === null ? '' : rawQuery).trim();
+  if (q.length < 3) return { status: 'short', ids: [] };
+  if (/^\d+$/.test(q)) {
+    const m = guests.filter((g) => String(g.studentId || '').trim() === q);
+    return m.length ? { status: 'found', ids: m.map((g) => g.id) } : { status: 'notfound', ids: [] };
+  }
+  const tokens = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const m = guests.filter((g) => {
+    const n = String(g.name || '').toLowerCase().replace(/\s+/g, ' ');
+    return tokens.every((t) => n.includes(t));
+  });
+  if (m.length === 0) return { status: 'notfound', ids: [] };
+  if (m.length > PUBLIC_LOOKUP_MAX) return { status: 'refine', ids: [], total: m.length };
+  return { status: 'found', ids: [...m].sort(compareSeatOrder).map((g) => g.id) };
+};
+
+// ข้อมูลที่ส่งออกไปแสดงบนหน้า Public (เฉพาะที่จำเป็น — ไม่มีอีเมล/สถานะเช็กชื่อ/ข้อมูลส่วนตัวอื่น)
+//  - เลขคิวใหม่ = ลำดับที่นั่งปัจจุบันในระบบ (ตรงกับที่ Staff ใช้)
+//  - เลขคิวเดิม = ฟิลด์ originalSeat ของรายชื่อ (ถ้ามี) — ถ้ายังไม่มีข้อมูล จะแสดงว่า "ยังไม่มีข้อมูล" ไม่เดาให้
+//  - สิทธิ์เข้าร่วม = มีสิทธิ์ ถ้าอยู่ในระบบ เว้นแต่รายชื่อถูกระบุ ceremonyEligible === false
+const toPublicRecord = (g) => {
+  const newSeat = seatKey(g.badgeNumber);
+  const hasOld = g.originalSeat !== undefined && g.originalSeat !== null && String(g.originalSeat).trim() !== '';
+  const oldSeat = hasOld ? seatKey(g.originalSeat) : null;
+  return {
+    id: g.id,
+    studentId: String(g.studentId || '-'),
+    name: g.name,
+    oldSeat,
+    newSeat,
+    seatChange: oldSeat === null ? 'unknown' : (oldSeat === newSeat ? 'same' : 'changed'),
+    eligible: g.ceremonyEligible !== false,
+    ineligibleReason: g.ceremonyEligible === false && g.ineligibleReason ? String(g.ineligibleReason) : ''
+  };
+};
+
+// กราฟิกเครื่องหมายประดับบ่า + ปีก (SVG) สำหรับหน้าปก
+const EpauletteArt = ({ className = '' }) => (
+  <svg viewBox="0 0 420 290" className={className} role="img" aria-label="เครื่องหมายประดับบ่า">
+    <defs>
+      <linearGradient id="spuGold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#fff3c4" />
+        <stop offset="0.45" stopColor="#d4af37" />
+        <stop offset="1" stopColor="#8a6a12" />
+      </linearGradient>
+      <linearGradient id="spuNavy" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stopColor="#173063" />
+        <stop offset="1" stopColor="#0a1530" />
+      </linearGradient>
+      <filter id="spuGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="6" result="b" />
+        <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+      </filter>
+    </defs>
+    <g filter="url(#spuGlow)">
+      <g fill="url(#spuGold)">
+        <path d="M205 96 C170 62 108 56 36 84 C74 86 106 94 134 112 C104 110 76 118 50 136 C88 130 126 134 154 148 C132 150 112 158 96 172 C130 164 166 164 196 172 L205 140 Z" />
+        <path transform="translate(420,0) scale(-1,1)" d="M205 96 C170 62 108 56 36 84 C74 86 106 94 134 112 C104 110 76 118 50 136 C88 130 126 134 154 148 C132 150 112 158 96 172 C130 164 166 164 196 172 L205 140 Z" />
+      </g>
+      <path d="M210 70 L219 96 L247 98 L225 115 L233 142 L210 126 L187 142 L195 115 L173 98 L201 96 Z" fill="url(#spuGold)" />
+      <path d="M62 190 L358 190 Q382 190 382 214 L382 246 Q382 270 358 270 L62 270 Q38 270 38 246 L38 214 Q38 190 62 190 Z" fill="url(#spuNavy)" stroke="url(#spuGold)" strokeWidth="3" />
+      <rect x="104" y="206" width="236" height="9" rx="3" fill="url(#spuGold)" />
+      <rect x="104" y="224" width="236" height="9" rx="3" fill="url(#spuGold)" />
+      <rect x="104" y="242" width="236" height="9" rx="3" fill="url(#spuGold)" />
+      <circle cx="74" cy="230" r="17" fill="url(#spuGold)" stroke="#0a1530" strokeWidth="2" />
+      <path d="M74 220 L77 227 L84 228 L79 233 L80 240 L74 236 L68 240 L69 233 L64 228 L71 227 Z" fill="#0a1530" />
+      <g stroke="url(#spuGold)" strokeWidth="3" strokeLinecap="round">
+        <line x1="388" y1="206" x2="402" y2="206" /><line x1="388" y1="220" x2="404" y2="220" />
+        <line x1="388" y1="234" x2="404" y2="234" /><line x1="388" y1="248" x2="402" y2="248" />
+      </g>
+    </g>
+  </svg>
+);
+
 const app = initializeApp(CUSTOM_FIREBASE_CONFIG);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -179,6 +295,11 @@ export default function App() {
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false); // true เมื่อรับข้อมูลชุดแรกจากฐานข้อมูลแล้ว
+  const [showBackTop, setShowBackTop] = useState(false);
+  const [lookupInput, setLookupInput] = useState('');
+  const [lookupState, setLookupState] = useState({ status: 'idle', ids: [] });
+  const [searchResultsModal, setSearchResultsModal] = useState({ isOpen: false, query: '', items: [], total: 0 });
   const [scannerRestartKey, setScannerRestartKey] = useState(0);
   const [isLandscape, setIsLandscape] = useState(() => typeof window !== 'undefined' && window.innerWidth > window.innerHeight);
   const scannerQueueRef = useRef(Promise.resolve());
@@ -277,6 +398,7 @@ export default function App() {
         .filter((d) => d.id !== SETTINGS_DOC_ID)
         .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
       setGuests(sortGuestsByCustomCriteria(items));
+      setIsDataLoaded(true);
     }, (err) => {
       console.error(err);
       showToast('error', 'เชื่อมต่อฐานข้อมูลไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
@@ -398,7 +520,7 @@ export default function App() {
             (decodedText) => {
               if (!isProcessingScanRef.current) {
                 isProcessingScanRef.current = true;
-                if (inspectRef.current) inspectRef.current(decodedText);
+                if (inspectRef.current) inspectRef.current(decodedText, 'qr');
                 setTimeout(() => { isProcessingScanRef.current = false; }, 1500);
               }
             },
@@ -445,6 +567,14 @@ export default function App() {
     };
   }, [isAuthorized, activeTab, scannerRestartKey, isLandscape]);
 
+  // แสดงปุ่ม Back to Top เมื่อเลื่อนลงมาพอสมควร (หน้าแรก)
+  useEffect(() => {
+    const onScroll = () => setShowBackTop(window.scrollY > 500);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   // บันทึกจำนวนที่นั่งต่อแถว: เก็บในเครื่อง + ฐานข้อมูล (ทุกเครื่องใช้ค่าเดียวกัน) จนกว่าจะมีคนเปลี่ยนใหม่
   const saveSeatsPerRow = async (n) => {
     try { localStorage.setItem(SEATS_LS_KEY, String(n)); } catch (e) {}
@@ -481,12 +611,24 @@ export default function App() {
     sessionStorage.removeItem('staff_auth');
     setIsAuthorized(false);
     setActiveTab('scan');
+    window.scrollTo(0, 0);
     showToast('info', 'ออกจากระบบเรียบร้อยแล้ว');
   };
 
   const getGuestDocRef = (id) => doc(db, COLLECTION_NAME, id);
 
-  const handleInspectQrCode = (code) => {
+  // เปิดผลลัพธ์ของนักศึกษา 1 คน (ใช้ร่วมกันทั้งการสแกน QR และการค้นหา)
+  const openGuestResult = (guest) => {
+    if (guest.status && guest.status !== 'pending') {
+      setDuplicateAlertModal({ isOpen: true, guest });
+    } else {
+      setScannedPreviewGuest(guest);
+    }
+  };
+
+  // ค้นหา/สแกนนักศึกษา: ตรวจประเภทคำค้นหาอัตโนมัติ (ลำดับที่นั่ง / รหัสนักศึกษา / ชื่อ-นามสกุล / QR)
+  // source = 'qr' → จับคู่แบบตรงทั้งหมดเท่านั้น (กัน QR แปลกๆ เด้งรายชื่อ)
+  const handleInspectQrCode = (code, source = 'manual') => {
     const clean = String(code).trim();
     if (!clean) return;
 
@@ -503,35 +645,20 @@ export default function App() {
       try { target = clean.split('token=')[1].split('&')[0]; } catch (e) {}
     }
 
-    const found = guestsWithComputedBadges.find((g) =>
-      String(g.qrToken || '').trim() === String(target).trim() ||
-      String(g.studentId || '').trim() === String(target).trim() ||
-      String(g.badgeNumber || '') === String(target).replace('#', '').trim() ||
-      String(g.studentId || '').trim() === String(clean).trim()
-    );
+    const opts = { exactOnly: source === 'qr' };
+    let result = searchGuests(guestsWithComputedBadges, target, opts);
+    if (result.items.length === 0 && target !== clean) result = searchGuests(guestsWithComputedBadges, clean, opts);
 
-    if (found) {
-      if (found.status && found.status !== 'pending') {
-        setDuplicateAlertModal({ isOpen: true, guest: found });
-      } else {
-        setScannedPreviewGuest(found);
-      }
-      setManualCodeInput('');
-    } else {
-      const partialFound = guestsWithComputedBadges.find((g) =>
-        String(g.name || '').toLowerCase().includes(clean.toLowerCase()) ||
-        String(g.studentId || '').includes(clean)
-      );
-      if (partialFound) {
-        if (partialFound.status && partialFound.status !== 'pending') {
-          setDuplicateAlertModal({ isOpen: true, guest: partialFound });
-        } else {
-          setScannedPreviewGuest(partialFound);
-        }
-      } else {
-        showToast('warning', `ไม่พบรายชื่อ "${clean}" ในระบบ`);
-      }
+    if (result.items.length === 0) {
+      showToast('warning', `ไม่พบข้อมูล "${clean}" ลองค้นหาด้วยลำดับที่นั่ง รหัสนักศึกษา หรือชื่อ-นามสกุล`);
+      return;
     }
+    setManualCodeInput('');
+    if (result.items.length === 1) {
+      openGuestResult(result.items[0]);
+      return;
+    }
+    setSearchResultsModal({ isOpen: true, query: clean, items: result.items.slice(0, 30), total: result.items.length });
   };
 
   // ให้ตัวสแกนกล้องเรียกใช้ฟังก์ชันเวอร์ชันล่าสุดเสมอ (กัน stale closure)
@@ -1118,6 +1245,30 @@ export default function App() {
     return { total: guestsWithComputedBadges.length, normal: guestsWithComputedBadges.length - staffList.length, staff: staffList.length, byYear };
   }, [guestsWithComputedBadges]);
 
+  // ---------- หน้าแรก (Landing): เลื่อนไปยังแต่ละ Section แบบ Smooth ----------
+  const scrollToSection = (id) => {
+    if (id === 'hero') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // ค้นหาลำดับที่นั่งสำหรับบุคคลทั่วไป — เก็บเฉพาะ id ของผลที่ตรง แล้วอ่านข้อมูลสดจากฐานข้อมูลตอนแสดงผล (เรียลไทม์)
+  const handleLookup = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!isDataLoaded) {
+      setLookupState({ status: 'loading', ids: [] });
+      return;
+    }
+    setLookupState(publicLookup(guestsWithComputedBadges, lookupInput));
+  };
+  const lookupRecords = lookupState.ids
+    .map((id) => guestsWithComputedBadges.find((g) => g.id === id))
+    .filter(Boolean)
+    .map(toPublicRecord);
+
   const toastStyles = {
     success: { box: 'bg-emerald-950 border-emerald-500/60 text-emerald-100', Icon: CheckCircle2, icon: 'text-emerald-400' },
     error: { box: 'bg-red-950 border-red-500/60 text-red-100', Icon: Ban, icon: 'text-red-400' },
@@ -1144,78 +1295,268 @@ export default function App() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#070b19] text-[#fdfbf7] p-4 sm:p-8 flex flex-col justify-between font-sans">
+      <div id="top" className="min-h-screen bg-[#070b19] text-[#fdfbf7] font-sans relative overflow-x-hidden">
         {toastEl}
-        <div className="max-w-6xl w-full mx-auto space-y-6">
-          <div className="flex justify-between items-center bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl px-6 py-4 shadow-[0_4px_20px_rgba(212,175,55,0.15)]">
-            <div>
-              <h1 className="text-base sm:text-lg font-black text-[#f3e5ab] flex items-center gap-2">
-                <Award className="w-6 h-6 text-[#d4af37]" /> พิธีมอบประดับบ่าเกียรติยศ SPU
-              </h1>
-              <p className="text-xs text-[#d1c7bd]">จอแสดงผลสถานะคิวภาพรวม (Public LED Display)</p>
-            </div>
-            <button
-              onClick={() => setIsPinModalOpen(true)}
-              className="px-4 py-2 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e6c252] hover:to-[#c19016] text-[#070b19] rounded-xl text-xs font-black shadow-[0_0_15px_rgba(212,175,55,0.4)] flex items-center gap-1.5 transition-all transform hover:scale-105"
-            >
-              <Lock className="w-3.5 h-3.5" /> เข้าสู่ระบบสตาฟ (จัดการระบบ)
+        <style>{`
+          @keyframes spuFadeUp { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+          @keyframes spuShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+          @keyframes spuFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+          .spu-fade { animation: spuFadeUp .9s ease both; }
+          .spu-d1 { animation-delay: .15s; } .spu-d2 { animation-delay: .3s; } .spu-d3 { animation-delay: .45s; } .spu-d4 { animation-delay: .6s; }
+          .spu-gold-text { background: linear-gradient(90deg, #f3e5ab, #d4af37, #fff3c4, #d4af37, #f3e5ab); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; color: transparent; animation: spuShimmer 8s linear infinite; }
+          .spu-float { animation: spuFloat 6s ease-in-out infinite; }
+          .spu-serif { font-family: 'Noto Serif Thai', 'Sarabun', Georgia, 'Times New Roman', serif; }
+          @media (prefers-reduced-motion: reduce) { .spu-fade, .spu-gold-text, .spu-float { animation: none !important; } }
+        `}</style>
+
+        {/* แถบนำทางขนาดเล็ก (Sticky) */}
+        <nav className="fixed top-0 inset-x-0 z-40 bg-[#070b19]/85 backdrop-blur-md border-b border-[#d4af37]/20">
+          <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 flex items-center justify-between gap-2">
+            <button onClick={() => scrollToSection('hero')} className="flex items-center gap-2 text-[#f3e5ab] font-black text-sm">
+              <Award className="w-5 h-5 text-[#d4af37]" /> <span className="hidden sm:inline">พิธีประดับบ่าในวันเกียรติยศ</span>
             </button>
+            <div className="flex items-center gap-1 sm:gap-2 text-xs font-bold">
+              <button onClick={() => scrollToSection('led-section')} className="px-2.5 sm:px-3 py-1.5 rounded-lg text-[#d1c7bd] hover:text-[#f3e5ab] transition-colors">สถานะพิธี</button>
+              <button onClick={() => scrollToSection('seat-lookup')} className="px-2.5 sm:px-3 py-1.5 rounded-lg text-[#d1c7bd] hover:text-[#f3e5ab] transition-colors">ตรวจสอบที่นั่ง</button>
+              <button onClick={() => setIsPinModalOpen(true)} className="px-3 py-1.5 bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] rounded-lg font-black flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5" /> สตาฟ
+              </button>
+            </div>
           </div>
+        </nav>
 
-          <div className="bg-[#0e1628]/90 border-2 border-[#d4af37]/60 rounded-[2.5rem] p-6 sm:p-12 shadow-[0_0_50px_rgba(212,175,55,0.2)] relative overflow-hidden">
-            <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#d4af37]/10 text-[#f3e5ab] border border-[#d4af37]/40 text-sm font-bold tracking-wide shadow-inner">
-                <Sparkles className="w-4 h-4 text-[#d4af37] animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
-              </div>
+        {/* 1) Hero Section */}
+        <section
+          id="hero"
+          className="relative min-h-screen flex items-center justify-center px-4 pt-24 pb-20 overflow-hidden"
+          style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(212,175,55,0.16), transparent 55%), radial-gradient(ellipse at 50% 100%, rgba(30,58,138,0.40), transparent 60%), linear-gradient(180deg, #070b19 0%, #0b1530 55%, #070b19 100%)' }}
+        >
+          <div className="absolute inset-x-6 top-20 bottom-6 border border-[#d4af37]/15 rounded-[2rem] pointer-events-none" />
+          <div className="relative z-10 max-w-4xl w-full text-center space-y-5 sm:space-y-6">
+            <div className="spu-fade flex justify-center">
+              <EpauletteArt className="w-56 sm:w-72 spu-float" />
+            </div>
+            <p className="spu-fade spu-d1 text-[11px] sm:text-sm tracking-[0.35em] text-[#d4af37] font-bold uppercase">Aviation Honor Ceremony</p>
+            <h1 className="spu-fade spu-d1 spu-serif spu-gold-text text-4xl sm:text-6xl lg:text-7xl font-black leading-tight">พิธีประดับบ่าในวันเกียรติยศ</h1>
+            <h2 className="spu-fade spu-d2 text-xl sm:text-3xl font-bold text-[#fdfbf7]">ประจำปีการศึกษา 2569</h2>
+            <div className="spu-fade spu-d2 flex justify-center">
+              <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-[#d4af37]/60 bg-[#d4af37]/10 text-[#f3e5ab] text-sm sm:text-base font-bold tracking-wide">
+                <Sparkles className="w-4 h-4 text-[#d4af37]" /> 12 พฤศจิกายน 2569
+              </span>
+            </div>
+            <p className="spu-fade spu-d3 spu-serif text-base sm:text-xl italic text-[#f3e5ab]/90 max-w-2xl mx-auto leading-relaxed">“เกียรติยศแห่งความภาคภูมิใจ สู่เส้นทางวิชาชีพการบิน”</p>
+            <div className="spu-fade spu-d4 flex flex-col sm:flex-row gap-3 justify-center pt-3">
+              <button
+                onClick={() => scrollToSection('led-section')}
+                className="px-7 py-3.5 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#aa7c11] hover:from-[#e6c252] hover:to-[#c19016] text-[#070b19] font-black text-sm sm:text-base shadow-[0_0_24px_rgba(212,175,55,0.35)] transition-all hover:scale-[1.03]"
+              >
+                เข้าสู่หน้าสถานะพิธี
+              </button>
+              <button
+                onClick={() => scrollToSection('seat-lookup')}
+                className="px-7 py-3.5 rounded-2xl border-2 border-[#d4af37]/70 text-[#f3e5ab] hover:bg-[#d4af37]/10 font-black text-sm sm:text-base transition-all hover:scale-[1.03]"
+              >
+                ตรวจสอบลำดับที่นั่ง
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* 2) Public LED Display (นำระบบเดิมมาแสดงในส่วนนี้ทั้งหมด) */}
+        <section id="led-section" className="scroll-mt-16 relative py-16 sm:py-24 px-4" style={{ background: 'linear-gradient(180deg, #070b19, #0a1226 50%, #070b19)' }}>
+          <div className="max-w-6xl mx-auto space-y-8">
+            <div className="text-center space-y-2">
+              <p className="text-[11px] sm:text-xs tracking-[0.3em] text-[#d4af37] font-bold uppercase">Public LED Display</p>
+              <h2 className="spu-serif text-3xl sm:text-4xl font-black text-[#f3e5ab]">สถานะพิธีประดับบ่า</h2>
+              <p className="text-xs sm:text-sm text-[#d1c7bd]">จอแสดงผลสถานะคิวภาพรวม อัปเดตแบบเรียลไทม์</p>
             </div>
 
-            {currentStageGroup.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {currentStageGroup.map((g) => (
-                  <div key={g.id} className="bg-[#121f38] border-2 border-[#d4af37]/70 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(212,175,55,0.25)] space-y-1">
-                    <span className="inline-block px-3 py-0.5 bg-[#d4af37] text-[#070b19] font-black text-sm rounded-xl">
-                      #{g.badgeNumber}
-                    </span>
-                    <h4 className="text-base sm:text-lg font-black text-[#fdfbf7] truncate">{g.name}</h4>
-                    <p className="text-xs font-mono text-[#f3e5ab]">{g.studentId || '-'} • {g.year}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="py-16 text-center space-y-4">
-                <div className="w-16 h-16 rounded-3xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37] animate-pulse">
-                  <Award className="w-8 h-8" />
+            <div className="bg-[#0e1628]/90 border-2 border-[#d4af37]/60 rounded-[2.5rem] p-6 sm:p-12 shadow-[0_0_50px_rgba(212,175,55,0.2)] relative overflow-hidden">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#d4af37]/10 text-[#f3e5ab] border border-[#d4af37]/40 text-sm font-bold tracking-wide shadow-inner">
+                  <Sparkles className="w-4 h-4 text-[#d4af37] animate-spin" /> กำลังขึ้นเวทีรับประดับบ่าขณะนี้ ({currentStageGroup.length} คน)
                 </div>
-                <h3 className="text-2xl sm:text-3xl font-black text-[#fdfbf7]">เตรียมตัวเริ่มพิธี</h3>
-                <p className="text-sm sm:text-base text-[#d1c7bd]">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
               </div>
-            )}
 
-            <div className="mt-10 pt-6 border-t border-[#d4af37]/30">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-black text-[#f3e5ab] uppercase tracking-widest flex items-center gap-1.5">
-                  <Users className="w-4 h-4 text-[#d4af37]" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
-                </h4>
-                <span className="px-3 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">
-                  รออยู่ {standbyQueue.length} คน
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
-                {standbyQueue.length === 0 ? (
-                  <span className="text-xs text-[#d1c7bd] italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
-                ) : (
-                  standbyQueue.map((g, idx) => (
-                    <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-sm">
-                      <span className="text-[11px] font-black text-[#d4af37]">#{g.badgeNumber}</span>
-                      <span className="text-xs font-bold text-[#fdfbf7] truncate max-w-[120px]">{g.name}</span>
-                      <span className="text-[10px] text-[#f3e5ab] bg-[#d4af37]/10 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+              {currentStageGroup.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {currentStageGroup.map((g) => (
+                    <div key={g.id} className="bg-[#121f38] border-2 border-[#d4af37]/70 rounded-2xl p-4 text-center shadow-[0_0_20px_rgba(212,175,55,0.25)] space-y-1">
+                      <span className="inline-block px-3 py-0.5 bg-[#d4af37] text-[#070b19] font-black text-sm rounded-xl">
+                        #{g.badgeNumber}
+                      </span>
+                      <h4 className="text-base sm:text-lg font-black text-[#fdfbf7] truncate">{g.name}</h4>
+                      <p className="text-xs font-mono text-[#f3e5ab]">{g.studentId || '-'} • {g.year}</p>
                     </div>
-                  ))
-                )}
+                  ))}
+                </div>
+              ) : (
+                <div className="py-16 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-3xl bg-[#d4af37]/10 border border-[#d4af37]/30 flex items-center justify-center mx-auto text-[#d4af37] animate-pulse">
+                    <Award className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-2xl sm:text-3xl font-black text-[#fdfbf7]">เตรียมตัวเริ่มพิธี</h3>
+                  <p className="text-sm sm:text-base text-[#d1c7bd]">รอเจ้าหน้าที่กดประกาศรายชื่อชุดถัดไปขึ้นเวที</p>
+                </div>
+              )}
+
+              <div className="mt-10 pt-6 border-t border-[#d4af37]/30">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-black text-[#f3e5ab] uppercase tracking-widest flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-[#d4af37]" /> แถวสแตนด์บายเตรียมขึ้นชุดถัดไป
+                  </h4>
+                  <span className="px-3 py-0.5 bg-[#d4af37]/20 text-[#f3e5ab] text-xs font-bold rounded-full border border-[#d4af37]/40">
+                    รออยู่ {standbyQueue.length} คน
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-1">
+                  {standbyQueue.length === 0 ? (
+                    <span className="text-xs text-[#d1c7bd] italic">- ยังไม่มีคิวสแตนด์บายหลังเวที -</span>
+                  ) : (
+                    standbyQueue.map((g, idx) => (
+                      <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-xl px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                        <span className="text-[11px] font-black text-[#d4af37]">#{g.badgeNumber}</span>
+                        <span className="text-xs font-bold text-[#fdfbf7] truncate max-w-[120px]">{g.name}</span>
+                        <span className="text-[10px] text-[#f3e5ab] bg-[#d4af37]/10 px-1.5 py-0.5 rounded font-mono">คิว {idx + 1}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </section>
+
+        {/* 3) Public Seat Queue Lookup */}
+        <section id="seat-lookup" className="scroll-mt-16 relative py-16 sm:py-24 px-4" style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(30,58,138,0.30), transparent 60%), linear-gradient(180deg, #070b19, #0b1530)' }}>
+          <div className="max-w-3xl mx-auto space-y-8">
+            <div className="text-center space-y-2">
+              <p className="text-[11px] sm:text-xs tracking-[0.3em] text-[#d4af37] font-bold">หลังวันซ้อมพิธีประดับบ่า</p>
+              <h2 className="spu-serif text-3xl sm:text-4xl font-black text-[#f3e5ab]">ตรวจสอบลำดับที่นั่ง</h2>
+              <p className="text-xs sm:text-sm text-[#d1c7bd]">ตรวจสอบเลขคิวและสถานะสิทธิ์เข้าร่วมพิธีวันจริง</p>
+            </div>
+
+            <form onSubmit={handleLookup} className="bg-[#0e1628]/90 border border-[#d4af37]/40 rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-[#d4af37] absolute left-4 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={lookupInput}
+                  onChange={(e) => setLookupInput(e.target.value)}
+                  placeholder="กรอกรหัสนักศึกษา หรือ ชื่อ-นามสกุล"
+                  aria-label="ค้นหาด้วยรหัสนักศึกษาหรือชื่อ-นามสกุล"
+                  className="w-full pl-11 pr-4 py-3 bg-[#070b19] border border-[#d4af37]/50 rounded-2xl text-sm text-[#fdfbf7] outline-none focus:border-[#d4af37]"
+                />
+              </div>
+              <button type="submit" className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#d4af37] to-[#aa7c11] text-[#070b19] font-black text-sm shadow-md">
+                ค้นหาข้อมูล
+              </button>
+            </form>
+
+            <div className="space-y-4" aria-live="polite">
+              {lookupState.status === 'idle' && (
+                <p className="text-center text-xs text-[#d1c7bd]">ค้นหาด้วยรหัสนักศึกษา หรือชื่อ-นามสกุล ระบบจะแสดงเฉพาะข้อมูลของผู้ที่ค้นหาเท่านั้น</p>
+              )}
+              {lookupState.status === 'short' && (
+                <div className="rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-200 text-center">กรุณากรอกรหัสนักศึกษา หรือชื่อ-นามสกุลอย่างน้อย 3 ตัวอักษร</div>
+              )}
+              {lookupState.status === 'loading' && (
+                <div className="rounded-2xl border border-sky-500/40 bg-sky-950/30 p-4 text-sm text-sky-200 text-center">กำลังโหลดข้อมูล กรุณาลองกดค้นหาอีกครั้งในอีกสักครู่</div>
+              )}
+              {(lookupState.status === 'notfound' || (lookupState.status === 'found' && lookupRecords.length === 0)) && (
+                <div className="rounded-2xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm text-rose-200 text-center space-y-1">
+                  <p className="font-bold">ไม่พบข้อมูลในระบบ</p>
+                  <p className="text-xs">กรุณาตรวจสอบรหัสนักศึกษาหรือชื่อ-นามสกุลอีกครั้ง หากยังไม่พบ โปรดติดต่อทีมงาน</p>
+                </div>
+              )}
+              {lookupState.status === 'refine' && (
+                <div className="rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-200 text-center space-y-1">
+                  <p className="font-bold">พบข้อมูลที่ตรงกันหลายรายการ</p>
+                  <p className="text-xs">กรุณาระบุชื่อ-นามสกุลให้ละเอียดขึ้น หรือค้นหาด้วยรหัสนักศึกษา</p>
+                </div>
+              )}
+
+              {lookupState.status === 'found' && lookupRecords.map((r) => (
+                <div key={r.id} className="bg-[#0e1628] border-2 border-[#d4af37]/60 rounded-3xl p-5 sm:p-6 shadow-[0_0_30px_rgba(212,175,55,0.15)] space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 border-b border-[#d4af37]/25 pb-4">
+                    <div>
+                      <p className="text-[11px] text-[#d1c7bd]">ชื่อ-นามสกุล</p>
+                      <h3 className="text-lg sm:text-xl font-black text-[#fdfbf7]">{r.name}</h3>
+                    </div>
+                    <div className="sm:text-right">
+                      <p className="text-[11px] text-[#d1c7bd]">รหัสนักศึกษา</p>
+                      <p className="font-mono font-bold text-[#f3e5ab]">{r.studentId}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-[#070b19] border border-[#d4af37]/30 p-4 text-center">
+                      <p className="text-[11px] text-[#d1c7bd]">เลขคิวเดิม</p>
+                      <p className="text-3xl font-black text-[#d1c7bd] mt-1">{r.oldSeat ? `#${r.oldSeat}` : '—'}</p>
+                    </div>
+                    <div className="rounded-2xl bg-[#070b19] border-2 border-[#d4af37]/70 p-4 text-center">
+                      <p className="text-[11px] text-[#f3e5ab]">เลขคิวใหม่</p>
+                      <p className="text-3xl font-black text-[#d4af37] mt-1">#{r.newSeat}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-[#d4af37]/25 bg-[#121f38]/60 p-4 space-y-2">
+                      <p className="text-[11px] font-bold tracking-wide text-[#d1c7bd]">การเปลี่ยนแปลงลำดับคิว</p>
+                      {r.seatChange === 'changed' && (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-amber-900/40 border border-amber-500/40 text-amber-300 text-xs font-black">มีการเปลี่ยนแปลงลำดับคิว</span>
+                          <p className="text-sm text-[#fdfbf7]">จาก <b>#{r.oldSeat}</b> เป็น <b className="text-[#d4af37]">#{r.newSeat}</b></p>
+                        </>
+                      )}
+                      {r.seatChange === 'same' && (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-slate-700/60 border border-slate-500/40 text-slate-200 text-xs font-black">ไม่มีการเปลี่ยนแปลงลำดับคิว</span>
+                          <p className="text-sm text-[#d1c7bd]">เลขคิวเดิมและเลขคิวใหม่ตรงกัน (#{r.newSeat})</p>
+                        </>
+                      )}
+                      {r.seatChange === 'unknown' && (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-slate-800 border border-slate-600/40 text-slate-300 text-xs font-black">ยังไม่มีข้อมูลเลขคิวเดิม</span>
+                          <p className="text-xs text-[#d1c7bd]">ระบบยังไม่มีเลขคิวเดิมสำหรับเปรียบเทียบ โปรดใช้เลขคิวใหม่เป็นหลัก</p>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border border-[#d4af37]/25 bg-[#121f38]/60 p-4 space-y-2">
+                      <p className="text-[11px] font-bold tracking-wide text-[#d1c7bd]">สถานะสิทธิ์เข้าร่วมพิธีวันจริง</p>
+                      {r.eligible ? (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-emerald-900/40 border border-emerald-500/40 text-emerald-300 text-xs font-black">มีสิทธิ์เข้าร่วม</span>
+                          <p className="text-xs text-[#d1c7bd]">ผ่านเงื่อนไข และสามารถเข้าร่วมพิธีวันจริงได้</p>
+                        </>
+                      ) : (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-rose-900/40 border border-rose-500/40 text-rose-300 text-xs font-black">ไม่มีสิทธิ์เข้าร่วม</span>
+                          <p className="text-xs text-[#d1c7bd]">ไม่ผ่านเงื่อนไขการเข้าร่วมพิธีวันจริง{r.ineligibleReason ? ` (${r.ineligibleReason})` : ''}</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <footer className="py-10 px-4 text-center border-t border-[#d4af37]/15 bg-[#070b19]">
+          <p className="text-xs text-[#d1c7bd]">พิธีประดับบ่าในวันเกียรติยศ • ประจำปีการศึกษา 2569</p>
+          <p className="text-[11px] text-[#d1c7bd]/70 mt-1">12 พฤศจิกายน 2569</p>
+        </footer>
+
+        {/* ปุ่มกลับสู่หน้าปก */}
+        <button
+          onClick={() => scrollToSection('hero')}
+          aria-label="กลับสู่หน้าปก"
+          className={`fixed bottom-5 right-5 z-40 w-11 h-11 rounded-full bg-gradient-to-br from-[#f3e5ab] to-[#d4af37] text-[#070b19] shadow-lg flex items-center justify-center transition-all duration-300 ${showBackTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 15 12 9 18 15" /></svg>
+        </button>
 
         {isPinModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -1271,7 +1612,7 @@ export default function App() {
               <button onClick={() => setActiveTab('scan')} className={navBtnClass('scan')}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
               <button onClick={() => setActiveTab('queue')} className={navBtnClass('queue')}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={navBtnClass('dashboard')}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
-              <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าจอ LED</button>
+              <button onClick={() => { setIsAuthorized(false); window.scrollTo(0, 0); }} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าแรก</button>
             </nav>
             <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
           </div>
@@ -1316,14 +1657,14 @@ export default function App() {
                 </div>
 
                 <div className={`${isLandscape ? 'w-72 shrink-0' : 'w-full pt-4 border-t border-[#d4af37]/30'} text-left`}>
-                  <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาชื่อ / รหัสนักศึกษา:</label>
+                  <label className="text-xs font-bold text-[#f3e5ab] block mb-1.5">ค้นหาด้วยลำดับที่นั่ง / รหัสนักศึกษา / ชื่อ-นามสกุล:</label>
                   <div className={isLandscape ? 'flex flex-col gap-2' : 'flex gap-2'}>
                     <input
                       type="text"
                       value={manualCodeInput}
                       onChange={(e) => setManualCodeInput(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleInspectQrCode(manualCodeInput)}
-                      placeholder="พิมพ์ชื่อ หรือ รหัสนักศึกษา..."
+                      placeholder="ลำดับที่นั่ง รหัสนักศึกษา หรือชื่อ-นามสกุล..."
                       className="flex-1 px-3 py-2.5 bg-[#070b19] border border-[#d4af37]/50 rounded-xl text-xs text-[#fdfbf7] outline-none focus:border-[#d4af37]"
                     />
                     <button onClick={() => handleInspectQrCode(manualCodeInput)} className="px-4 py-2.5 bg-[#d4af37] hover:bg-[#e6c252] text-[#070b19] text-xs font-black rounded-xl shadow-md">ค้นหา</button>
@@ -1882,6 +2223,33 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {searchResultsModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="bg-[#0e1628] border-2 border-[#d4af37] text-[#fdfbf7] rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-[#f3e5ab]">ผลการค้นหา "{searchResultsModal.query}"</h3>
+              <button onClick={() => setSearchResultsModal({ isOpen: false, query: '', items: [], total: 0 })} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <p className="text-xs text-[#d1c7bd]">พบ {searchResultsModal.total} รายการ แตะเพื่อเลือกคนที่ต้องการ{searchResultsModal.total > searchResultsModal.items.length ? ` (แสดง ${searchResultsModal.items.length} รายการแรก — ระบุให้ละเอียดขึ้นเพื่อกรอง)` : ''}</p>
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {searchResultsModal.items.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => { setSearchResultsModal({ isOpen: false, query: '', items: [], total: 0 }); setManualCodeInput(''); openGuestResult(g); }}
+                  className="w-full text-left bg-[#121f38] hover:bg-[#1a2d52] border border-[#d4af37]/30 rounded-2xl p-3 flex items-center gap-3"
+                >
+                  <span className="px-2.5 py-1 bg-[#d4af37] text-[#070b19] font-black text-xs rounded-lg shrink-0">#{g.badgeNumber}</span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold truncate">{g.name}</span>
+                    <span className="block text-[11px] font-mono text-[#d1c7bd]">{g.studentId || '-'} • {g.year} • {getGuestStatusLabel(g)}</span>
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
