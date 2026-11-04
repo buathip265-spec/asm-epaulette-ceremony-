@@ -407,7 +407,15 @@ export default function App() {
   const seatsSaveTimerRef = useRef(null);
 
   const [isSyncingSheets, setIsSyncingSheets] = useState(false);
-  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailData, setEmailData] = useState(null); // ผลสถานะจาก Apps Script: { rows, counts, quota, senders, stopped }
+  const [emailBusy, setEmailBusy] = useState(''); // '' | 'load' | 'sync' | 'send' | 'test'
+  const [emailFilter, setEmailFilter] = useState('all');
+  const [emailSearch, setEmailSearch] = useState('');
+  const [emailSelected, setEmailSelected] = useState([]);
+  const [emailProgress, setEmailProgress] = useState('');
+  const [emailTestTo, setEmailTestTo] = useState(() => { try { return localStorage.getItem('spu_email_test_to') || ''; } catch (e) { return ''; } });
+  const emailStopRef = useRef(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false); // true เมื่อรับข้อมูลชุดแรกจากฐานข้อมูลแล้ว
   const [showBackTop, setShowBackTop] = useState(false);
   const [lookupInput, setLookupInput] = useState('');
@@ -1418,22 +1426,135 @@ export default function App() {
     finally { setIsSyncingSheets(false); }
   };
 
-  const handleSendEmail = async () => {
-    if (!window.confirm('ต้องการส่งอีเมลพร้อม QR Code ให้ผู้เข้าร่วมทั้งหมดใช่หรือไม่?')) return;
-    setIsSendingEmail(true);
-    const tid = showToast('loading', 'กำลังส่งอีเมล QR Code ให้ผู้เข้าร่วม...');
+  // ---------- ระบบส่งอีเมล QR (คุยกับ Apps Script แบบอ่านผลตอบกลับได้) ----------
+  const EMAIL_STATUS = { pending: 'ยังไม่ส่ง', sent: 'ส่งแล้ว', failed: 'ล้มเหลว', received: 'ยืนยันได้รับ' };
+
+  const callEmailApi = async (payload) => {
+    let res;
     try {
-      await fetch(GOOGLE_APPS_SCRIPT_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "send_emails" })
-      });
-      await new Promise((r) => setTimeout(r, 5000));
-      updateToast(tid, 'success', 'ส่งคำสั่งส่งอีเมลเรียบร้อยแล้ว');
-    } catch (err) { updateToast(tid, 'error', 'ส่งอีเมลไม่สำเร็จ: ' + err.message); }
-    finally { setIsSendingEmail(false); }
+      res = await fetch(GOOGLE_APPS_SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+    } catch (e) {
+      throw new Error('ติดต่อ Apps Script ไม่ได้ (ตรวจอินเทอร์เน็ต และให้ deploy เวอร์ชันใหม่ของสคริปต์แล้ว)');
+    }
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) { throw new Error('สคริปต์ตอบกลับไม่ถูกต้อง — ตรวจว่าวางโค้ดใหม่และ deploy เป็นเวอร์ชันใหม่แล้ว'); }
   };
+
+  const loadEmailStatus = async (silent) => {
+    if (!silent) setEmailBusy('load');
+    try {
+      const r = await callEmailApi({ action: 'status' });
+      if (!r.ok) throw new Error(r.message || 'โหลดสถานะไม่สำเร็จ');
+      setEmailData(r);
+      setEmailSelected((prev) => prev.filter((t) => r.rows.some((x) => x.token === t)));
+    } catch (e) {
+      showToast('error', e.message);
+    } finally {
+      if (!silent) setEmailBusy('');
+    }
+  };
+
+  const openEmailModal = () => {
+    setIsEmailModalOpen(true);
+    loadEmailStatus();
+  };
+
+  // ซิงค์รายชื่อล่าสุด (เรียงตามที่นั่ง) ลงชีต แล้วโหลดสถานะ — สถานะการส่งเดิมไม่หาย
+  const syncEmailSheet = async () => {
+    if (guestsWithComputedBadges.length === 0) { showToast('warning', 'ไม่มีรายชื่อในระบบให้ซิงค์'); return; }
+    setEmailBusy('sync');
+    try {
+      const ordered = [...guestsWithComputedBadges].sort((a, b) => (getYearOrderWeight(a.year) - getYearOrderWeight(b.year)) || compareSeating(a, b));
+      const r = await callEmailApi({ action: 'sync', guests: ordered });
+      if (!r.ok) throw new Error(r.message || 'ซิงค์ไม่สำเร็จ');
+      showToast('success', `ซิงค์รายชื่อ ${r.synced} คน เข้า Google Sheets แล้ว`);
+      await loadEmailStatus(true);
+    } catch (e) {
+      showToast('error', e.message);
+    } finally {
+      setEmailBusy('');
+    }
+  };
+
+  const runEmailSend = async (tokens, testTo) => {
+    if (emailBusy) return;
+    setEmailBusy(testTo ? 'test' : 'send');
+    emailStopRef.current = false;
+    let sent = 0, failed = 0, doneAll = true;
+    try {
+      if (!testTo) await callEmailApi({ action: 'resume' });
+      const chunks = testTo ? [[]] : [];
+      if (!testTo) for (let i = 0; i < tokens.length; i += 40) chunks.push(tokens.slice(i, i + 40));
+      for (let c = 0; c < chunks.length; c++) {
+        if (emailStopRef.current) { doneAll = false; break; }
+        const r = await callEmailApi({ action: 'send', tokens: chunks[c], testTo: testTo || '' });
+        if (!r.ok) { showToast('error', r.message || 'ส่งไม่สำเร็จ'); doneAll = false; break; }
+        sent += r.sent; failed += r.failed;
+        setEmailProgress(testTo ? '' : `ส่งแล้ว ${sent} • ล้มเหลว ${failed} • โควตาที่เหลือ ${r.quota}`);
+        if (testTo) { showToast(r.sent ? 'success' : 'error', r.sent ? `ส่งอีเมลทดสอบไปที่ ${testTo} แล้ว ตรวจกล่องจดหมาย (และสแปม)` : 'ส่งอีเมลทดสอบไม่สำเร็จ'); break; }
+        if (r.stopReason === 'quota') { showToast('warning', `โควตาส่งอีเมลวันนี้หมด (ส่งไปแล้ว ${sent} ฉบับ) กดส่งต่อได้อีกครั้งเมื่อโควตารีเซ็ต`); doneAll = false; break; }
+        if (r.stopReason === 'stopped') { doneAll = false; break; }
+        if (r.stopReason === 'batch') { doneAll = false; showToast('warning', 'สคริปต์พักรอบ กดส่งอีกครั้งเพื่อทำต่อ'); break; }
+        // โชว์สถานะระหว่างทาง
+        await loadEmailStatus(true);
+      }
+      if (!testTo) {
+        if (doneAll) showToast(failed ? 'warning' : 'success', `ส่งเสร็จ ${sent} ฉบับ${failed ? ` • ล้มเหลว ${failed} (ดูรายการสีแดง)` : ''}`);
+        else if (emailStopRef.current) showToast('warning', `หยุดแล้ว (ส่งไป ${sent} ฉบับ)`);
+      }
+    } catch (e) {
+      showToast('error', e.message);
+    } finally {
+      setEmailProgress('');
+      await loadEmailStatus(true);
+      setEmailBusy('');
+    }
+  };
+
+  const handleEmailStop = async () => {
+    emailStopRef.current = true;
+    try { await callEmailApi({ action: 'stop' }); showToast('warning', 'สั่งหยุดแล้ว — ฉบับที่กำลังส่งอยู่จะเสร็จก่อนจึงหยุด'); await loadEmailStatus(true); }
+    catch (e) { showToast('error', e.message); }
+  };
+
+  const handleEmailResume = async () => {
+    try { await callEmailApi({ action: 'resume' }); showToast('success', 'ปลดหยุดแล้ว พร้อมส่งต่อ'); await loadEmailStatus(true); }
+    catch (e) { showToast('error', e.message); }
+  };
+
+  const handleEmailMark = async (status) => {
+    if (emailSelected.length === 0) return;
+    try {
+      const r = await callEmailApi({ action: 'mark', tokens: emailSelected, status });
+      if (!r.ok) throw new Error(r.message || 'อัปเดตไม่สำเร็จ');
+      showToast('success', `เปลี่ยนสถานะ ${r.updated} คน เป็น "${status}" แล้ว`);
+      await loadEmailStatus(true);
+    } catch (e) { showToast('error', e.message); }
+  };
+
+  const emailRows = emailData ? emailData.rows : [];
+  const emailFilteredRows = useMemo(() => {
+    const q = emailSearch.trim().toLowerCase();
+    return emailRows.filter((r) => {
+      if (emailFilter !== 'all' && r.status !== EMAIL_STATUS[emailFilter]) return false;
+      if (!q) return true;
+      return [r.name, r.studentId, r.email, r.badge].some((v) => String(v || '').toLowerCase().includes(q));
+    });
+  }, [emailRows, emailFilter, emailSearch]);
+  // ชีตเก่ากว่าข้อมูลในเว็บ (จำนวนคนหรืออีเมลไม่ตรงกัน) → เตือนให้ซิงค์ก่อนส่ง
+  const emailStaleCount = useMemo(() => {
+    if (!emailData) return 0;
+    const sheetByToken = new Map(emailRows.map((r) => [String(r.token), r]));
+    let n = 0;
+    guestsWithComputedBadges.forEach((g) => {
+      const row = sheetByToken.get(String(g.qrToken || g.studentId));
+      const expectedSeat = ['no_item_ordered', 'late_receive_after', 'dress_violation_receive_after'].includes(g.status) ? '-' : String(g.badgeNumber);
+      const sheetEmail = String(row ? row.email : '').trim();
+      const webEmail = String(g.email || '').trim() || '-';
+      if (!row || sheetEmail !== webEmail || String(row.badge) !== expectedSeat) n++;
+    });
+    return n + Math.max(0, emailRows.length - guestsWithComputedBadges.length);
+  }, [emailData, emailRows, guestsWithComputedBadges]);
 
   const summaryStats = useMemo(() => {
     const total = guestsWithComputedBadges.length;
@@ -2379,8 +2500,8 @@ export default function App() {
 
                 <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
                 <button disabled={isSyncingSheets} onClick={handleExportQrToGoogleSheets} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">{isSyncingSheets ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์ Google Sheets</button>
-                <button disabled={isSendingEmail} onClick={handleSendEmail} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                  {isSendingEmail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Award className="w-3.5 h-3.5" />} ส่งอีเมล
+                <button onClick={openEmailModal} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                  <Award className="w-3.5 h-3.5" /> ส่งอีเมล
                 </button>
 
                 <button
@@ -2722,6 +2843,125 @@ export default function App() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 bg-black/85 overflow-y-auto">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-5 max-w-5xl w-full space-y-3 my-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-black text-[#f3e5ab] flex items-center gap-2"><Award className="w-5 h-5 text-[#d4af37]" /> ส่งอีเมล QR Code</h3>
+                <p className="text-[11px] text-[#d1c7bd] mt-0.5">ส่งตามลำดับที่นั่ง • เลือกส่งเฉพาะบางคนได้ • สถานะเก็บใน Google Sheets (ชีต EmailLog)</p>
+              </div>
+              <button onClick={() => setIsEmailModalOpen(false)} disabled={emailBusy === 'send'} className="text-[#d1c7bd] hover:text-white disabled:opacity-40"><X className="w-5 h-5" /></button>
+            </div>
+
+            {emailData && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="px-2.5 py-1 rounded-lg bg-[#121f38] border border-[#d4af37]/30 text-[#f3e5ab] font-bold">โควตาส่งวันนี้เหลือ {emailData.quota} ฉบับ</span>
+                {emailData.senders.map((sd) => (
+                  <span key={sd.name} className="px-2 py-1 rounded-lg bg-[#070b19] border border-[#d4af37]/20 text-[#d1c7bd]">{sd.name}: {sd.error ? 'ติดต่อไม่ได้' : sd.remaining}</span>
+                ))}
+                {emailData.stopped && <span className="px-2.5 py-1 rounded-lg bg-red-900/50 border border-red-500/50 text-red-200 font-bold">ระบบถูกสั่งหยุดอยู่</span>}
+              </div>
+            )}
+
+            {emailData && emailStaleCount > 0 && (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-900/20 p-3 text-xs text-amber-200 flex flex-wrap items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span className="flex-1 min-w-[200px]">ข้อมูลในชีตไม่ตรงกับในเว็บ {emailStaleCount} รายการ (เช่น แก้อีเมลหรือที่นั่งแล้วยังไม่ซิงค์) กดซิงค์ก่อนส่ง เพื่อไม่ให้ส่งไปอีเมลเก่า</span>
+              </div>
+            )}
+
+            <div className="flex flex-wrap gap-2 items-center">
+              <button disabled={!!emailBusy} onClick={syncEmailSheet} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                {emailBusy === 'sync' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileDown className="w-3.5 h-3.5" />} ซิงค์รายชื่อล่าสุดเข้าชีต
+              </button>
+              <button disabled={!!emailBusy} onClick={() => loadEmailStatus()} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] disabled:opacity-50 text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                {emailBusy === 'load' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5 text-[#d4af37]" />} รีเฟรชสถานะ
+              </button>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <input type="email" value={emailTestTo} onChange={(e) => { setEmailTestTo(e.target.value); try { localStorage.setItem('spu_email_test_to', e.target.value); } catch (x) { /* ignore */ } }} placeholder="อีเมลตัวเองสำหรับทดสอบ" className="px-3 py-2 bg-[#070b19] border border-[#d4af37]/30 rounded-xl text-xs text-[#fdfbf7] w-52" />
+                <button disabled={!!emailBusy || !isValidEmail(emailTestTo)} onClick={() => runEmailSend([], emailTestTo.trim())} className="px-3 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                  {emailBusy === 'test' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} ส่งอีเมลทดสอบ
+                </button>
+              </div>
+            </div>
+
+            {emailData && (
+              <>
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  {[['all', 'ทั้งหมด', emailRows.length], ['pending', 'ยังไม่ส่ง', emailData.counts['ยังไม่ส่ง']], ['sent', 'ส่งแล้ว', emailData.counts['ส่งแล้ว']], ['failed', 'ล้มเหลว', emailData.counts['ล้มเหลว']], ['received', 'ยืนยันได้รับ', emailData.counts['ยืนยันได้รับ']]].map(([k, label, n]) => (
+                    <button key={k} onClick={() => setEmailFilter(k)} className={`px-3 py-1.5 rounded-full text-[11px] font-bold border ${emailFilter === k ? 'bg-[#d4af37] text-[#070b19] border-[#d4af37]' : 'bg-[#121f38] text-[#d1c7bd] border-[#d4af37]/30'}`}>{label} ({n || 0})</button>
+                  ))}
+                  <input value={emailSearch} onChange={(e) => setEmailSearch(e.target.value)} placeholder="ค้นหาชื่อ / รหัส / อีเมล / ที่นั่ง" className="ml-auto px-3 py-1.5 bg-[#070b19] border border-[#d4af37]/30 rounded-xl text-xs text-[#fdfbf7] w-60" />
+                </div>
+
+                <div className="flex flex-wrap gap-2 items-center">
+                  <button disabled={!!emailBusy || emailData.stopped} onClick={() => {
+                    const list = emailRows.filter((r) => (r.status === 'ยังไม่ส่ง' || r.status === 'ล้มเหลว') && isValidEmail(r.email)).map((r) => r.token);
+                    if (list.length === 0) { showToast('warning', 'ไม่มีคนที่ต้องส่งแล้ว'); return; }
+                    if (!window.confirm(`ส่งอีเมลให้ ${list.length} คน (ที่ยังไม่ส่ง/ล้มเหลว และอีเมลถูกรูปแบบ) ตามลำดับที่นั่ง ใช่หรือไม่?\n\nแนะนำให้กด "ส่งอีเมลทดสอบ" ดูหน้าตาก่อน`)) return;
+                    runEmailSend(list, '');
+                  }} className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white rounded-xl text-xs font-bold">ส่งให้ทุกคนที่ยังไม่ส่ง ({emailRows.filter((r) => (r.status === 'ยังไม่ส่ง' || r.status === 'ล้มเหลว') && isValidEmail(r.email)).length})</button>
+                  <button disabled={!!emailBusy || emailData.stopped || emailSelected.length === 0} onClick={() => {
+                    const rowsSel = emailRows.filter((r) => emailSelected.includes(r.token));
+                    const already = rowsSel.filter((r) => r.status === 'ส่งแล้ว' || r.status === 'ยืนยันได้รับ').length;
+                    const bad = rowsSel.filter((r) => !isValidEmail(r.email)).length;
+                    if (!window.confirm(`ส่งอีเมลให้ ${rowsSel.length} คนที่เลือก${already ? `\n(มี ${already} คนที่เคยส่งแล้ว จะถูกส่งซ้ำ)` : ''}${bad ? `\n(มี ${bad} คนอีเมลไม่ถูกต้อง จะขึ้นล้มเหลว)` : ''}`)) return;
+                    runEmailSend(rowsSel.map((r) => r.token), '');
+                  }} className="px-3 py-2 bg-[#d4af37] hover:bg-[#c29e2f] disabled:opacity-40 text-[#070b19] rounded-xl text-xs font-black">ส่งเฉพาะที่เลือก ({emailSelected.length})</button>
+                  {emailBusy === 'send' && <button onClick={handleEmailStop} className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black">หยุดส่ง</button>}
+                  {emailData.stopped && emailBusy !== 'send' && <button onClick={handleEmailResume} className="px-3 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold">ปลดหยุด (พร้อมส่งต่อ)</button>}
+                  <span className="ml-auto flex gap-1.5">
+                    <button disabled={emailSelected.length === 0} onClick={() => handleEmailMark('ยืนยันได้รับ')} className="px-2.5 py-2 bg-[#121f38] disabled:opacity-40 text-emerald-300 border border-emerald-500/40 rounded-xl text-[11px] font-bold">ทำเครื่องหมาย "ยืนยันได้รับ"</button>
+                    <button disabled={emailSelected.length === 0} onClick={() => handleEmailMark('ยังไม่ส่ง')} className="px-2.5 py-2 bg-[#121f38] disabled:opacity-40 text-[#d1c7bd] border border-[#d4af37]/30 rounded-xl text-[11px] font-bold">รีเซ็ตเป็น "ยังไม่ส่ง"</button>
+                  </span>
+                </div>
+                {emailProgress && <p className="text-xs text-emerald-300 font-bold flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" /> {emailProgress}</p>}
+
+                <div className="rounded-2xl border border-[#d4af37]/25 overflow-hidden">
+                  <div className="max-h-[48vh] overflow-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-[#121f38] text-[#f3e5ab] sticky top-0">
+                        <tr>
+                          <th className="p-2 w-8"><input type="checkbox" checked={emailFilteredRows.length > 0 && emailFilteredRows.every((r) => emailSelected.includes(r.token))} onChange={(e) => {
+                            const ids = emailFilteredRows.map((r) => r.token);
+                            setEmailSelected((prev) => e.target.checked ? Array.from(new Set([...prev, ...ids])) : prev.filter((t) => !ids.includes(t)));
+                          }} /></th>
+                          <th className="p-2 text-left">ที่นั่ง</th>
+                          <th className="p-2 text-left">ชื่อ-นามสกุล</th>
+                          <th className="p-2 text-left">อีเมล</th>
+                          <th className="p-2 text-left">สถานะ</th>
+                          <th className="p-2 text-left">ผู้ส่ง / เวลา</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {emailFilteredRows.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-[#d1c7bd]">{emailRows.length === 0 ? 'ยังไม่มีรายชื่อในชีต — กด "ซิงค์รายชื่อล่าสุดเข้าชีต" ก่อน' : 'ไม่พบรายการ'}</td></tr>}
+                        {emailFilteredRows.map((r) => {
+                          const badMail = !isValidEmail(r.email);
+                          const color = r.status === 'ส่งแล้ว' ? 'bg-emerald-900/40 text-emerald-300 border-emerald-500/40' : r.status === 'ยืนยันได้รับ' ? 'bg-sky-900/40 text-sky-300 border-sky-500/40' : r.status === 'ล้มเหลว' ? 'bg-red-900/40 text-red-300 border-red-500/40' : 'bg-[#121f38] text-[#d1c7bd] border-[#d4af37]/20';
+                          return (
+                            <tr key={r.token} className="border-t border-[#d4af37]/10 hover:bg-[#121f38]/60">
+                              <td className="p-2"><input type="checkbox" checked={emailSelected.includes(r.token)} onChange={(e) => setEmailSelected((prev) => e.target.checked ? [...prev, r.token] : prev.filter((t) => t !== r.token))} /></td>
+                              <td className="p-2 font-black text-[#d4af37] whitespace-nowrap">#{r.badge}</td>
+                              <td className="p-2 text-[#fdfbf7]"><div className="font-bold">{r.name}</div><div className="text-[10px] text-[#d1c7bd]">{r.studentId} • {r.year}</div></td>
+                              <td className={`p-2 font-mono ${badMail ? 'text-red-300' : 'text-[#d1c7bd]'}`}>{r.email || '-'}{badMail && <div className="text-[10px] font-sans text-red-300">อีเมลไม่ถูกต้อง — แก้ที่ปุ่มแก้ไขในแดชบอร์ด แล้วซิงค์ใหม่</div>}</td>
+                              <td className="p-2"><span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold whitespace-nowrap ${color}`}>{r.status}</span>{r.error && <div className="text-[10px] text-red-300 mt-0.5 max-w-[180px]">{r.error}</div>}</td>
+                              <td className="p-2 text-[10px] text-[#d1c7bd]">{r.sender || ''}{r.sentAt ? <div>{r.sentAt}</div> : null}{r.attempts > 1 ? <div>ลองแล้ว {r.attempts} ครั้ง</div> : null}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+                <p className="text-[10px] text-[#d1c7bd] leading-relaxed">"ยืนยันได้รับ" ต้องกดทำเครื่องหมายเอง (Gmail ไม่บอกว่าอีเมลถูกเปิดอ่าน) • ถ้าโควตาหมดระหว่างส่ง ระบบหยุดเอง และพรุ่งนี้กด "ส่งให้ทุกคนที่ยังไม่ส่ง" ต่อได้ • ถ้าแก้อีเมลของใครในแดชบอร์ด ให้กดซิงค์ก่อนส่งใหม่</p>
+              </>
+            )}
+            {!emailData && emailBusy === 'load' && <p className="text-xs text-[#d1c7bd] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลดสถานะ...</p>}
           </div>
         </div>
       )}
