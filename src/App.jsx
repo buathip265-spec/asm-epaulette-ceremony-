@@ -49,6 +49,18 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
+// ล้างอักขระล่องหน (zero-width) และช่องว่างซ้อน ที่มักติดมาจาก Google Form / การคัดลอก
+const cleanCell = (v) => String(v === undefined || v === null ? '' : v).replace(/[\u200b-\u200d\u2060\ufeff\u00a0]/g, ' ').replace(/\s+/g, ' ').trim();
+const KNOWN_EMAIL_DOMAINS = ['spumail.net', 'spu.ac.th', 'gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com', 'icloud.com', 'live.com', 'hotmail.co.th', 'yahoo.co.th'];
+const isSuspiciousEmailDomain = (v) => { const d = String(v || '').trim().toLowerCase().split('@')[1]; return !!d && !KNOWN_EMAIL_DOMAINS.includes(d); };
+// แก้โดเมนที่พิมพ์ผิดให้เป็น spumail.net หรือ gmail.com (เดาจากตัวอักษรในโดเมน)
+const fixEmailDomain = (v) => {
+  const [local, domain] = String(v).trim().split('@');
+  const d = String(domain || '').toLowerCase();
+  const target = /gma|gam|mail\.net$/.test(d) && /gma|gam|gmi/.test(d) ? 'gmail.com' : 'spumail.net';
+  return local + '@' + target;
+};
+const parseYearLabel = (v) => { const m = String(v || '').match(/(\d)/); return m ? 'ปี ' + m[1] : ''; };
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim());
 const YEAR_OPTIONS = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
 
@@ -331,6 +343,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('scan');
 
   const [batchSize, setBatchSize] = useState(14);
+  const [mcRows, setMcRows] = useState('auto'); // จำนวนคนต่อหน้าของใบรายชื่อพิธีกร: 'auto' (ตามชุด) | 30 | 40 | 50
   const [seatsPerRow, setSeatsPerRow] = useState(readSavedSeatsPerRow);
   const [seatsPerRowInput, setSeatsPerRowInput] = useState(() => String(readSavedSeatsPerRow())); // ข้อความในช่องกรอก (ปล่อยว่างระหว่างพิมพ์ได้)
   const seatsEditingRef = useRef(false);
@@ -412,6 +425,7 @@ export default function App() {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState([]);
   const [excelDupCount, setExcelDupCount] = useState(0);
+  const [excelReport, setExcelReport] = useState(null); // สรุปผลตรวจไฟล์ Excel ก่อนนำเข้า
   const fileInputRef = useRef(null);
 
   const [resetConfirmInput, setResetConfirmInput] = useState('');
@@ -1112,9 +1126,11 @@ export default function App() {
         clone.style.boxShadow = 'none';
         clone.style.margin = '0';
         holder.appendChild(clone);
-        const canvas = await window.html2canvas(clone, { scale: 2, backgroundColor: '#ffffff' });
+        try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* ignore */ }
+        const canvas = await window.html2canvas(clone, { scale: 3, backgroundColor: '#ffffff', windowWidth: 794, logging: false });
         if (i > 0) pdf.addPage();
-        pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+        canvas.width = 0; canvas.height = 0;
         updateToast(tid, 'loading', `กำลังสร้างไฟล์ PDF... (${i + 1}/${pageEls.length} หน้า)`);
       }
 
@@ -1426,7 +1442,13 @@ export default function App() {
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
   const mcPages = useMemo(() => {
-    const ROWS_PER_PAGE = 25;
+    const setSize = Math.max(5, Math.min(25, Number(batchSize) || 10));
+    // จัดหน้าให้ชุด (ชุดละ N คน) ไม่ถูกตัดข้ามหน้า และแถวสูงพอให้อ่านง่าย
+    const fixedRows = mcRows === 'auto' ? 0 : Number(mcRows);
+    const ROWS_PER_PAGE = fixedRows > 0 ? fixedRows : Math.max(setSize, Math.floor(22 / setSize) * setSize);
+    const dense = fixedRows >= 40; // หน้าแน่น: ไม่ใช้แถบหัวชุด ใช้เส้นหนาและสีสลับแทนเพื่อประหยัดที่
+    const bandsPerPage = dense ? 0 : Math.ceil(ROWS_PER_PAGE / setSize) + (fixedRows > 0 ? 1 : 0);
+    const rowH = Math.max(15, Math.min(54, Math.floor((850 - bandsPerPage * 24) / ROWS_PER_PAGE)));
     const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
@@ -1440,12 +1462,16 @@ export default function App() {
           page: i + 1,
           totalPages,
           total: list.length,
+          setSize,
+          rowH,
+          dense,
+          startIndex: i * ROWS_PER_PAGE,
           rows: list.slice(i * ROWS_PER_PAGE, (i + 1) * ROWS_PER_PAGE)
         });
       }
     });
     return pages;
-  }, [guestsWithComputedBadges]);
+  }, [guestsWithComputedBadges, batchSize, mcRows]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guestsWithComputedBadges.filter((g) => {
@@ -2583,7 +2609,16 @@ export default function App() {
                 </h2>
                 <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี ไม่ปนกัน • ทั้งหมด {mcPages.length} หน้า • มีช่องติ๊ก มา / สาย</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 items-center justify-end">
+                <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1.5">
+                  คนต่อหน้า
+                  <select value={mcRows} onChange={(e) => setMcRows(e.target.value)} className="px-2 py-1.5 rounded-lg border border-gray-300 bg-white text-gray-800 text-xs font-bold">
+                    <option value="auto">ตามชุด (อ่านง่ายสุด)</option>
+                    <option value="30">30 คน</option>
+                    <option value="40">40 คน (แน่น)</option>
+                    <option value="50">50 คน (แน่นมาก)</option>
+                  </select>
+                </label>
                 <button
                   disabled={isPdfGenerating}
                   onClick={handleSaveMcPdf}
@@ -2603,43 +2638,67 @@ export default function App() {
                   <div
                     key={pIdx}
                     className="mc-page"
-                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 48px 40px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
+                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '36px 48px 40px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
                   >
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.4 }}>พิธีมอบประดับบ่าเกียรติยศ SPU</div>
-                      <div style={{ fontSize: 15, marginTop: 2, lineHeight: 1.4 }}>รายชื่อ{pg.year} • ทั้งหมด {pg.total} คน</div>
+                    <div style={{ textAlign: 'center', borderBottom: '3px solid #111827', paddingBottom: 8 }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.5 }}>พิธีมอบประดับบ่าเกียรติยศ SPU</div>
+                      <div style={{ fontSize: 16, marginTop: 2, lineHeight: 1.5, fontWeight: 700 }}>รายชื่อ{pg.year} • ทั้งหมด {pg.total} คน • ชุดละ {pg.setSize} คน</div>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginTop: 16, fontSize: 13 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginTop: 10, fontSize: 14 }}>
                       <colgroup>
-                        <col style={{ width: 80 }} />
-                        <col style={{ width: 120 }} />
+                        <col style={{ width: 44 }} />
+                        <col style={{ width: 72 }} />
                         <col />
-                        <col style={{ width: 70 }} />
-                        <col style={{ width: 70 }} />
+                        <col style={{ width: 92 }} />
+                        <col style={{ width: 48 }} />
+                        <col style={{ width: 48 }} />
+                        <col style={{ width: 78 }} />
                       </colgroup>
                       <thead>
-                        <tr style={{ background: '#f3f4f6', height: 36 }}>
-                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>ที่นั่ง</th>
-                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>รหัสนักศึกษา</th>
-                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'left' }}>ชื่อ - นามสกุล</th>
-                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>มา</th>
-                          <th style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center' }}>สาย</th>
+                        <tr style={{ background: '#111827', color: '#ffffff', height: 34 }}>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>ลำดับ</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>ที่นั่ง</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 8px', textAlign: 'left' }}>ชื่อ - นามสกุล</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>รหัส</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>มา</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center' }}>สาย</th>
+                          <th style={{ border: '1px solid #111827', padding: '0 4px', textAlign: 'center', fontSize: 12 }}>หมายเหตุ</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {pg.rows.map((g) => (
-                          <tr key={g.id} style={{ height: 34 }}>
-                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center', fontWeight: 700 }}>#{g.badgeNumber}</td>
-                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', textAlign: 'center', fontFamily: 'monospace' }}>{g.studentId || '-'}</td>
-                            <td style={{ border: '1px solid #9ca3af', padding: '0 8px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</td>
-                            <td style={{ border: '1px solid #9ca3af', textAlign: 'center' }}>
-                              <span style={{ display: 'inline-block', width: 16, height: 16, border: '1.5px solid #374151', borderRadius: 3, verticalAlign: 'middle' }} />
-                            </td>
-                            <td style={{ border: '1px solid #9ca3af', textAlign: 'center' }}>
-                              <span style={{ display: 'inline-block', width: 16, height: 16, border: '1.5px solid #374151', borderRadius: 3, verticalAlign: 'middle' }} />
-                            </td>
-                          </tr>
-                        ))}
+                        {pg.rows.map((g, i) => {
+                          const idx = pg.startIndex + i;
+                          const setNo = Math.floor(idx / pg.setSize) + 1;
+                          const startsSet = idx % pg.setSize === 0;
+                          const shade = setNo % 2 === 0 ? '#e5eaf2' : '#ffffff';
+                          const fs = Math.max(11, Math.min(17, Math.round(pg.rowH * 0.56)));
+                          const cb = Math.max(12, Math.min(22, pg.rowH - 8));
+                          const cell = { border: '1px solid #6b7280', padding: 0 };
+                          return (
+                            <React.Fragment key={g.id}>
+                              {startsSet && !pg.dense && (
+                                <tr style={{ height: 24 }}>
+                                  <td colSpan={7} style={{ background: '#374151', color: '#ffffff', fontSize: 12, fontWeight: 700, padding: '0 10px', border: '1px solid #111827' }}>
+                                    ชุดที่ {setNo} • เริ่มที่นั่ง #{g.badgeNumber}
+                                  </td>
+                                </tr>
+                              )}
+                              <tr style={{ height: pg.rowH, background: shade }}>
+                                <td style={{ ...cell, textAlign: 'center', fontSize: Math.max(10, fs - 4), color: '#4b5563', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{idx + 1}</td>
+                                <td style={{ ...cell, textAlign: 'center', fontWeight: 800, fontSize: Math.min(18, fs + 1), borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>#{g.badgeNumber}</td>
+                                <td style={{ ...cell, padding: '0 8px', fontWeight: 700, fontSize: fs, lineHeight: 1.15, whiteSpace: pg.dense ? 'nowrap' : 'normal', overflow: 'hidden', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{g.name}</td>
+                                <td style={{ ...cell, textAlign: 'center', fontFamily: 'monospace', fontSize: Math.max(9, fs - 5), color: '#6b7280', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>{g.studentId || '-'}</td>
+                                <td style={{ ...cell, textAlign: 'center', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>
+                                  <span style={{ display: 'inline-block', width: cb, height: cb, border: '2px solid #111827', borderRadius: 3, background: '#ffffff', verticalAlign: 'middle' }} />
+                                </td>
+                                <td style={{ ...cell, textAlign: 'center', borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }}>
+                                  <span style={{ display: 'inline-block', width: cb, height: cb, border: '2px solid #111827', borderRadius: 3, background: '#ffffff', verticalAlign: 'middle' }} />
+                                </td>
+                                <td style={{ ...cell, borderTop: startsSet && pg.dense ? '2.5px solid #111827' : cell.border }} />
+                              </tr>
+                            </React.Fragment>
+                          );
+                        })}
                       </tbody>
                     </table>
                     <div style={{ position: 'absolute', bottom: 18, left: 0, right: 0, textAlign: 'center', fontSize: 11, color: '#6b7280' }}>
@@ -2884,49 +2943,83 @@ export default function App() {
             <input ref={fileInputRef} type="file" accept=".xlsx, .xls, .csv" onChange={(e) => {
               const file = e.target.files?.[0];
               if (!file) return;
+              setExcelReport(null);
               const reader = new FileReader();
               reader.onload = (evt) => {
                 const workbook = XLSX.read(evt.target?.result, { type: 'binary' });
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 const raw = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-                const parsed = raw.map((row, idx) => ({
-                  id: String(row['รหัสนักศึกษา'] || '').trim() ? 'imp_' + String(row['รหัสนักศึกษา']).trim() : 'imp_' + Date.now() + '_' + idx,
-                  studentId: String(row['รหัสนักศึกษา'] || ''),
-                  name: String(row['ชื่อ-นามสกุล'] || row['ชื่อ'] || ''),
-                  email: String(row['อีเมล'] || ''),
-                  role: 'ผู้เข้าร่วม',
-                  year: detectYearFromStudentId(String(row['รหัสนักศึกษา'] || '')),
-                  note: String(row['หมายเหตุ'] || ''),
-                  qrToken: String(row['รหัสนักศึกษา'] || Math.random().toString(36).substring(2, 8).toUpperCase()),
-                  status: 'pending',
-                  checkInTime: null,
-                  prevStatus: null,
-                  skipped: false,
-                  standbyOrder: null, queueOrder: null,
-                  studentType: 'normal'
-                })).filter(g => g.name);
-
-                // ตัดรายชื่อที่ซ้ำกับในระบบ/ซ้ำกันเองในไฟล์ออก — ไม่เขียนทับรายชื่อเดิม (จึงไม่ทำให้สถานะ Staff หาย)
-                const existingIds = new Set(guestsWithComputedBadges.map((g) => normKey(g.studentId)).filter(Boolean));
-                const existingNames = new Set(guestsWithComputedBadges.map((g) => normKey(g.name)));
+                // จับคู่หัวคอลัมน์แบบยืดหยุ่น: ตัดช่องว่างทั้งหมด (เช่น "ชื่อ - นามสกุล" = "ชื่อ-นามสกุล")
+                const squash = (t) => String(t).replace(/[\s\u200b-\u200d\ufeff]+/g, '').toLowerCase();
+                const cell = (row, keys) => {
+                  const map = {};
+                  Object.keys(row).forEach((k) => { map[squash(k)] = row[k]; });
+                  for (const k of keys) { const v = cleanCell(map[squash(k)]); if (v) return v; }
+                  return '';
+                };
+                const report = { totalRows: 0, noName: [], notAttend: [], dupSystem: [], dupFile: [], badEmail: [], badDomain: [], emailFixed: [], badId: [], yearMismatch: [], noEmail: 0, noId: 0 };
+                const existingIds = new Set(allGuestsComputed.map((g) => normKey(g.studentId)).filter(Boolean));
+                const existingNames = new Set(allGuestsComputed.map((g) => normKey(g.name)));
                 const seenKeys = new Set();
                 const fresh = [];
-                let dupCount = 0;
-                parsed.forEach((g) => {
-                  const sid = normKey(g.studentId);
-                  const key = sid ? 'id:' + sid : 'nm:' + normKey(g.name);
-                  const exists = sid ? existingIds.has(sid) : existingNames.has(normKey(g.name));
-                  if (exists || seenKeys.has(key)) { dupCount++; return; }
+                raw.forEach((row, idx) => {
+                  const rowNo = idx + 2; // แถวใน Excel (แถว 1 = หัวตาราง)
+                  let sid = cell(row, ['รหัสนักศึกษา', 'รหัสนศ', 'รหัส']);
+                  const prefix = cell(row, ['คำนำหน้า']);
+                  let name = cell(row, ['ชื่อ-นามสกุล', 'ชื่อนามสกุล', 'ชื่อ']);
+                  let email = cell(row, ['อีเมล', 'อีเมลล์', 'email']);
+                  const intent = cell(row, ['ความประสงค์']);
+                  const yearCol = parseYearLabel(cell(row, ['ระดับชั้นปี', 'ชั้นปี']));
+                  if (!sid && !name && !email) return; // แถวว่าง ข้ามเงียบๆ
+                  report.totalRows++;
+                  if (!name) { report.noName.push({ rowNo, sid }); return; }
+                  // ไฟล์จากฟอร์ม: คนที่เลือก "ไม่เข้าร่วม" ไม่นำเข้า
+                  if (intent && /ไม่\s*เข้าร่วม/.test(intent)) { report.notAttend.push({ rowNo, name, sid, reason: cell(row, ['เหตุผลที่ไม่สามารถเข้าร่วมได้']) }); return; }
+                  // คำนำหน้าแยกคอลัมน์ → ต่อหน้าชื่อ (ระบบจัดที่นั่งหญิง/ชายจากคำนำหน้า)
+                  if (prefix && !name.startsWith(prefix)) name = prefix + name;
+                  // รหัสต้องเป็นตัวเลขล้วน
+                  if (sid && !/^\d+$/.test(sid)) { report.badId.push({ rowNo, name, sid }); sid = ''; }
+                  else if (sid && sid.length !== 8) report.badId.push({ rowNo, name, sid, note: 'ความยาวไม่ใช่ 8 หลัก' });
+                  const nsid = normKey(sid);
+                  const key = nsid ? 'id:' + nsid : 'nm:' + normKey(name);
+                  const inSystem = nsid ? existingIds.has(nsid) : existingNames.has(normKey(name));
+                  if (inSystem) { report.dupSystem.push({ rowNo, name, sid }); return; }
+                  if (seenKeys.has(key)) { report.dupFile.push({ rowNo, name, sid }); return; }
                   seenKeys.add(key);
-                  fresh.push(g);
+                  if (!sid) report.noId++;
+                  if (!email) report.noEmail++;
+                  else if (!isValidEmail(email)) report.badEmail.push({ rowNo, name, email });
+                  else if (isSuspiciousEmailDomain(email)) { const fixed = fixEmailDomain(email); report.emailFixed.push({ rowNo, name, from: email, to: fixed }); email = fixed; }
+                  const yearId = detectYearFromStudentId(sid);
+                  const year = yearCol || yearId;
+                  if (yearCol && sid.length === 8 && yearCol !== yearId) report.yearMismatch.push({ rowNo, name, sid, yearCol });
+                  fresh.push({
+                    id: sid ? 'imp_' + sid : 'imp_' + Date.now() + '_' + idx,
+                    studentId: sid,
+                    name,
+                    email,
+                    role: 'ผู้เข้าร่วม',
+                    year,
+                    note: cell(row, ['หมายเหตุ']),
+                    qrToken: sid || Math.random().toString(36).substring(2, 8).toUpperCase(),
+                    status: 'pending',
+                    checkInTime: null,
+                    prevStatus: null,
+                    skipped: false,
+                    standbyOrder: null, queueOrder: null,
+                    studentType: 'normal'
+                  });
                 });
+                const dupCount = report.dupSystem.length + report.dupFile.length;
+                report.newCount = fresh.length;
+                setExcelReport(report);
 
-                if (parsed.length === 0) {
+                if (report.totalRows === 0) {
                   showToast('warning', 'ไม่พบรายชื่อในไฟล์ ตรวจสอบหัวคอลัมน์ "ชื่อ-นามสกุล" และ "รหัสนักศึกษา"');
                 } else if (fresh.length === 0) {
-                  showToast('warning', `รายชื่อทั้งหมดในไฟล์ (${parsed.length} รายการ) มีอยู่ในระบบแล้ว ไม่มีรายชื่อใหม่ให้นำเข้า`);
+                  showToast('warning', 'ไม่มีรายชื่อใหม่ให้นำเข้า ดูสรุปในหน้าต่าง');
                 } else {
-                  showToast('success', `อ่านไฟล์สำเร็จ พบรายชื่อใหม่ ${fresh.length} รายชื่อ${dupCount > 0 ? ` (ข้ามรายชื่อซ้ำ ${dupCount} รายการ)` : ''}`);
+                  showToast('success', `อ่านไฟล์สำเร็จ รายชื่อใหม่ ${fresh.length} ซ้ำ ${dupCount}`);
                 }
                 setExcelDupCount(dupCount);
                 setExcelPreviewData(fresh);
@@ -2934,14 +3027,57 @@ export default function App() {
               reader.onerror = () => showToast('error', 'อ่านไฟล์ไม่สำเร็จ กรุณาลองไฟล์อื่น');
               reader.readAsBinaryString(file);
             }} className="text-xs text-[#d1c7bd] file:bg-[#d4af37] file:text-[#070b19] file:border-0 file:rounded-xl file:px-3 file:py-1.5 cursor-pointer font-bold" />
-            {excelPreviewData.length > 0 && <p className="text-xs text-emerald-400">พร้อมนำเข้า {excelPreviewData.length} รายการ{excelDupCount > 0 ? ` (ข้ามรายชื่อซ้ำ ${excelDupCount} รายการ)` : ''} — รายชื่อใหม่เป็น Normal</p>}
+            {excelReport && (
+              <div className="rounded-2xl border border-[#d4af37]/30 bg-[#070b19] p-3 space-y-2 text-xs max-h-72 overflow-y-auto">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-[#121f38] p-2"><div className="text-lg font-black text-[#f3e5ab]">{excelReport.totalRows}</div><div className="text-[10px] text-[#d1c7bd]">แถวในไฟล์</div></div>
+                  <div className="rounded-xl bg-emerald-900/30 border border-emerald-500/30 p-2"><div className="text-lg font-black text-emerald-400">{excelReport.newCount}</div><div className="text-[10px] text-emerald-200">เพิ่มได้ (ใหม่)</div></div>
+                  <div className="rounded-xl bg-amber-900/30 border border-amber-500/30 p-2"><div className="text-lg font-black text-amber-400">{excelReport.dupSystem.length + excelReport.dupFile.length}</div><div className="text-[10px] text-amber-200">ซ้ำ (ข้าม)</div></div>
+                </div>
+                {excelReport.dupSystem.length > 0 && (
+                  <details className="text-amber-300"><summary className="cursor-pointer font-bold">ซ้ำกับที่มีในระบบ {excelReport.dupSystem.length} คน</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.dupSystem.slice(0, 30).map((r) => <li key={'s' + r.rowNo}>แถว {r.rowNo}: {r.name} {r.sid && `(${r.sid})`}</li>)}{excelReport.dupSystem.length > 30 && <li>…และอีก {excelReport.dupSystem.length - 30} คน</li>}</ul></details>
+                )}
+                {excelReport.dupFile.length > 0 && (
+                  <details className="text-amber-300"><summary className="cursor-pointer font-bold">ซ้ำกันเองในไฟล์ {excelReport.dupFile.length} คน (เก็บแถวแรก)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.dupFile.slice(0, 30).map((r) => <li key={'f' + r.rowNo}>แถว {r.rowNo}: {r.name} {r.sid && `(${r.sid})`}</li>)}</ul></details>
+                )}
+                {excelReport.noName.length > 0 && (
+                  <details className="text-red-300" open><summary className="cursor-pointer font-bold">ไม่มีชื่อ {excelReport.noName.length} แถว (ไม่นำเข้า)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.noName.slice(0, 30).map((r) => <li key={'n' + r.rowNo}>แถว {r.rowNo} {r.sid && `(รหัส ${r.sid})`}</li>)}</ul></details>
+                )}
+                {excelReport.badEmail.length > 0 && (
+                  <details className="text-red-300" open><summary className="cursor-pointer font-bold">อีเมลรูปแบบผิด {excelReport.badEmail.length} คน (นำเข้าได้ แต่ควรแก้ภายหลัง)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.badEmail.slice(0, 50).map((r) => <li key={'e' + r.rowNo}>แถว {r.rowNo}: {r.name} — “{r.email}”</li>)}</ul></details>
+                )}
+                {excelReport.notAttend.length > 0 && (
+                  <details className="text-sky-300"><summary className="cursor-pointer font-bold">แจ้งไม่เข้าร่วม {excelReport.notAttend.length} คน (ไม่นำเข้า)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.notAttend.slice(0, 30).map((r) => <li key={'a' + r.rowNo}>แถว {r.rowNo}: {r.name}{r.reason ? ` — ${r.reason}` : ''}</li>)}</ul></details>
+                )}
+                {excelReport.badId.length > 0 && (
+                  <details className="text-red-300" open><summary className="cursor-pointer font-bold">รหัสนักศึกษาผิดปกติ {excelReport.badId.length} คน (นำเข้าได้ แต่ควรตรวจ)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.badId.slice(0, 30).map((r) => <li key={'i' + r.rowNo}>แถว {r.rowNo}: {r.name} — “{r.sid}” {r.note || '(ไม่ใช่ตัวเลข ระบบจะเว้นว่างไว้)'}</li>)}</ul></details>
+                )}
+                {excelReport.emailFixed.length > 0 && (
+                  <details className="text-amber-300" open><summary className="cursor-pointer font-bold">แก้อีเมลที่พิมพ์ผิดให้อัตโนมัติ {excelReport.emailFixed.length} คน (ควรตรวจอีกครั้ง)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.emailFixed.slice(0, 50).map((r) => <li key={'d' + r.rowNo}>แถว {r.rowNo}: {r.name} — {r.from} → <span className="text-emerald-300">{r.to}</span></li>)}</ul></details>
+                )}
+                {excelReport.yearMismatch.length > 0 && (
+                  <details className="text-amber-300"><summary className="cursor-pointer font-bold">ชั้นปีไม่ตรงกับรหัส {excelReport.yearMismatch.length} คน (ใช้ชั้นปีที่กรอกในไฟล์)</summary>
+                    <ul className="mt-1 pl-4 list-disc text-[11px] text-[#d1c7bd]">{excelReport.yearMismatch.slice(0, 30).map((r) => <li key={'y' + r.rowNo}>แถว {r.rowNo}: {r.name} ({r.sid}) → {r.yearCol}</li>)}</ul></details>
+                )}
+                {excelReport.noEmail > 0 && <p className="text-amber-300 font-bold">ไม่มีอีเมล {excelReport.noEmail} คน (นำเข้าได้ ส่งอีเมลไม่ได้จนกว่าจะเพิ่ม)</p>}
+                {excelReport.noId > 0 && <p className="text-amber-300 font-bold">ไม่มีรหัสนักศึกษา {excelReport.noId} คน (ใช้ชื่อเทียบซ้ำแทน)</p>}
+                {excelReport.newCount > 0 && <p className="text-emerald-400 font-bold">กดยืนยันเพื่อเพิ่ม {excelReport.newCount} คน เป็น Normal — คนเดิมไม่ถูกแก้ไข</p>}
+              </div>
+            )}
             <div className="flex gap-2 pt-2">
-              <button onClick={() => setIsExcelModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={() => { setIsExcelModalOpen(false); setExcelReport(null); setExcelPreviewData([]); setExcelDupCount(0); }} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button disabled={excelPreviewData.length === 0} onClick={async () => {
                 const colRef = collection(db, COLLECTION_NAME);
                 // เช็กซ้ำอีกรอบกับข้อมูลล่าสุดก่อนเขียน (กันนำเข้าซ้ำ/เขียนทับสถานะที่ผู้ดูแลตั้งไว้)
-                const latestIds = new Set(guestsWithComputedBadges.map((g) => normKey(g.studentId)).filter(Boolean));
-                const latestNames = new Set(guestsWithComputedBadges.map((g) => normKey(g.name)));
+                const latestIds = new Set(allGuestsComputed.map((g) => normKey(g.studentId)).filter(Boolean));
+                const latestNames = new Set(allGuestsComputed.map((g) => normKey(g.name)));
                 const toImport = excelPreviewData.filter((g) => {
                   const sid = normKey(g.studentId);
                   return sid ? !latestIds.has(sid) : !latestNames.has(normKey(g.name));
@@ -2964,6 +3100,7 @@ export default function App() {
                 }
                 setExcelPreviewData([]);
                 setExcelDupCount(0);
+                setExcelReport(null);
                 setIsExcelModalOpen(false);
                 updateToast(tid, 'success', `นำเข้า ${total} รายชื่อสำเร็จ${skippedTotal > 0 ? ` (ข้ามรายชื่อซ้ำ ${skippedTotal} รายการ)` : ''}`);
                 } catch (err) {
