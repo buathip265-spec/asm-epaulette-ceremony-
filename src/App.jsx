@@ -49,6 +49,9 @@ const detectYearFromStudentId = (studentId) => {
   return 'ปี 1';
 };
 
+const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim());
+const YEAR_OPTIONS = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
+
 const checkIsItemNotReady = (guest) => {
   if (!guest) return false;
   const text = `${guest.note || ''} ${guest.itemStatus || ''}`.toLowerCase();
@@ -1185,6 +1188,22 @@ export default function App() {
     });
   };
 
+  // เปิดหน้าต่างแก้ไขข้อมูลของคนที่เลือก (รหัส ชั้นปี ชื่อ อีเมล ประเภท)
+  const openEditGuest = (g) => {
+    setEditingGuest(g);
+    setFormData({
+      badgeNumber: g.badgeNumber || '',
+      studentId: g.studentId || '',
+      name: g.name || '',
+      email: g.email || '',
+      role: g.role || 'ผู้เข้าร่วม',
+      note: g.note || '',
+      year: g.year || detectYearFromStudentId(g.studentId),
+      studentType: getStudentType(g)
+    });
+    setIsEditModalOpen(true);
+  };
+
   const handleSaveGuest = async (e) => {
     e.preventDefault();
     if (!formData.name.trim()) {
@@ -1192,12 +1211,18 @@ export default function App() {
       return;
     }
     const sid = formData.studentId.trim();
-    if (!editingGuest && sid && guests.some((g) => String(g.studentId || '').trim() === sid)) {
+    if (sid && guests.some((g) => String(g.studentId || '').trim() === sid && (!editingGuest || g.id !== editingGuest.id))) {
       showToast('warning', `รหัสนักศึกษา ${sid} มีอยู่ในระบบแล้ว`);
       return;
     }
+    const emailTrim = formData.email.trim();
+    if (emailTrim && !isValidEmail(emailTrim)) {
+      showToast('warning', 'รูปแบบอีเมลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง');
+      return;
+    }
 
-    const calculatedYear = detectYearFromStudentId(formData.studentId);
+    const calculatedYear = YEAR_OPTIONS.includes(formData.year) ? formData.year : detectYearFromStudentId(formData.studentId);
+    const chosenType = formData.studentType === 'staff' ? 'staff' : 'normal';
     const qrToken = formData.studentId.trim() || `K${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
     const tid = showToast('loading', editingGuest ? 'กำลังบันทึกการแก้ไข...' : 'กำลังเพิ่มรายชื่อ...');
@@ -1209,7 +1234,8 @@ export default function App() {
         year: calculatedYear,
         email: formData.email.trim(),
         role: formData.role,
-        note: formData.note.trim()
+        note: formData.note.trim(),
+        studentType: chosenType
       });
     } else {
       const newGuest = {
@@ -1226,7 +1252,7 @@ export default function App() {
         prevStatus: null,
         skipped: false,
         standbyOrder: null, queueOrder: null,
-        studentType: 'normal'
+        studentType: chosenType
       };
       await setDoc(getGuestDocRef(newGuest.id), newGuest);
     }
@@ -2165,6 +2191,7 @@ export default function App() {
                             <td className="p-3.5">{g.originalSeat ? `#${g.originalSeat}` : '—'}</td>
                             <td className="p-3.5 text-rose-300">{g.ineligibleReason || 'ไม่เข้าร่วมงานซ้อม'}</td>
                             <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                              <button onClick={() => openEditGuest(g)} className="px-2.5 py-1 bg-[#d4af37]/15 text-[#f3e5ab] border border-[#d4af37]/40 rounded text-[11px] font-bold">แก้ไข</button>
                               <button onClick={() => handleRestoreEligibility(g)} className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 hover:text-white rounded text-[11px] font-bold">คืนสิทธิ์</button>
                               <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบถาวร"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                             </td>
@@ -2477,7 +2504,10 @@ export default function App() {
                           )}
                         </td>
                         <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
-                        <td className="p-3.5 font-bold text-[#fdfbf7]">{g.name}</td>
+                        <td className="p-3.5 font-bold text-[#fdfbf7]">
+                          {g.name}
+                          <div className={`text-[10px] font-mono font-normal mt-0.5 ${isValidEmail(g.email) ? 'text-[#d1c7bd]' : 'text-rose-300'}`}>{g.email ? (isValidEmail(g.email) ? g.email : `⚠ ${g.email}`) : '⚠ ยังไม่มีอีเมล'}</div>
+                        </td>
                         <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
                         <td className="p-3.5">
                           <div className="inline-flex rounded-lg overflow-hidden border border-[#d4af37]/30 text-[11px] font-bold">
@@ -2509,6 +2539,7 @@ export default function App() {
                         </td>
                         <td className="p-3.5 text-right space-x-2">
                           {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#d4af37] hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
+                          <button onClick={() => openEditGuest(g)} className="px-2 py-1 bg-[#d4af37]/15 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/40 rounded text-[11px] font-bold inline-flex items-center gap-1"><Edit2 className="w-3 h-3" /> แก้ไข</button>
                           <button onClick={() => handleMarkIneligible(g)} className="text-rose-300 hover:underline text-[11px] font-bold">ตัดสิทธิ์</button>
                           <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                         </td>
@@ -2788,10 +2819,32 @@ export default function App() {
                 <input
                   type="text"
                   value={formData.studentId}
-                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setFormData({ ...formData, studentId: v, ...(editingGuest ? {} : { year: detectYearFromStudentId(v) }) });
+                  }}
                   className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
                   placeholder="เช่น 69014522"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-[#d1c7bd] block mb-1">ชั้นปี</label>
+                  <select
+                    value={YEAR_OPTIONS.includes(formData.year) ? formData.year : detectYearFromStudentId(formData.studentId)}
+                    onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                    className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
+                  >
+                    {YEAR_OPTIONS.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-[#d1c7bd] block mb-1">ประเภท</label>
+                  <div className="inline-flex w-full rounded-xl overflow-hidden border border-[#d4af37]/40 text-[11px] font-bold">
+                    <button type="button" onClick={() => setFormData({ ...formData, studentType: 'normal' })} className={`flex-1 py-2 ${formData.studentType !== 'staff' ? 'bg-slate-600 text-white' : 'bg-[#070b19] text-[#d1c7bd]'}`}>Normal</button>
+                    <button type="button" onClick={() => setFormData({ ...formData, studentType: 'staff' })} className={`flex-1 py-2 ${formData.studentType === 'staff' ? 'bg-purple-600 text-white' : 'bg-[#070b19] text-[#d1c7bd]'}`}>Staff</button>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="font-bold text-[#d1c7bd] block mb-1">ชื่อ-นามสกุล *</label>
@@ -2813,6 +2866,7 @@ export default function App() {
                   className="w-full px-3 py-2 bg-[#070b19] border border-[#d4af37]/40 rounded-xl text-[#fdfbf7] outline-none"
                   placeholder="name@spumail.net"
                 />
+                {formData.email.trim() && !isValidEmail(formData.email) && <p className="mt-1 text-[11px] text-rose-300">รูปแบบอีเมลดูไม่ถูกต้อง</p>}
               </div>
               <div className="pt-3 border-t border-[#d4af37]/30 flex gap-2">
                 <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 bg-[#121f38] text-[#d1c7bd] font-bold rounded-xl border border-[#d4af37]/30">ยกเลิก</button>
