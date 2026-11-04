@@ -45,7 +45,7 @@ const detectYearFromStudentId = (studentId) => {
   if (prefix === '67') return 'ปี 3';
   if (prefix === '66') return 'ปี 4';
   const num = parseInt(prefix, 10);
-  if (!isNaN(num) && num <= 65) return 'บัณฑิต';
+  if (!isNaN(num) && num <= 65) return 'ปี 4'; // รหัสรุ่นเก่ากว่า 66 นับเป็นปี 4 (ไม่มีกลุ่มบัณฑิตแยก)
   return 'ปี 1';
 };
 
@@ -98,7 +98,7 @@ const copyTextToClipboard = async (text) => {
 };
 const parseYearLabel = (v) => { const m = String(v || '').match(/(\d)/); return m ? 'ปี ' + m[1] : ''; };
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(v || '').trim());
-const YEAR_OPTIONS = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
+const YEAR_OPTIONS = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
 
 const checkIsItemNotReady = (guest) => {
   if (!guest) return false;
@@ -107,7 +107,7 @@ const checkIsItemNotReady = (guest) => {
   return keywords.some((kw) => text.includes(kw));
 };
 
-const YEAR_WEIGHTS = { 'ปี 1': 1, 'ปี 2': 2, 'ปี 3': 3, 'ปี 4': 4, 'บัณฑิต': 5 };
+const YEAR_WEIGHTS = { 'ปี 1': 1, 'ปี 2': 2, 'ปี 3': 3, 'ปี 4': 4 };
 const getYearOrderWeight = (yearStr) => {
   if (!yearStr) return 99;
   for (const [key, weight] of Object.entries(YEAR_WEIGHTS)) {
@@ -512,7 +512,7 @@ export default function App() {
       }
       const items = snapshot.docs
         .filter((d) => d.id !== SETTINGS_DOC_ID)
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        .map((docSnap) => { const d = docSnap.data(); return { id: docSnap.id, ...d, year: d.year === 'บัณฑิต' ? 'ปี 4' : d.year }; });
       setGuests(sortGuestsByCustomCriteria(items));
       setIsDataLoaded(true);
     }, (err) => {
@@ -1448,7 +1448,6 @@ export default function App() {
       'ปี 2': guestsWithComputedBadges.filter(g => g.year === 'ปี 2').length,
       'ปี 3': guestsWithComputedBadges.filter(g => g.year === 'ปี 3').length,
       'ปี 4': guestsWithComputedBadges.filter(g => g.year === 'ปี 4').length,
-      'บัณฑิต': guestsWithComputedBadges.filter(g => g.year === 'บัณฑิต').length,
     };
 
     return { total, checkedIn, pending, late, dressViolation, noItem, byYear };
@@ -1467,8 +1466,7 @@ export default function App() {
 • ปี 1: ${summaryStats.byYear['ปี 1']} คน
 • ปี 2: ${summaryStats.byYear['ปี 2']} คน
 • ปี 3: ${summaryStats.byYear['ปี 3']} คน
-• ปี 4: ${summaryStats.byYear['ปี 4']} คน
-• บัณฑิต: ${summaryStats.byYear['บัณฑิต']} คน`;
+• ปี 4: ${summaryStats.byYear['ปี 4']} คน`;
   };
 
   const getStatusLabel = (st) => {
@@ -1503,7 +1501,7 @@ export default function App() {
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
   const MC_ROWS_PER_PAGE = 20;
   const mcPages = useMemo(() => {
-    const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'];
+    const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
@@ -1565,7 +1563,7 @@ export default function App() {
   const typeStats = useMemo(() => {
     const staffList = guestsWithComputedBadges.filter(isStaffGuest);
     const byYear = {};
-    ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].forEach((y) => {
+    ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].forEach((y) => {
       byYear[y] = staffList.filter((g) => g.year === y).length;
     });
     return { total: guestsWithComputedBadges.length, normal: guestsWithComputedBadges.length - staffList.length, staff: staffList.length, byYear };
@@ -2467,7 +2465,6 @@ export default function App() {
                 <option value="ปี 2">ปี 2</option>
                 <option value="ปี 3">ปี 3</option>
                 <option value="ปี 4">ปี 4</option>
-                <option value="บัณฑิต">บัณฑิต</option>
               </select>
               {filteredDashboardGuests.length > paginatedGuests.length && (
                 <button onClick={() => setSelectedGuestIds(filteredDashboardGuests.map((g) => g.id))} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#f3e5ab] border border-[#d4af37]/40 rounded-xl text-xs font-bold whitespace-nowrap">
@@ -2510,7 +2507,7 @@ export default function App() {
 
             <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
               <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ตัดสิทธิ์คนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
-              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].map((y) => {
+              {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'].map((y) => {
                 const n = guestsWithComputedBadges.filter((g) => g.status === 'pending' && g.year === y).length;
                 return (
                   <button
@@ -2684,7 +2681,7 @@ export default function App() {
                   >
                     <div style={{ textAlign: 'center', marginBottom: 14 }}>
                       <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.6 }}>รายชื่อนักศึกษาเข้ารับการประดับบ่า ในพิธีมอบประดับบ่าเกียรติยศ</div>
-                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>สำหรับพิธีกรขานชื่อ — {pg.year === 'บัณฑิต' ? 'บัณฑิต' : `นักศึกษา${pg.year.replace('ปี ', 'ชั้นปีที่ ')}`} (ทั้งหมด {pg.total} คน)</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>สำหรับพิธีกรขานชื่อ — นักศึกษา{pg.year.replace('ปี ', 'ชั้นปีที่ ')} (ทั้งหมด {pg.total} คน)</div>
                     </div>
                     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 16, color: '#000' }}>
                       <colgroup>
@@ -2860,7 +2857,6 @@ export default function App() {
               <div className="flex justify-between text-[#d1c7bd]"><span>ปี 2:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 2']} คน</span></div>
               <div className="flex justify-between text-[#d1c7bd]"><span>ปี 3:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 3']} คน</span></div>
               <div className="flex justify-between text-[#d1c7bd]"><span>ปี 4:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['ปี 4']} คน</span></div>
-              <div className="flex justify-between text-[#d1c7bd]"><span>บัณฑิต:</span><span className="font-bold text-[#fdfbf7]">{summaryStats.byYear['บัณฑิต']} คน</span></div>
             </div>
 
             <div className="flex gap-2 pt-2">
