@@ -255,7 +255,8 @@ const publicLookup = (guests, rawQuery) => {
 //  - เลขคิวเดิม = ฟิลด์ originalSeat ของรายชื่อ (ถ้ามี) — ถ้ายังไม่มีข้อมูล จะแสดงว่า "ยังไม่มีข้อมูล" ไม่เดาให้
 //  - สิทธิ์เข้าร่วม = มีสิทธิ์ ถ้าอยู่ในระบบ เว้นแต่รายชื่อถูกระบุ ceremonyEligible === false
 const toPublicRecord = (g) => {
-  const newSeat = seatKey(g.badgeNumber);
+  const eligible = g.ceremonyEligible !== false;
+  const newSeat = eligible ? seatKey(g.badgeNumber) : '';
   const hasOld = g.originalSeat !== undefined && g.originalSeat !== null && String(g.originalSeat).trim() !== '';
   const oldSeat = hasOld ? seatKey(g.originalSeat) : null;
   return {
@@ -264,9 +265,9 @@ const toPublicRecord = (g) => {
     name: g.name,
     oldSeat,
     newSeat,
-    seatChange: oldSeat === null ? 'unknown' : (oldSeat === newSeat ? 'same' : 'changed'),
-    eligible: g.ceremonyEligible !== false,
-    ineligibleReason: g.ceremonyEligible === false && g.ineligibleReason ? String(g.ineligibleReason) : ''
+    seatChange: !eligible ? (oldSeat === null ? 'unknown' : 'cancelled') : (oldSeat === null ? 'unknown' : (oldSeat === newSeat ? 'same' : 'changed')),
+    eligible,
+    ineligibleReason: !eligible ? String(g.ineligibleReason || 'ไม่เข้าร่วมงานซ้อม') : ''
   };
 };
 
@@ -334,6 +335,7 @@ export default function App() {
   const [isDataLoaded, setIsDataLoaded] = useState(false); // true เมื่อรับข้อมูลชุดแรกจากฐานข้อมูลแล้ว
   const [showBackTop, setShowBackTop] = useState(false);
   const [lookupInput, setLookupInput] = useState('');
+  const [dashboardView, setDashboardView] = useState('main');
   const [lookupState, setLookupState] = useState({ status: 'idle', ids: [] });
   const [searchResultsModal, setSearchResultsModal] = useState({ isOpen: false, query: '', items: [], total: 0 });
   const [scannerRestartKey, setScannerRestartKey] = useState(0);
@@ -446,20 +448,24 @@ export default function App() {
   // - นักศึกษา Normal: จัดที่นั่งตามแถว A, B, C... (ข้ามตัวอักษร L เพราะสงวนไว้ให้ Staff)
   // - นักศึกษา Staff: ไม่เข้าแถวที่นั่ง ใช้ตำแหน่ง "L" โดยไม่มีเลขย่อย
   // - คนมาสายยังใช้เลขที่นั่งเดิม ส่วนการเพิ่ม/ลบ/เปลี่ยนประเภทนักศึกษาจะทำให้เลขที่นั่งของ Normal คำนวณใหม่
-  const guestsWithComputedBadges = useMemo(() => {
+  const allGuestsComputed = useMemo(() => {
     const rowLetters = 'ABCDEFGHIJKMNOPQRSTUVWXYZ';
     const n = rowLetters.length;
     const rowLabel = (r) => (r < n ? rowLetters[r] : rowLetters[Math.floor(r / n) - 1] + rowLetters[r % n]);
     const seatMap = new Map();
-    [...guests].filter((g) => !isStaffGuest(g)).sort(compareSeating).forEach((g, i) => {
+    [...guests].filter((g) => g.ceremonyEligible !== false && !isStaffGuest(g)).sort(compareSeating).forEach((g, i) => {
       seatMap.set(g.id, `${rowLabel(Math.floor(i / seatsPerRow))}${(i % seatsPerRow) + 1}`);
     });
     return guests.map((g) => ({
       ...g,
       studentType: getStudentType(g),
-      badgeNumber: isStaffGuest(g) ? STAFF_SEAT_LABEL : seatMap.get(g.id)
+      badgeNumber: g.ceremonyEligible === false ? '-' : (isStaffGuest(g) ? STAFF_SEAT_LABEL : seatMap.get(g.id))
     }));
   }, [guests, seatsPerRow]);
+
+  // รายชื่อที่ใช้งานจริง (มีสิทธิ์เข้าร่วม) — คนที่ถูกตัดสิทธิ์จะไม่อยู่ในแดชบอร์ด/คิว/ที่นั่ง แต่ยังอยู่ในข้อมูล
+  const guestsWithComputedBadges = useMemo(() => allGuestsComputed.filter((g) => g.ceremonyEligible !== false), [allGuestsComputed]);
+  const ineligibleGuests = useMemo(() => allGuestsComputed.filter((g) => g.ceremonyEligible === false).sort(compareCustomCriteria), [allGuestsComputed]);
 
   // ---------- กล้องสแกน QR (รองรับแนวตั้ง/แนวนอน และหมุนหน้าจอได้โดยไม่ต้องรีเฟรช) ----------
   const stopScannerNow = async () => {
@@ -710,6 +716,12 @@ export default function App() {
     if (result.items.length === 0 && target !== clean) result = searchGuests(guestsWithComputedBadges, clean, opts);
 
     if (result.items.length === 0) {
+      const blocked = searchGuests(ineligibleGuests, target, { exactOnly: true });
+      if (blocked.items.length > 0) {
+        const b = blocked.items[0];
+        showToast('error', `${b.name} ไม่มีสิทธิ์เข้าร่วมพิธี (${b.ineligibleReason || 'ไม่เข้าร่วมงานซ้อม'}) — ห้ามเข้าร่วม`, 8000);
+        return;
+      }
       showToast('warning', `ไม่พบข้อมูล "${clean}" ลองค้นหาด้วยลำดับที่นั่ง รหัสนักศึกษา หรือชื่อ-นามสกุล`);
       return;
     }
@@ -849,7 +861,9 @@ export default function App() {
     }
   };
 
+  // จัดลำดับเองได้เฉพาะคนที่เป็นประเภท Staff เท่านั้น (นักศึกษาปกติใช้ลำดับอัตโนมัติ) — Staff ย้ายแทรกขึ้น/ลงผ่านนักศึกษาได้
   const renderMoveControls = (list, g) => {
+    if (!isStaffGuest(g)) return null;
     const i = list.findIndex((x) => x.id === g.id);
     const btn = 'min-w-[34px] px-2 py-1.5 rounded-lg border text-[11px] font-black disabled:opacity-30';
     return (
@@ -983,7 +997,33 @@ export default function App() {
     });
   };
 
-  // หลังวันซ้อม: ลบคนที่ยังไม่เช็กชื่อ (ไม่มาซ้อม = ไม่ให้เข้าร่วมวันจริง) เลขที่นั่งของคนที่เหลือจะคำนวณใหม่
+  // เขียนข้อมูลหลายเอกสารเป็นชุดๆ (รองรับข้อมูลเยอะ)
+  const commitGuestUpdates = async (updates) => {
+    const entries = [...updates.entries()];
+    for (let i = 0; i < entries.length; i += 400) {
+      const batch = writeBatch(db);
+      entries.slice(i, i + 400).forEach(([id, data]) => batch.update(getGuestDocRef(id), data));
+      await batch.commit();
+    }
+  };
+
+  // ก่อนตัดสิทธิ์ใคร ต้องเก็บ "คิวเดิม" ของทุกคนที่ยังไม่มีไว้ก่อนเสมอ (เพราะเลขที่นั่งจะคำนวณใหม่หลังตัดสิทธิ์)
+  const buildSnapshotUpdates = () => {
+    const m = new Map();
+    guestsWithComputedBadges.forEach((g) => {
+      if (!g.originalSeat && g.badgeNumber && g.badgeNumber !== '-') m.set(g.id, { originalSeat: g.badgeNumber });
+    });
+    return m;
+  };
+
+  const markIneligibleIds = async (ids, reason) => {
+    const updates = buildSnapshotUpdates();
+    ids.forEach((id) => updates.set(id, { ...(updates.get(id) || {}), ceremonyEligible: false, ineligibleReason: reason }));
+    await commitGuestUpdates(updates);
+  };
+
+  // หลังวันซ้อม: ตัดสิทธิ์คนที่ยังไม่เช็กชื่อ (ไม่มาซ้อม = ไม่มีสิทธิ์เข้าร่วมวันจริง)
+  // ย้ายไปแท็บ "ไม่มีสิทธิ์เข้าร่วม" (ไม่ลบข้อมูล กู้คืนได้) เลขที่นั่งของคนที่เหลือจะคำนวณใหม่
   const handleDeletePendingGuests = (year = 'all') => {
     const yearLabel = year === 'all' ? 'ทุกชั้นปี' : year;
     const ids = guestsWithComputedBadges
@@ -995,27 +1035,49 @@ export default function App() {
     }
     setConfirmModal({
       isOpen: true,
-      title: `ลบคนที่ไม่มาซ้อม (${yearLabel})`,
-      message: `จะลบรายชื่อที่ "ยังไม่เช็กชื่อ" ของ${yearLabel} จำนวน ${ids.length} คน ออกจากระบบ เลขที่นั่งของคนที่เหลือจะคำนวณใหม่ และกู้คืนไม่ได้`,
-      confirmText: `ลบ ${ids.length} คน`,
+      title: `ตัดสิทธิ์คนที่ไม่มาซ้อม (${yearLabel})`,
+      message: `จะย้ายรายชื่อที่ "ยังไม่เช็กชื่อ" ของ${yearLabel} จำนวน ${ids.length} คน ไปแท็บ "ไม่มีสิทธิ์เข้าร่วม" (หมายเหตุ: ไม่เข้าร่วมงานซ้อม) เลขที่นั่งของคนที่เหลือจะคำนวณใหม่ ระบบจะเก็บคิวเดิมของทุกคนไว้ให้อัตโนมัติ และกู้คืนสิทธิ์ได้ภายหลัง`,
+      confirmText: `ตัดสิทธิ์ ${ids.length} คน`,
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         setSelectedGuestIds([]);
-        const tid = showToast('loading', `กำลังลบ ${ids.length} รายชื่อที่ไม่มาซ้อม (${yearLabel})...`);
+        const tid = showToast('loading', `กำลังตัดสิทธิ์ ${ids.length} คน (${yearLabel})...`);
         try {
-          for (let i = 0; i < ids.length; i += 400) {
-            const batch = writeBatch(db);
-            ids.slice(i, i + 400).forEach((id) => batch.delete(getGuestDocRef(id)));
-            await batch.commit();
-          }
-          updateToast(tid, 'success', `ลบคนที่ไม่มาซ้อม (${yearLabel}) ${ids.length} คนแล้ว เลขที่นั่งคำนวณใหม่เรียบร้อย`);
+          await markIneligibleIds(ids, 'ไม่เข้าร่วมงานซ้อม');
+          updateToast(tid, 'success', `ตัดสิทธิ์ ${ids.length} คน (${yearLabel}) แล้ว เลขที่นั่งคำนวณใหม่เรียบร้อย`);
         } catch (e) {
           console.error(e);
-          updateToast(tid, 'error', 'ลบรายชื่อไม่สำเร็จ บางรายการอาจยังไม่ถูกลบ');
+          updateToast(tid, 'error', 'ตัดสิทธิ์ไม่สำเร็จ บางรายการอาจยังไม่ถูกบันทึก');
         }
       }
     });
+  };
+
+  // ตัดสิทธิ์รายบุคคล
+  const handleMarkIneligible = async (guest) => {
+    const reason = window.prompt(`ตัดสิทธิ์ "${guest.name}" — ระบุหมายเหตุ:`, 'ไม่เข้าร่วมงานซ้อม');
+    if (reason === null) return;
+    const tid = showToast('loading', 'กำลังตัดสิทธิ์...');
+    try {
+      await markIneligibleIds([guest.id], reason.trim() || 'ไม่เข้าร่วมงานซ้อม');
+      updateToast(tid, 'success', `ตัดสิทธิ์ ${guest.name} แล้ว`);
+    } catch (e) {
+      console.error(e);
+      updateToast(tid, 'error', 'ตัดสิทธิ์ไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
+  };
+
+  // คืนสิทธิ์ (กลับเข้าระบบ เลขที่นั่งคำนวณใหม่)
+  const handleRestoreEligibility = async (guest) => {
+    const tid = showToast('loading', 'กำลังคืนสิทธิ์...');
+    try {
+      await updateDoc(getGuestDocRef(guest.id), { ceremonyEligible: true, ineligibleReason: null });
+      updateToast(tid, 'success', `คืนสิทธิ์ให้ ${guest.name} แล้ว เลขที่นั่งคำนวณใหม่เรียบร้อย`);
+    } catch (e) {
+      console.error(e);
+      updateToast(tid, 'error', 'คืนสิทธิ์ไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
   };
 
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
@@ -1329,6 +1391,8 @@ export default function App() {
   const standbyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'standby' && !g.skipped).sort(compareStandby), [guestsWithComputedBadges]);
   const readyQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'checked_in' && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
+  // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
+  const callOrderList = useMemo(() => guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
   const lateQueue = useMemo(() => guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped).sort(compareReadyQueue), [guestsWithComputedBadges]);
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
@@ -1418,13 +1482,13 @@ export default function App() {
       setLookupState({ status: 'loading', ids: [] });
       return;
     }
-    const res = publicLookup(guestsWithComputedBadges, lookupInput);
+    const res = publicLookup(allGuestsComputed, lookupInput);
     setLookupState(res);
     // ล้างช่องค้นหาทันทีหลังค้นเสร็จ (ผลลัพธ์ยังแสดงอยู่) กันชื่อ/รหัสค้างให้คนถัดไป
     if (res.status === 'found' || res.status === 'notfound') setLookupInput('');
   };
   const lookupRecords = lookupState.ids
-    .map((id) => guestsWithComputedBadges.find((g) => g.id === id))
+    .map((id) => allGuestsComputed.find((g) => g.id === id))
     .filter(Boolean)
     .map(toPublicRecord);
 
@@ -1466,8 +1530,14 @@ export default function App() {
           .spu-float { animation: spuFloat 6s ease-in-out infinite; }
           .spu-root { font-family: 'Sarabun', 'Prompt', system-ui, sans-serif; }
           .spu-serif { font-family: 'Noto Serif Thai', 'Sarabun', Georgia, 'Times New Roman', serif; font-weight: 800; }
-          .spu-gold-text { padding-bottom: .12em; }
-          @media (prefers-reduced-motion: reduce) { .spu-fade, .spu-gold-text, .spu-float { animation: none !important; } }
+          .spu-title { color: #f3e5ab; line-height: 1.55; padding: .1em 0; text-shadow: 0 0 30px rgba(212,175,55,.45), 0 2px 0 rgba(138,106,18,.7); }
+          @keyframes spuSpin { to { transform: rotate(360deg); } }
+          @keyframes spuTwinkle { 0%, 100% { opacity: .15; transform: scale(.7); } 50% { opacity: 1; transform: scale(1.15); } }
+          .spu-spin { animation: spuSpin 60s linear infinite; }
+          .spu-spin-rev { animation: spuSpin 90s linear infinite reverse; }
+          .spu-twinkle { animation: spuTwinkle 3.5s ease-in-out infinite; }
+          .spu-rays { background: repeating-conic-gradient(from 0deg, rgba(212,175,55,.10) 0deg 4deg, transparent 4deg 15deg); -webkit-mask-image: radial-gradient(circle, #000 0%, transparent 68%); mask-image: radial-gradient(circle, #000 0%, transparent 68%); animation: spuSpin 240s linear infinite; }
+          @media (prefers-reduced-motion: reduce) { .spu-fade, .spu-gold-text, .spu-float, .spu-spin, .spu-spin-rev, .spu-twinkle, .spu-rays { animation: none !important; } }
         `}</style>
 
         {/* แถบนำทางขนาดเล็ก (Sticky) */}
@@ -1495,11 +1565,35 @@ export default function App() {
           <div className="absolute inset-x-6 top-20 bottom-6 border border-[#d4af37]/15 rounded-[2rem] pointer-events-none" />
           <div className="relative z-10 max-w-4xl w-full text-center space-y-5 sm:space-y-6">
             <div className="spu-fade flex justify-center">
-              <div className="spu-float rounded-3xl bg-[#fdfbf7] px-6 py-5 sm:px-8 sm:py-6 shadow-[0_0_40px_rgba(212,175,55,0.30)] border border-[#d4af37]/60">
-                <img src={SPU_LOGO} alt="Bachelor of Science in Aviation Safety Management, Sripatum University" className="w-56 sm:w-80 h-auto block" />
+              <div className="relative w-72 h-72 sm:w-[26rem] sm:h-[26rem] flex items-center justify-center">
+                <div className="spu-rays absolute -inset-16 rounded-full pointer-events-none" />
+                <svg className="spu-spin absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" aria-hidden="true">
+                  <circle cx="50" cy="50" r="49" fill="none" stroke="#d4af37" strokeWidth="0.35" strokeDasharray="1.2 2.4" opacity="0.8" />
+                </svg>
+                <svg className="spu-spin-rev absolute inset-3 w-[calc(100%-1.5rem)] h-[calc(100%-1.5rem)] pointer-events-none" viewBox="0 0 100 100" aria-hidden="true">
+                  <circle cx="50" cy="50" r="49" fill="none" stroke="#f3e5ab" strokeWidth="0.25" strokeDasharray="10 4 2 4" opacity="0.55" />
+                </svg>
+                <div className="spu-float absolute inset-6 rounded-full bg-gradient-to-br from-[#ffffff] via-[#fdfbf7] to-[#efe6cc] border-[3px] border-[#d4af37] ring-4 ring-[#d4af37]/25 ring-offset-4 ring-offset-[#0b1530] shadow-[0_0_70px_rgba(212,175,55,0.40),inset_0_0_36px_rgba(212,175,55,0.18)] flex items-center justify-center">
+                  <img src={SPU_LOGO} alt="Bachelor of Science in Aviation Safety Management, Sripatum University" className="w-[80%] h-auto block" />
+                </div>
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '8%', top: '20%', animationDelay: '0.00s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '92%', top: '16%', animationDelay: '0.55s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '15%', top: '70%', animationDelay: '1.10s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '85%', top: '78%', animationDelay: '1.65s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '30%', top: '8%', animationDelay: '2.20s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '70%', top: '6%', animationDelay: '2.75s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '5%', top: '48%', animationDelay: '3.30s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '95%', top: '52%', animationDelay: '3.85s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '22%', top: '92%', animationDelay: '4.40s' }} />
+              <span className="spu-twinkle absolute w-1.5 h-1.5 rounded-full bg-[#f3e5ab] shadow-[0_0_8px_#d4af37]" style={{ left: '78%', top: '94%', animationDelay: '4.95s' }} />
               </div>
             </div>
-            <h1 className="spu-fade spu-d1 spu-serif spu-gold-text text-4xl sm:text-6xl lg:text-7xl leading-[1.4]">พิธีประดับบ่าในวันเกียรติยศ</h1>
+            <div className="spu-fade spu-d1 flex items-center justify-center gap-3" aria-hidden="true">
+              <span className="h-px w-16 sm:w-28 bg-gradient-to-r from-transparent to-[#d4af37]" />
+              <Sparkles className="w-4 h-4 text-[#d4af37]" />
+              <span className="h-px w-16 sm:w-28 bg-gradient-to-l from-transparent to-[#d4af37]" />
+            </div>
+            <h1 className="spu-fade spu-d1 spu-serif spu-title text-4xl sm:text-6xl lg:text-7xl">พิธีประดับบ่าในวันเกียรติยศ</h1>
             <h2 className="spu-fade spu-d2 text-xl sm:text-3xl font-bold text-[#fdfbf7]">ประจำปีการศึกษา 2569</h2>
             <div className="spu-fade spu-d2 flex justify-center">
               <span className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-[#d4af37]/60 bg-[#d4af37]/10 text-[#f3e5ab] text-sm sm:text-base font-bold tracking-wide">
@@ -1664,7 +1758,7 @@ export default function App() {
                     </div>
                     <div className="rounded-2xl bg-[#070b19] border-2 border-[#d4af37]/70 p-4 text-center">
                       <p className="text-[11px] text-[#f3e5ab]">เลขคิวใหม่</p>
-                      <p className="text-3xl font-black text-[#d4af37] mt-1">#{r.newSeat}</p>
+                      <p className="text-3xl font-black text-[#d4af37] mt-1">{r.eligible ? `#${r.newSeat}` : '—'}</p>
                     </div>
                   </div>
 
@@ -1675,6 +1769,12 @@ export default function App() {
                         <>
                           <span className="inline-block px-3 py-1 rounded-full bg-amber-900/40 border border-amber-500/40 text-amber-300 text-xs font-black">มีการเปลี่ยนแปลงลำดับคิว</span>
                           <p className="text-sm text-[#fdfbf7]">จาก <b>#{r.oldSeat}</b> เป็น <b className="text-[#d4af37]">#{r.newSeat}</b></p>
+                        </>
+                      )}
+                      {r.seatChange === 'cancelled' && (
+                        <>
+                          <span className="inline-block px-3 py-1 rounded-full bg-rose-900/40 border border-rose-500/40 text-rose-300 text-xs font-black">ไม่มีลำดับคิวใหม่</span>
+                          <p className="text-sm text-[#d1c7bd]">ลำดับคิวเดิม <b>#{r.oldSeat}</b> ถูกยกเลิก เนื่องจากไม่มีสิทธิ์เข้าร่วมพิธี</p>
                         </>
                       )}
                       {r.seatChange === 'same' && (
@@ -1701,7 +1801,7 @@ export default function App() {
                       ) : (
                         <>
                           <span className="inline-block px-3 py-1 rounded-full bg-rose-900/40 border border-rose-500/40 text-rose-300 text-xs font-black">ไม่มีสิทธิ์เข้าร่วม</span>
-                          <p className="text-xs text-[#d1c7bd]">ไม่ผ่านเงื่อนไขการเข้าร่วมพิธีวันจริง{r.ineligibleReason ? ` (${r.ineligibleReason})` : ''}</p>
+                          <p className="text-xs text-[#d1c7bd]">{r.ineligibleReason ? `หมายเหตุ: ${r.ineligibleReason}` : 'ไม่ผ่านเงื่อนไขการเข้าร่วมพิธีวันจริง'}</p>
                         </>
                       )}
                     </div>
@@ -2026,6 +2126,45 @@ export default function App() {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-4">
+            <div className="inline-flex rounded-2xl overflow-hidden border border-[#d4af37]/40 text-xs font-bold">
+              <button onClick={() => setDashboardView('main')} className={`px-4 py-2.5 ${dashboardView === 'main' ? 'bg-[#d4af37] text-[#070b19] font-black' : 'bg-[#0e1628] text-[#d1c7bd]'}`}>รายชื่อผู้เข้าร่วม ({guestsWithComputedBadges.length})</button>
+              <button onClick={() => setDashboardView('ineligible')} className={`px-4 py-2.5 ${dashboardView === 'ineligible' ? 'bg-rose-600 text-white font-black' : 'bg-[#0e1628] text-rose-300'}`}>ไม่มีสิทธิ์เข้าร่วม ({ineligibleGuests.length})</button>
+            </div>
+
+            {dashboardView === 'ineligible' ? (
+              <div className="bg-[#0e1628] rounded-3xl border border-rose-500/40 overflow-hidden shadow-xl">
+                <div className="p-4 border-b border-rose-500/30">
+                  <h3 className="font-black text-rose-200 text-sm">รายชื่อคนไม่มีสิทธิ์เข้าร่วมพิธีวันจริง ({ineligibleGuests.length} คน)</h3>
+                  <p className="text-xs text-[#d1c7bd]">คนกลุ่มนี้ไม่อยู่ในแดชบอร์ดหลัก คิว และเลขที่นั่ง หน้าตรวจสอบของนักศึกษาจะแสดง "ไม่มีสิทธิ์เข้าร่วม" พร้อมหมายเหตุ</p>
+                </div>
+                {ineligibleGuests.length === 0 ? (
+                  <p className="text-center text-xs text-[#d1c7bd] py-12">ยังไม่มีรายชื่อที่ถูกตัดสิทธิ์</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#121f38] text-[#f3e5ab] font-bold border-b border-rose-500/20">
+                        <tr><th className="p-3.5">รหัสนักศึกษา</th><th className="p-3.5">ชื่อ-นามสกุล</th><th className="p-3.5">ชั้นปี</th><th className="p-3.5">คิวเดิม</th><th className="p-3.5">หมายเหตุ</th><th className="p-3.5 text-right">การจัดการ</th></tr>
+                      </thead>
+                      <tbody className="divide-y divide-rose-500/10 text-[#fdfbf7]">
+                        {ineligibleGuests.map((g) => (
+                          <tr key={g.id} className="hover:bg-[#121f38]/50">
+                            <td className="p-3.5 font-mono">{g.studentId || '-'}</td>
+                            <td className="p-3.5 font-bold">{g.name}</td>
+                            <td className="p-3.5">{g.year}</td>
+                            <td className="p-3.5">{g.originalSeat ? `#${g.originalSeat}` : '—'}</td>
+                            <td className="p-3.5 text-rose-300">{g.ineligibleReason || 'ไม่เข้าร่วมงานซ้อม'}</td>
+                            <td className="p-3.5 text-right space-x-2 whitespace-nowrap">
+                              <button onClick={() => handleRestoreEligibility(g)} className="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600 text-emerald-200 hover:text-white rounded text-[11px] font-bold">คืนสิทธิ์</button>
+                              <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบถาวร"><Trash2 className="w-3.5 h-3.5 inline" /></button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (<>
             <div className="bg-[#0e1628] p-4 rounded-3xl border border-[#d4af37]/40 flex flex-col md:flex-row items-center justify-between gap-4 shadow-lg">
               <div className="flex items-center gap-3">
                 <Grid className="w-6 h-6 text-[#d4af37]" />
@@ -2255,7 +2394,7 @@ export default function App() {
             </div>
 
             <div className="bg-[#0e1628] p-3 rounded-3xl border border-red-900/50 flex flex-wrap items-center gap-2 shadow-lg">
-              <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ลบคนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
+              <span className="text-xs font-bold text-red-300 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> ตัดสิทธิ์คนที่ไม่มาซ้อม (สถานะ "ยังไม่มา") แยกตามชั้นปี:</span>
               {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'บัณฑิต'].map((y) => {
                 const n = guestsWithComputedBadges.filter((g) => g.status === 'pending' && g.year === y).length;
                 return (
@@ -2340,6 +2479,12 @@ export default function App() {
                               className={`px-2.5 py-1 ${getStudentType(g) === 'staff' ? 'bg-purple-600 text-white' : 'bg-[#070b19] text-[#d1c7bd] hover:bg-[#121f38]'}`}
                             >Staff</button>
                           </div>
+                          {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับเรียกที่ {callOrderList.findIndex((x) => x.id === g.id) + 1}/{callOrderList.length}</span>
+                              {renderMoveControls(callOrderList, g)}
+                            </div>
+                          )}
                         </td>
                         <td className="p-3.5">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLateGuest(g) ? 'bg-amber-900/40 text-amber-300 border border-amber-500/30' : g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : isDisqualifiedStatus(g.status) ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
@@ -2353,6 +2498,7 @@ export default function App() {
                         </td>
                         <td className="p-3.5 text-right space-x-2">
                           {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#d4af37] hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
+                          <button onClick={() => handleMarkIneligible(g)} className="text-rose-300 hover:underline text-[11px] font-bold">ตัดสิทธิ์</button>
                           <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
                         </td>
                       </tr>
@@ -2369,6 +2515,7 @@ export default function App() {
                 </div>
               </div>
             </div>
+            </>)}
           </div>
         )}
       </main>
