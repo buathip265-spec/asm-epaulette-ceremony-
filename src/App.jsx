@@ -131,11 +131,10 @@ const getSortableCleanName = (fullName) => {
 
 // ไม่ขึ้นรับบ่า (ร่วมพิธีเฉยๆ): ผิดระเบียบ / ของไม่พร้อม
 const isDisqualifiedStatus = (status) =>
-  status === 'no_item_ordered' || status === 'dress_violation_receive_after';
+  status === 'no_item_ordered' || status === 'dress_violation_receive_after' || status === 'late_receive_after';
 
-// มาสาย = ยังขึ้นรับบ่าตามปกติ แต่ต่อท้ายแถวของชั้นปีตัวเอง
-// (isLate จะคงอยู่แม้สถานะเปลี่ยนเป็น standby / on_stage / completed)
-const isLateGuest = (g) => !!g && (g.isLate === true || g.status === 'late_receive_after');
+// มาสาย = ร่วมพิธีแต่ไม่ขึ้นรับบ่า (ไม่เข้าคิวเวที)
+const isLateGuest = (g) => !!g && g.status === 'late_receive_after';
 
 // ประเภทนักศึกษา: 'normal' (ค่าเริ่มต้น เมื่อไม่มีข้อมูล) หรือ 'staff'
 // Staff ไม่ถูกจัดที่นั่งในแถวปกติ (ที่นั่ง = L ไม่มีเลขย่อย) และอยู่ท้ายกลุ่มนักศึกษาปกติของชั้นปีตัวเองในคิวขึ้นรับบ่า
@@ -1613,7 +1612,7 @@ export default function App() {
     const total = guestsWithComputedBadges.length;
     const checkedIn = guestsWithComputedBadges.filter(g => (g.status === 'checked_in' || g.status === 'completed' || g.status === 'on_stage' || g.status === 'standby') && !isLateGuest(g)).length;
     const pending = guestsWithComputedBadges.filter(g => g.status === 'pending').length;
-    const late = guestsWithComputedBadges.filter(g => isLateGuest(g) && !isDisqualifiedStatus(g.status) && g.status !== 'pending').length;
+    const late = guestsWithComputedBadges.filter(g => isLateGuest(g)).length;
     const dressViolation = guestsWithComputedBadges.filter(g => g.status === 'dress_violation_receive_after').length;
     const noItem = guestsWithComputedBadges.filter(g => g.status === 'no_item_ordered').length;
 
@@ -1632,7 +1631,7 @@ export default function App() {
 👥 รายชื่อทั้งหมด: ${summaryStats.total} คน
 ✅ เข้าร่วมและเช็กชื่อแล้ว: ${summaryStats.checkedIn} คน
 ❌ ยังไม่มา / ขาด: ${summaryStats.pending} คน
-⏰ มาสาย (ขึ้นรับบ่าท้ายแถว): ${summaryStats.late} คน
+⏰ มาสาย (ร่วมพิธี - ไม่ขึ้นรับบ่า): ${summaryStats.late} คน
 ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่ขึ้นรับบ่า): ${summaryStats.dressViolation} คน
 📦 สั่งของไม่ทัน / ไม่ขึ้นรับบ่า: ${summaryStats.noItem} คน
 
@@ -1648,7 +1647,7 @@ export default function App() {
       case 'pending': return 'ยังไม่มา';
       case 'checked_in': return 'เช็กชื่อแล้ว (มาปกติ)';
       case 'no_item_ordered': return 'เข้าร่วมพิธี (ไม่ขึ้นรับบ่า)';
-      case 'late_receive_after': return 'มาสาย (ขึ้นรับบ่าท้ายแถว)';
+      case 'late_receive_after': return 'มาสาย (ร่วมพิธี - ไม่ขึ้นรับบ่า)';
       case 'dress_violation_receive_after': return 'ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)';
       case 'standby': return 'สแตนด์บาย';
       case 'on_stage': return 'กำลังขึ้นเวที';
@@ -1693,7 +1692,6 @@ export default function App() {
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
-  const lateQueue = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => g.status === 'late_receive_after' && !g.skipped)), [guestsWithComputedBadges]);
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
   const MC_ROWS_PER_PAGE = 20;
@@ -2303,7 +2301,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="bg-[#0e1628] border border-[#d4af37]/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
                 <div className="flex justify-between items-center pb-3 border-b border-[#d4af37]/30 mb-3">
                   <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-[#d4af37]" /> พร้อมเรียกคิว</h3>
@@ -2342,39 +2340,6 @@ export default function App() {
                 </div>
                 {readyQueue.some(hasManualOrder) && (
                   <button onClick={() => handleResetManualOrder(readyQueue)} className="mt-2 text-[10px] text-[#d1c7bd] underline text-center">กลับไปใช้ลำดับอัตโนมัติ</button>
-                )}
-              </div>
-
-              <div className="bg-[#0e1628] border border-orange-500/40 rounded-3xl p-4 flex flex-col min-h-[500px] shadow-lg">
-                <div className="flex justify-between items-center pb-3 border-b border-orange-500/30 mb-3">
-                  <h3 className="font-black text-[#f3e5ab] text-sm flex items-center gap-2"><Clock className="w-4 h-4 text-orange-400" /> มาสาย (ต่อท้ายแถว)</h3>
-                  <span className="px-2.5 py-0.5 bg-orange-500/20 text-orange-300 text-xs font-bold rounded-full border border-orange-500/40">{lateQueue.length} คน</span>
-                </div>
-                {lateQueue.length > 0 && (
-                  <button
-                    onClick={() => handleMoveToStandbyBatch('late')}
-                    className="w-full mb-3 py-2.5 bg-orange-500/20 hover:bg-orange-500 text-orange-200 hover:text-[#070b19] border border-orange-500/50 rounded-2xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-1.5"
-                  >
-                    <span>⏰ ดึงคนมาสายเข้าสแตนด์บาย ({Math.min(batchSize, lateQueue.length)} คน)</span>
-                  </button>
-                )}
-                <div className="flex-1 space-y-2.5 overflow-y-auto">
-                  {lateQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมที่มาสาย</p> : lateQueue.map((g) => (
-                    <div key={g.id} className="bg-[#121f38] border border-orange-500/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
-                      <div className="flex items-center justify-between"><span className="text-xs font-black text-orange-400">ที่นั่งเดิม #{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}{isStaffGuest(g) ? ' • Staff' : ''}</span></div>
-                      <div>
-                        <div className="text-sm font-bold text-[#fdfbf7] truncate">{g.name}</div>
-                        <div className="text-xs font-mono text-[#d1c7bd]">{g.studentId || '-'}</div>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <button onClick={() => handleToggleSkip(g)} className="text-[10px] text-amber-400 text-left hover:underline">ข้ามคิวนี้</button>
-                        {renderMoveControls(lateQueue, g)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                {lateQueue.some(hasManualOrder) && (
-                  <button onClick={() => handleResetManualOrder(lateQueue)} className="mt-2 text-[10px] text-[#d1c7bd] underline text-center">กลับไปใช้ลำดับอัตโนมัติ</button>
                 )}
               </div>
 
@@ -2681,7 +2646,7 @@ export default function App() {
                 <option value="all">ทุกสถานะเช็กชื่อ</option>
                 <option value="pending">ยังไม่มา</option>
                 <option value="checked_in">เช็กชื่อแล้ว (มาปกติ)</option>
-                <option value="late_receive_after">มาสาย (รอเรียกคิว)</option>
+                <option value="late_receive_after">มาสาย (ไม่ขึ้นรับบ่า)</option>
                 <option value="dress_violation_receive_after">ผิดระเบียบ</option>
                 <option value="no_item_ordered">ของไม่พร้อม</option>
                 <option value="standby">สแตนด์บาย</option>
@@ -3133,7 +3098,7 @@ export default function App() {
                   </button>
                   <div className="grid grid-cols-2 gap-2">
                     <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'late_receive_after')} className="py-2.5 px-2 bg-amber-500 hover:bg-amber-600 text-[#070b19] font-black rounded-xl text-[11px] transition-transform active:scale-95">
-                      ⏰ มาสาย (ขึ้นรับบ่าท้ายแถว)
+                      ⏰ มาสาย (ร่วมพิธี - ไม่ขึ้นรับบ่า)
                     </button>
                     <button onClick={() => handleConfirmCheckIn(scannedPreviewGuest, 'dress_violation_receive_after')} className="py-2.5 px-2 bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl text-[11px] transition-transform active:scale-95">
                       ⚠️ ผิดระเบียบ (ร่วมพิธี/ไม่รับบ่า)
