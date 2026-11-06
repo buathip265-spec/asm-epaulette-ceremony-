@@ -1229,7 +1229,9 @@ export default function App() {
     setIsPdfGenerating(true);
     const tid = showToast('loading', 'กำลังสร้างไฟล์ PDF...');
     let holder = null;
+    const MC_FONT = "'Sarabun', 'Prompt', system-ui, sans-serif";
     try {
+      try { await Promise.all([document.fonts.load('400 16px Sarabun'), document.fonts.load('700 16px Sarabun')]); } catch (e) { /* ignore */ }
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', () => !!window.html2canvas);
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
       const { jsPDF } = window.jspdf;
@@ -1237,7 +1239,7 @@ export default function App() {
       const pageEls = document.querySelectorAll('#mc-print-root .mc-page');
 
       holder = document.createElement('div');
-      holder.style.cssText = 'position:fixed;left:-10000px;top:0;background:#ffffff;';
+      holder.style.cssText = 'position:fixed;left:-10000px;top:0;background:#ffffff;font-family:' + MC_FONT + ';';
       document.body.appendChild(holder);
 
       for (let i = 0; i < pageEls.length; i++) {
@@ -1245,6 +1247,7 @@ export default function App() {
         const clone = pageEls[i].cloneNode(true);
         clone.style.boxShadow = 'none';
         clone.style.margin = '0';
+        clone.style.fontFamily = MC_FONT;
         holder.appendChild(clone);
         try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch (e) { /* ignore */ }
         const canvas = await window.html2canvas(clone, { scale: 3, backgroundColor: '#ffffff', windowWidth: 794, logging: false });
@@ -2855,7 +2858,7 @@ export default function App() {
                   <div
                     key={pIdx}
                     className="mc-page"
-                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '56px 48px', background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
+                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '56px 48px', fontFamily: "'Sarabun', 'Prompt', system-ui, sans-serif", background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
                   >
                     <div style={{ textAlign: 'center', marginBottom: 14 }}>
                       <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.6 }}>รายชื่อนักศึกษาเข้ารับการประดับบ่า ในพิธีมอบประดับบ่าเกียรติยศ</div>
@@ -2880,7 +2883,7 @@ export default function App() {
                         {Array.from({ length: MC_ROWS_PER_PAGE }).map((_, i) => {
                           const g = pg.rows[i];
                           const nm = g ? splitThaiName(g.name) : null;
-                          const td = { border: '1px solid #000', padding: '0 8px', height: 39, overflow: 'hidden', whiteSpace: 'nowrap' };
+                          const td = { border: '1px solid #000', padding: '0 8px', height: 39, lineHeight: '39px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
                           return (
                             <tr key={i}>
                               <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? pg.startIndex + i + 1 : ''}</td>
