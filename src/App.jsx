@@ -434,6 +434,7 @@ export default function App() {
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
   const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
+  const [pdfResult, setPdfResult] = useState(null); // { url, fileName, blob } ไฟล์ PDF ที่สร้างเสร็จ รอผู้ใช้กดเปิด/บันทึก (กันหน้าเว็บถูกแทนที่บน Safari iPad)
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
   // ---------- ระบบแจ้งเตือน (Toast) ----------
@@ -921,7 +922,7 @@ export default function App() {
     const list = fullList.filter((x) => isStaffGuest(x) && x.year === guest.year); // จัดลำดับในหมู่สตาฟชั้นปีเดียวกันเท่านั้น
     const idx = list.findIndex((g) => g.id === guest.id);
     if (idx < 0) return;
-    const target = dir === 'up' ? idx - 1 : dir === 'down' ? idx + 1 : dir === 'top' ? 0 : list.length - 1;
+    const target = typeof dir === 'number' ? Math.min(Math.max(dir, 1), list.length) - 1 : dir === 'up' ? idx - 1 : dir === 'down' ? idx + 1 : dir === 'top' ? 0 : list.length - 1;
     if (target < 0 || target >= list.length || target === idx) return;
     try {
       const needInit = list.some((g) => !hasManualOrder(g));
@@ -1263,8 +1264,9 @@ export default function App() {
         updateToast(tid, 'loading', `กำลังสร้างไฟล์ PDF... (${i + 1}/${pageEls.length} หน้า)`);
       }
 
-      pdf.save(fileName);
-      updateToast(tid, 'success', `บันทึกไฟล์ PDF เรียบร้อยแล้ว (${pageEls.length} หน้า)`);
+      const pdfBlob = pdf.output('blob');
+      setPdfResult((prev) => { if (prev && prev.url) { try { URL.revokeObjectURL(prev.url); } catch (e) { /* ignore */ } } return { url: URL.createObjectURL(pdfBlob), fileName, blob: pdfBlob }; });
+      updateToast(tid, 'success', `สร้างไฟล์ PDF เรียบร้อยแล้ว (${pageEls.length} หน้า) กดปุ่มเพื่อเปิด/บันทึก`);
     } catch (err) {
       console.error(err);
       updateToast(tid, 'error', 'สร้าง PDF ไม่สำเร็จ (อาจไม่มีอินเทอร์เน็ต) กำลังเปิดหน้าพิมพ์แทน เลือก "บันทึกเป็น PDF" ได้');
@@ -1747,7 +1749,7 @@ export default function App() {
   }, [guestsWithComputedBadges, seatsPerRow]);
 
   const filteredDashboardGuests = useMemo(() => {
-    return guestsWithComputedBadges.filter((g) => {
+    const filtered = guestsWithComputedBadges.filter((g) => {
       if (filterStatus !== 'all' && g.status !== filterStatus) return false;
       if (filterYear !== 'all' && g.year !== filterYear) return false;
       if (filterType !== 'all' && getStudentType(g) !== filterType) return false;
@@ -1762,7 +1764,18 @@ export default function App() {
       }
       return true;
     });
-  }, [guestsWithComputedBadges, filterStatus, filterYear, filterType, filterGender, searchQuery]);
+    // เลือกดูเฉพาะ Staff → เรียงตามลำดับคิวที่ขึ้นเวที (ชั้นปี → ลำดับสตาฟ) คนที่ไม่อยู่ในคิวแล้วไว้ท้าย
+    if (filterType === 'staff') {
+      const pos = new Map(callOrderList.map((x, i) => [x.id, i]));
+      return filtered.map((g, i) => ({ g, i })).sort((a, b) => {
+        const pa = pos.has(a.g.id) ? pos.get(a.g.id) : Infinity;
+        const pb = pos.has(b.g.id) ? pos.get(b.g.id) : Infinity;
+        if (pa !== pb) return pa === Infinity ? 1 : pb === Infinity ? -1 : pa - pb;
+        return a.i - b.i;
+      }).map((x) => x.g);
+    }
+    return filtered;
+  }, [guestsWithComputedBadges, callOrderList, filterStatus, filterYear, filterType, filterGender, searchQuery]);
 
   const totalPages = Math.ceil(filteredDashboardGuests.length / itemsPerPage) || 1;
   const paginatedGuests = useMemo(() => filteredDashboardGuests.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage), [filteredDashboardGuests, currentPage]);
@@ -2802,12 +2815,32 @@ export default function App() {
                               className={`px-2.5 py-1 ${getStudentType(g) === 'staff' ? 'bg-purple-600 text-white' : 'bg-[#070b19] text-[#d1c7bd] hover:bg-[#121f38]'}`}
                             >Staff</button>
                           </div>
-                          {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (
-                            <div className="mt-1.5 flex items-center gap-2">
-                              <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับสตาฟ {(() => { const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year); return `${sl.findIndex((x) => x.id === g.id) + 1}/${sl.length}`; })()}</span>
-                              {renderMoveControls(callOrderList, g)}
-                            </div>
-                          )}
+                          {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (() => {
+                            const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year);
+                            const pos = sl.findIndex((x) => x.id === g.id) + 1;
+                            return (
+                              <div className="mt-1.5 flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับสตาฟ</span>
+                                <input
+                                  key={`${g.id}-${pos}-${sl.length}`}
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  defaultValue={pos}
+                                  onFocus={(e) => e.target.select()}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                                  onBlur={(e) => {
+                                    const n = parseInt(e.target.value, 10);
+                                    if (!isFinite(n) || n < 1 || n === pos) { e.target.value = pos; return; }
+                                    handleMoveInQueue(callOrderList, g, Math.min(n, sl.length));
+                                  }}
+                                  className="w-14 px-2 py-1 rounded-lg bg-[#070b19] border border-purple-400/60 text-center text-sm font-black text-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                  aria-label="พิมพ์ลำดับสตาฟแล้วกด Enter"
+                                />
+                                <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">/ {sl.length}</span>
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="p-3.5">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${isLateGuest(g) ? 'bg-amber-900/40 text-amber-300 border border-amber-500/30' : g.status === 'checked_in' ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-500/30' : isDisqualifiedStatus(g.status) ? 'bg-rose-900/40 text-rose-300 border border-rose-500/30' : 'bg-slate-800 text-[#d1c7bd]'}`}>
@@ -3547,6 +3580,43 @@ export default function App() {
               <button onClick={() => setIsResetModalOpen(false)} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button disabled={resetConfirmInput !== 'RESET'} onClick={handleResetAllStatuses} className="flex-1 py-2 bg-red-600 text-white rounded-xl text-xs font-bold">รีเซ็ต</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {pdfResult && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+            <h3 className="text-base font-black text-[#f3e5ab]">ไฟล์ PDF พร้อมแล้ว</h3>
+            <p className="text-xs text-[#d1c7bd]">{pdfResult.fileName}</p>
+            <a
+              href={pdfResult.url}
+              download={pdfResult.fileName}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold"
+            >
+              เปิด / ดาวน์โหลด PDF
+            </a>
+            {typeof navigator !== 'undefined' && navigator.canShare && (
+              <button
+                onClick={async () => {
+                  try {
+                    const f = new File([pdfResult.blob], pdfResult.fileName, { type: 'application/pdf' });
+                    if (navigator.canShare({ files: [f] })) await navigator.share({ files: [f], title: pdfResult.fileName });
+                  } catch (e) { /* ผู้ใช้ยกเลิกการแชร์ */ }
+                }}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"
+              >
+                แชร์ / บันทึกลงไฟล์
+              </button>
+            )}
+            <button
+              onClick={() => { try { URL.revokeObjectURL(pdfResult.url); } catch (e) { /* ignore */ } setPdfResult(null); }}
+              className="w-full py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30"
+            >
+              ปิด
+            </button>
           </div>
         </div>
       )}
