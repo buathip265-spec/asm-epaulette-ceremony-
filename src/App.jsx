@@ -1070,19 +1070,22 @@ export default function App() {
   };
 
   const handleDeleteSelectedGuests = () => {
-    if (selectedGuestIds.length === 0) return;
+    // ลบเฉพาะรายการที่เลือกและยังอยู่ในผลค้นหา/ผลกรองปัจจุบัน (เหมือนเดิม)
+    const visibleIds = new Set(filteredDashboardGuests.map((g) => g.id));
+    const delIds = selectedGuestIds.filter((id) => visibleIds.has(id));
+    if (delIds.length === 0) return;
     setConfirmModal({
       isOpen: true,
       title: 'ยืนยันการลบรายชื่อที่เลือก',
-      message: `คุณต้องการลบรายชื่อจำนวน ${selectedGuestIds.length} รายการใช่หรือไม่?`,
-      confirmText: `ลบ ${selectedGuestIds.length} รายชื่อ`,
+      message: `คุณต้องการลบรายชื่อจำนวน ${delIds.length} รายการใช่หรือไม่?`,
+      confirmText: `ลบ ${delIds.length} รายชื่อ`,
       confirmColor: 'bg-red-600 hover:bg-red-700',
       onConfirm: async () => {
-        const idsToDelete = [...selectedGuestIds];
+        const idsToDelete = [...delIds];
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
         const tid = showToast('loading', `กำลังลบ ${idsToDelete.length} รายชื่อ...`);
         setGuests((prev) => prev.filter((g) => !idsToDelete.includes(g.id)));
-        setSelectedGuestIds([]);
+        setSelectedGuestIds((prev) => prev.filter((id) => !idsToDelete.includes(id)));
         try {
           for (let i = 0; i < idsToDelete.length; i += 400) {
             const batch = writeBatch(db);
@@ -1285,8 +1288,7 @@ export default function App() {
 
   // เปลี่ยนประเภทหลายรายการ: ทำกับรายการที่เลือก "และยังอยู่ในผลค้นหา/ผลกรองปัจจุบัน" เท่านั้น
   const handleBulkSetStudentType = (type) => {
-    const visible = new Set(filteredDashboardGuests.map((g) => g.id));
-    const ids = selectedGuestIds.filter((id) => visible.has(id));
+    const ids = [...selectedGuestIds];
     if (ids.length === 0) {
       showToast('warning', 'กรุณาเลือกรายชื่อก่อน');
       return;
@@ -1306,7 +1308,8 @@ export default function App() {
       isOpen: true,
       title: `กำหนดเป็น ${typeLabel} (${changeIds.length} รายชื่อ)`,
       message: `ต้องการเปลี่ยนประเภทของ ${changeIds.length} รายชื่อที่เลือกเป็น ${typeLabel} ใช่หรือไม่?${skipped > 0 ? ` (ข้าม ${skipped} รายชื่อที่เป็น ${typeLabel} อยู่แล้ว)` : ''}\n${detail}`,
-      confirmText: `ยืนยัน ${typeLabel}`,
+      list: changeIds.map((id, i) => `${i + 1}. ${byId.get(id).name}${byId.get(id).studentId ? ' (' + byId.get(id).studentId + ')' : ''} — ${byId.get(id).year || ''}`),
+      confirmText: `ยืนยัน ${typeLabel} ${changeIds.length} รายชื่อ`,
       confirmColor: type === 'staff' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-600 hover:bg-slate-500',
       onConfirm: async () => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
@@ -1746,14 +1749,14 @@ export default function App() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  // กันเลือกข้อมูลที่อยู่นอกผลค้นหา/ผลกรองโดยไม่ตั้งใจ: เมื่อผลลัพธ์เปลี่ยน ให้เหลือเฉพาะรายการที่ยังมองเห็นอยู่
+  // การเลือกจะคงอยู่ข้ามการค้นหา/กรอง (เลือกได้หลายรอบก่อนกดทำรายการ) ตัดออกเฉพาะรายการที่ถูกลบออกจากระบบแล้ว
   useEffect(() => {
-    const visible = new Set(filteredDashboardGuests.map((g) => g.id));
+    const exist = new Set(guestsWithComputedBadges.map((g) => g.id));
     setSelectedGuestIds((prev) => {
-      const next = prev.filter((id) => visible.has(id));
+      const next = prev.filter((id) => exist.has(id));
       return next.length === prev.length ? prev : next;
     });
-  }, [filteredDashboardGuests]);
+  }, [guestsWithComputedBadges]);
 
   const pendingCount = guestsWithComputedBadges.filter((g) => g.status === 'pending').length;
 
@@ -2463,7 +2466,7 @@ export default function App() {
                     onClick={handleDeleteSelectedGuests}
                     className="px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.length})
+                    <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedGuestIds.filter((id) => filteredDashboardGuests.some((g) => g.id === id)).length})
                   </button>
                 )}
 
@@ -2671,7 +2674,7 @@ export default function App() {
             </div>
 
             <div className="bg-[#0e1628] p-3 rounded-3xl border border-purple-500/40 flex flex-wrap items-center gap-2 shadow-lg">
-              <span className="text-xs font-bold text-purple-200">เลือกอยู่ {selectedGuestIds.length} รายการ</span>
+              <span className="text-xs font-bold text-purple-200">เลือกอยู่ {selectedGuestIds.length} รายการ{(() => { const vis = new Set(filteredDashboardGuests.map((g) => g.id)); const hidden = selectedGuestIds.filter((id) => !vis.has(id)).length; return hidden > 0 ? ` (อยู่นอกผลค้นหาตอนนี้ ${hidden})` : ''; })()}</span>
               <button
                 disabled={paginatedGuests.length === 0}
                 onClick={() => setSelectedGuestIds((prev) => Array.from(new Set([...prev, ...paginatedGuests.map((g) => g.id)])))}
@@ -3443,9 +3446,14 @@ export default function App() {
 
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3">
+          <div className="bg-[#0e1628] border border-[#d4af37]/50 rounded-3xl p-6 max-w-sm w-full text-center space-y-3 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-black text-[#f3e5ab]">{confirmModal.title}</h3>
             <p className="text-xs text-[#d1c7bd] whitespace-pre-line text-left">{confirmModal.message}</p>
+            {Array.isArray(confirmModal.list) && confirmModal.list.length > 0 && (
+              <div className="max-h-56 overflow-y-auto text-left text-xs text-[#fdfbf7] bg-[#070b19] border border-[#d4af37]/30 rounded-xl p-3 space-y-0.5">
+                {confirmModal.list.map((t, i) => <div key={i}>{t}</div>)}
+              </div>
+            )}
             <div className="flex gap-2">
               <button onClick={() => setConfirmModal(p => ({ ...p, isOpen: false }))} className="flex-1 py-2 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
               <button onClick={confirmModal.onConfirm} className={`flex-1 py-2 text-white rounded-xl text-xs font-bold ${confirmModal.confirmColor}`}>{confirmModal.confirmText}</button>
