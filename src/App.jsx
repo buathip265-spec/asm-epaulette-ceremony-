@@ -1769,14 +1769,16 @@ export default function App() {
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
 
-  // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามเลขที่นั่ง
+  // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามคิวขึ้นเวที (Team A → ปกติ → Team B → สตาฟที่เหลือ)
   const MC_ROWS_PER_PAGE = 20;
   const mcPages = useMemo(() => {
     const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
-      const list = guestsWithComputedBadges.filter((g) => g.year === y).sort((a, b) => (isStaffGuest(a) ? 1 : 0) - (isStaffGuest(b) ? 1 : 0) || compareSeating(a, b));
+      // เรียงตามคิวขึ้นเวที: Team A → นักศึกษาปกติ → Team B → สตาฟที่เหลือ (ลำดับที่จัดเองในแต่ละทีมใช้ด้วย) — ไม่ขึ้นกับสถานะเช็กชื่อ รายชื่อจึงไม่ขยับตอนมีคนมาสาย
+      const staticRank = (g) => (isStaffGuest(g) ? (getStaffTeam(g) === 'A' ? -1 : getStaffTeam(g) === 'B' ? 1 : 1.5) : 0);
+      const list = reorderStaffSlots(guestsWithComputedBadges.filter((g) => g.year === y).sort((a, b) => staticRank(a) - staticRank(b) || compareSeating(a, b)));
       if (list.length === 0) return;
       const totalPages = Math.ceil(list.length / MC_ROWS_PER_PAGE);
       for (let i = 0; i < totalPages; i++) {
@@ -3088,7 +3090,7 @@ export default function App() {
                   >
                     <div style={{ textAlign: 'center', marginBottom: 14 }}>
                       <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.6 }}>รายชื่อนักศึกษาเข้ารับการประดับบ่า ในพิธีมอบประดับบ่าเกียรติยศ</div>
-                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>สำหรับพิธีกรขานชื่อ — นักศึกษา{pg.year.replace('ปี ', 'ชั้นปีที่ ')} (ทั้งหมด {pg.total} คน)</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>สำหรับพิธีกรขานชื่อ — นักศึกษา{pg.year.replace('ปี ', 'ชั้นปีที่ ')} (ทั้งหมด {pg.total} คน){pg.rows.some((r) => isStaffGuest(r)) ? ' • แถวแรเงา = Staff' : ''}</div>
                     </div>
                     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 16, color: '#000' }}>
                       <colgroup>
@@ -3109,14 +3111,15 @@ export default function App() {
                         {Array.from({ length: MC_ROWS_PER_PAGE }).map((_, i) => {
                           const g = pg.rows[i];
                           const nm = g ? splitThaiName(g.name) : null;
-                          const td = { border: '1px solid #000', padding: '0 8px', height: 39, lineHeight: '39px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+                          const isStaffRow = !!g && isStaffGuest(g);
+                          const td = { border: '1px solid #000', padding: '0 8px', height: 39, lineHeight: '39px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle', background: isStaffRow ? '#e5e7eb' : 'transparent' };
                           return (
                             <tr key={i}>
                               <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? pg.startIndex + i + 1 : ''}</td>
                               <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? String(g.year).replace('ปี ', '') : ''}</td>
                               <td style={td}>{nm ? nm.first : ''}</td>
                               <td style={td}>{nm ? nm.last : ''}</td>
-                              <td style={td} />
+                              <td style={{ ...td, fontSize: 13, fontWeight: 700 }}>{isStaffRow ? `Staff${getStaffTeam(g) === 'R' ? '' : ' ' + STAFF_TEAM_LABEL[getStaffTeam(g)]}` : ''}</td>
                             </tr>
                           );
                         })}
