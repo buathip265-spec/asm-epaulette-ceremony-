@@ -433,6 +433,7 @@ export default function App() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
+  const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
   // ---------- ระบบแจ้งเตือน (Toast) ----------
@@ -1224,8 +1225,10 @@ export default function App() {
   };
 
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
-  const handleSaveMcPdf = async () => {
-    if (mcPages.length === 0) {
+  const handleSaveMcPdf = () => savePagesPdf('#mc-print-root .mc-page', 'รายชื่อพิธีกร.pdf', mcPages.length);
+  const handleSaveGoodsPdf = () => savePagesPdf('#goods-print-root .goods-page', 'รายชื่อรับสินค้า.pdf', goodsPages.length);
+  const savePagesPdf = async (pageSelector, fileName, pageCount) => {
+    if (pageCount === 0) {
       showToast('warning', 'ไม่มีรายชื่อให้สร้างเอกสาร');
       return;
     }
@@ -1239,7 +1242,7 @@ export default function App() {
       await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', () => !!(window.jspdf && window.jspdf.jsPDF));
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageEls = document.querySelectorAll('#mc-print-root .mc-page');
+      const pageEls = document.querySelectorAll(pageSelector);
 
       holder = document.createElement('div');
       holder.style.cssText = 'position:fixed;left:-10000px;top:0;background:#ffffff;font-family:' + MC_FONT + ';';
@@ -1260,7 +1263,7 @@ export default function App() {
         updateToast(tid, 'loading', `กำลังสร้างไฟล์ PDF... (${i + 1}/${pageEls.length} หน้า)`);
       }
 
-      pdf.save('รายชื่อพิธีกร.pdf');
+      pdf.save(fileName);
       updateToast(tid, 'success', `บันทึกไฟล์ PDF เรียบร้อยแล้ว (${pageEls.length} หน้า)`);
     } catch (err) {
       console.error(err);
@@ -1722,6 +1725,26 @@ export default function App() {
     });
     return pages;
   }, [guestsWithComputedBadges]);
+
+  // ใบรายชื่อรับสินค้า: 1 ใบ = 1 บล็อกที่นั่ง (เช่น A1–A25, A26–A50, B1–B25 ...) เรียงตามเลขที่นั่งในระบบ Staff อยู่ท้ายสุด
+  const GOODS_ROWS_PER_PAGE = 25;
+  const goodsPages = useMemo(() => {
+    const normals = guestsWithComputedBadges.filter((g) => !isStaffGuest(g) && g.badgeNumber && g.badgeNumber !== '-').sort(compareSeating);
+    const staffList = guestsWithComputedBadges.filter((g) => isStaffGuest(g)).sort(compareSeating);
+    const groups = [];
+    normals.forEach((g) => {
+      const b = seatBlockOf(g);
+      const key = b ? b.key : 'other';
+      const last = groups[groups.length - 1];
+      if (last && last.key === key && last.rows.length < GOODS_ROWS_PER_PAGE) last.rows.push(g);
+      else groups.push({ key, rows: [g], staff: false });
+    });
+    for (let i = 0; i < staffList.length; i += GOODS_ROWS_PER_PAGE) groups.push({ key: 'staff' + i, rows: staffList.slice(i, i + GOODS_ROWS_PER_PAGE), staff: true });
+    return groups.map((gr, i) => {
+      const first = gr.rows[0], last = gr.rows[gr.rows.length - 1];
+      return { sheet: i + 1, totalSheets: groups.length, staff: gr.staff, rows: gr.rows, range: gr.staff ? 'Staff' : (first.badgeNumber === last.badgeNumber ? `${first.badgeNumber}` : `${first.badgeNumber} – ${last.badgeNumber}`) };
+    });
+  }, [guestsWithComputedBadges, seatsPerRow]);
 
   const filteredDashboardGuests = useMemo(() => {
     return guestsWithComputedBadges.filter((g) => {
@@ -2502,6 +2525,7 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => setIsSummaryModalOpen(true)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน</button>
                     <button onClick={() => setIsMcModalOpen(true)} className="px-3 py-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF)</button>
+                    <button onClick={() => setIsGoodsModalOpen(true)} className="px-3 py-2 bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อรับสินค้า (PDF)</button>
                     <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
                     <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
                   </div>
@@ -2821,6 +2845,89 @@ export default function App() {
       </main>
 
       {/* Modal ใบรายชื่อพิธีกร (บันทึกเป็น PDF แยกหน้าตามชั้นปี) */}
+      {isGoodsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #goods-print-root, #goods-print-root * { visibility: visible !important; }
+              #goods-print-root { position: absolute; left: 0; top: 0; display: block !important; }
+              .goods-page { box-shadow: none !important; margin: 0 !important; break-after: page; page-break-after: always; }
+              .goods-page:last-child { break-after: auto; page-break-after: auto; }
+              @page { size: A4; margin: 0; }
+            }
+          `}</style>
+          <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-300 pb-4 print:hidden">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <Printer className="w-5 h-5 text-amber-600" /> ใบรายชื่อรับสินค้า
+                </h2>
+                <p className="text-xs text-gray-600 mt-0.5">เรียงตามเลขที่นั่งในระบบ • 1 ใบ = 1 บล็อกที่นั่ง (สูงสุด 25 คน) • ทั้งหมด {goodsPages.length} ใบ • มีช่องลงชื่อรับสินค้า</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center justify-end">
+                <button
+                  disabled={isPdfGenerating}
+                  onClick={handleSaveGoodsPdf}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md"
+                >
+                  {isPdfGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} บันทึกเป็น PDF
+                </button>
+                <button onClick={() => setIsGoodsModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold">ปิด</button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <div id="goods-print-root" className="flex flex-col items-center gap-4">
+                {goodsPages.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-10">ยังไม่มีรายชื่อในระบบ</p>
+                ) : goodsPages.map((pg, pIdx) => (
+                  <div
+                    key={pIdx}
+                    className="goods-page"
+                    style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 44px', fontFamily: "'Sarabun', 'Prompt', system-ui, sans-serif", background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}
+                  >
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.6 }}>ใบรายชื่อรับสินค้า — พิธีมอบประดับบ่าเกียรติยศ</div>
+                      <div style={{ fontSize: 15, lineHeight: 1.6 }}>ใบที่ {pg.sheet} / {pg.totalSheets} • ที่นั่ง {pg.range} • จำนวน {pg.rows.length} คน</div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 16, color: '#000' }}>
+                      <colgroup>
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 120 }} />
+                        <col style={{ width: 280 }} />
+                        <col />
+                      </colgroup>
+                      <thead>
+                        <tr style={{ background: '#e5e7eb', height: 34 }}>
+                          {['ลำดับที่นั่ง', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'ลายเซ็นรับสินค้า'].map((h) => (
+                            <th key={h} style={{ border: '1px solid #000', padding: '0 4px', textAlign: 'center', fontSize: 14, fontWeight: 700 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: GOODS_ROWS_PER_PAGE }).map((_, i) => {
+                          const g = pg.rows[i];
+                          const td = { border: '1px solid #000', padding: '0 8px', height: 35, lineHeight: '35px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+                          return (
+                            <tr key={i}>
+                              <td style={{ ...td, textAlign: 'center', padding: 0, fontWeight: 700 }}>{g ? g.badgeNumber : ''}</td>
+                              <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? (g.studentId || '') : ''}</td>
+                              <td style={td}>{g ? g.name : ''}</td>
+                              <td style={td} />
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isMcModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
           <style>{`
