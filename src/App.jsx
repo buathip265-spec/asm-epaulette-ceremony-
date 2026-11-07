@@ -141,6 +141,9 @@ const isLateGuest = (g) => !!g && g.status === 'late_receive_after';
 const STAFF_SEAT_LABEL = 'L';
 const getStudentType = (g) => (g && g.studentType === 'staff' ? 'staff' : 'normal');
 const isStaffGuest = (g) => getStudentType(g) === 'staff';
+// ทีมของสตาฟ: 'A' = ถือพานส่งพาน ทีม A (ขึ้นก่อนนักศึกษาปกติของชั้นปี), 'B' = ถือพานส่งพาน ทีม B (ต่อท้ายปกติ), 'R' = สตาฟที่เหลือ (ต่อจากทีม B) — ค่าเริ่มต้นคือ 'R'
+const getStaffTeam = (g) => (g.staffTeam === 'A' || g.staffTeam === 'B' ? g.staffTeam : 'R');
+const STAFF_TEAM_LABEL = { A: 'Team A', B: 'Team B', R: 'สตาฟที่เหลือ' };
 
 // ใช้เทียบรายชื่อซ้ำตอนนำเข้า Excel (ตัดช่องว่างส่วนเกิน ไม่สนตัวพิมพ์เล็ก/ใหญ่)
 const normKey = (v) => String(v === undefined || v === null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
@@ -149,7 +152,7 @@ const normKey = (v) => String(v === undefined || v === null ? '' : v).trim().toL
 const getQueueRank = (g) => {
   if (isDisqualifiedStatus(g.status)) return 3;
   if (isLateGuest(g)) return 2;
-  if (isStaffGuest(g)) return 1;
+  if (isStaffGuest(g)) { const t = getStaffTeam(g); return t === 'A' ? -1 : t === 'B' ? 1 : 1.5; }
   return 0;
 };
 
@@ -201,19 +204,19 @@ const compareStandbyDefault = (a, b) => {
   const yearA = getYearOrderWeight(a.year);
   const yearB = getYearOrderWeight(b.year);
   if (yearA !== yearB) return yearA - yearB;
-  const rankOf = (g) => (isLateGuest(g) ? 2 : isStaffGuest(g) ? 1 : 0);
+  const rankOf = (g) => (isLateGuest(g) ? 2 : isStaffGuest(g) ? (getStaffTeam(g) === 'A' ? -1 : getStaffTeam(g) === 'B' ? 1 : 1.5) : 0);
   const rankA = rankOf(a);
   const rankB = rankOf(b);
   if (rankA !== rankB) return rankA - rankB;
   return (a.standbyOrder || 0) - (b.standbyOrder || 0);
 };
 
-// ลำดับที่จัดเองใช้กับ Staff เท่านั้น: Staff ยังอยู่ท้ายชั้นปีของตัวเอง แต่สลับกันเองได้ว่าใครขึ้นก่อน (ไม่ข้ามไปแทรกนักศึกษาปกติ)
+// ลำดับที่จัดเองใช้กับ Staff เท่านั้น: สลับกันเองได้ภายในทีมเดียวกัน (Team A / Team B / สตาฟที่เหลือ) ของชั้นปีเดียวกัน ไม่ข้ามทีมหรือไปแทรกนักศึกษาปกติ
 const reorderStaffSlots = (sorted) => {
   const slotsByYear = new Map();
   sorted.forEach((g, i) => {
     if (!isStaffGuest(g)) return;
-    const k = g.year || '';
+    const k = `${g.year || ''}|${getStaffTeam(g)}`;
     if (!slotsByYear.has(k)) slotsByYear.set(k, []);
     slotsByYear.get(k).push(i);
   });
@@ -883,6 +886,12 @@ export default function App() {
     let blockLabel = '';
     if (isLateKind) {
       batchList = readyList.slice(0, Math.min(Number(batchSize), readyList.length));
+    } else if (kind === 'staff-A' || kind === 'staff-B' || kind === 'staff-R') {
+      const team = kind.slice(-1);
+      const pool = readyList.filter((g) => isStaffGuest(g) && getStaffTeam(g) === team);
+      const y = pool[0]?.year;
+      batchList = pool.filter((g) => g.year === y); // ดึงทีละชั้นปี (ชั้นปีที่ถึงคิวก่อน)
+      blockLabel = `${STAFF_TEAM_LABEL[team]} `;
     } else if (kind === 'staff') {
       batchList = readyList.filter((g) => isStaffGuest(g));
       blockLabel = 'สตาฟ ';
@@ -919,7 +928,7 @@ export default function App() {
   // ---------- จัดลำดับคิวเรียกชื่อเอง (ขึ้น/ลง/บนสุด/ท้ายสุด) ----------
   // ใช้ฟิลด์ queueOrder (ตัวเลข) — เขียนเพียง 1 เอกสารต่อการย้าย 1 ครั้ง (ครั้งแรกของแต่ละแถวจะกำหนดเลขให้ทั้งแถวหนึ่งรอบ)
   const handleMoveInQueue = async (fullList, guest, dir) => {
-    const list = fullList.filter((x) => isStaffGuest(x) && x.year === guest.year); // จัดลำดับในหมู่สตาฟชั้นปีเดียวกันเท่านั้น
+    const list = fullList.filter((x) => isStaffGuest(x) && x.year === guest.year && getStaffTeam(x) === getStaffTeam(guest)); // จัดลำดับในหมู่สตาฟชั้นปีและทีมเดียวกันเท่านั้น
     const idx = list.findIndex((g) => g.id === guest.id);
     if (idx < 0) return;
     const target = typeof dir === 'number' ? Math.min(Math.max(dir, 1), list.length) - 1 : dir === 'up' ? idx - 1 : dir === 'down' ? idx + 1 : dir === 'top' ? 0 : list.length - 1;
@@ -1289,6 +1298,56 @@ export default function App() {
       console.error(e);
       showToast('error', `เปลี่ยนประเภทของ ${guest.name} ไม่สำเร็จ กรุณาลองอีกครั้ง`);
     }
+  };
+
+  // กำหนดทีมของสตาฟ: 'A' / 'B' / 'R' (สตาฟที่เหลือ)
+  const handleSetStaffTeam = async (guest, team) => {
+    if (!isStaffGuest(guest) || getStaffTeam(guest) === team) return;
+    try {
+      await updateDoc(getGuestDocRef(guest.id), { staffTeam: team === 'R' ? null : team, queueOrder: null });
+      showToast('success', `${guest.name}: ${STAFF_TEAM_LABEL[team]}`);
+    } catch (e) {
+      console.error(e);
+      showToast('error', `เปลี่ยนทีมของ ${guest.name} ไม่สำเร็จ กรุณาลองอีกครั้ง`);
+    }
+  };
+
+  const handleBulkSetStaffTeam = (team) => {
+    const byId = new Map(guestsWithComputedBadges.map((g) => [g.id, g]));
+    const staffIds = selectedGuestIds.filter((id) => byId.get(id) && isStaffGuest(byId.get(id)));
+    const changeIds = staffIds.filter((id) => getStaffTeam(byId.get(id)) !== team);
+    if (staffIds.length === 0) {
+      showToast('warning', 'ไม่มี Staff ในรายชื่อที่เลือก (กำหนดเป็น Staff ก่อน)');
+      return;
+    }
+    if (changeIds.length === 0) {
+      showToast('info', `Staff ที่เลือกอยู่ใน${STAFF_TEAM_LABEL[team]}อยู่แล้วทั้งหมด`);
+      return;
+    }
+    const label = STAFF_TEAM_LABEL[team];
+    setConfirmModal({
+      isOpen: true,
+      title: `กำหนดเป็น ${label} (${changeIds.length} คน)`,
+      message: `ต้องการกำหนด Staff ${changeIds.length} คนนี้เป็น ${label} ใช่หรือไม่? (ลำดับที่เคยจัดเองของคนเหล่านี้จะถูกล้าง)`,
+      list: changeIds.map((id, i) => `${i + 1}. ${byId.get(id).name}${byId.get(id).studentId ? ' (' + byId.get(id).studentId + ')' : ''} — ${byId.get(id).year || ''}`),
+      confirmText: `ยืนยัน ${label} ${changeIds.length} คน`,
+      confirmColor: 'bg-purple-600 hover:bg-purple-700',
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        const tid = showToast('loading', `กำลังกำหนด ${label} ${changeIds.length} คน...`);
+        try {
+          for (let i = 0; i < changeIds.length; i += 400) {
+            const batch = writeBatch(db);
+            changeIds.slice(i, i + 400).forEach((id) => batch.update(getGuestDocRef(id), { staffTeam: team === 'R' ? null : team, queueOrder: null }));
+            await batch.commit();
+          }
+          updateToast(tid, 'success', `กำหนด ${label} ${changeIds.length} คนเรียบร้อยแล้ว`);
+        } catch (e) {
+          console.error(e);
+          updateToast(tid, 'error', 'กำหนดทีมไม่สำเร็จ บางรายการอาจยังไม่เปลี่ยน กรุณาลองอีกครั้ง');
+        }
+      }
+    });
   };
 
   // เปลี่ยนประเภทหลายรายการ: ทำกับรายการที่เลือก "และยังอยู่ในผลค้นหา/ผลกรองปัจจุบัน" เท่านั้น
@@ -1700,6 +1759,12 @@ export default function App() {
     return { ...best, label: seatBlockLabel(best), members };
   }, [readyQueue, seatsPerRow]);
   const readyStaff = useMemo(() => readyQueue.filter((g) => isStaffGuest(g)), [readyQueue]);
+  // สตาฟที่รอเรียกแยกตามทีม (ดึงทีละทีม ทีละชั้นปี)
+  const readyStaffTeams = useMemo(() => ['A', 'B', 'R'].map((t) => {
+    const pool = readyStaff.filter((g) => getStaffTeam(g) === t);
+    if (pool.length === 0) return null;
+    return { team: t, count: pool.filter((g) => g.year === pool[0].year).length };
+  }).filter(Boolean), [readyStaff]);
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
@@ -2357,14 +2422,15 @@ export default function App() {
                     <span>🚀 ดึงเข้าสแตนด์บาย{nextSeatBlock ? ` ${nextSeatBlock.label} (${nextSeatBlock.members.length} คน)` : ''}</span>
                   </button>
                 )}
-                {readyStaff.length > 0 && (
+                {readyStaffTeams.map((t) => (
                   <button
-                    onClick={() => handleMoveToStandbyBatch('staff')}
+                    key={t.team}
+                    onClick={() => handleMoveToStandbyBatch('staff-' + t.team)}
                     className="w-full mb-3 py-2 bg-transparent hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-dashed border-[#d4af37]/50 rounded-2xl text-xs font-bold transition-all flex items-center justify-center gap-1.5"
                   >
-                    <span>⭐ ดึงสตาฟเข้าสแตนด์บาย ({readyStaff.length} คน)</span>
+                    <span>ดึง{t.team === 'R' ? 'สตาฟที่เหลือ' : 'สตาฟ ' + STAFF_TEAM_LABEL[t.team]} ({t.count} คน)</span>
                   </button>
-                )}
+                ))}
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
                   {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
                     <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
@@ -2747,6 +2813,16 @@ export default function App() {
               >
                 กำหนดเป็น Normal
               </button>
+              {['A', 'B', 'R'].map((t) => (
+                <button
+                  key={t}
+                  disabled={selectedGuestIds.length === 0}
+                  onClick={() => handleBulkSetStaffTeam(t)}
+                  className="px-3 py-1.5 bg-purple-900/60 hover:bg-purple-800 border border-purple-400/40 text-purple-100 rounded-xl text-xs font-bold disabled:opacity-35 disabled:cursor-not-allowed"
+                >
+                  {t === 'R' ? 'Staff ที่เหลือ' : 'Staff ' + STAFF_TEAM_LABEL[t]}
+                </button>
+              ))}
             </div>
 
 
@@ -2816,11 +2892,17 @@ export default function App() {
                             >Staff</button>
                           </div>
                           {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (() => {
-                            const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year);
+                            const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year && getStaffTeam(x) === getStaffTeam(g));
                             const pos = sl.findIndex((x) => x.id === g.id) + 1;
                             return (
-                              <div className="mt-1.5 flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับสตาฟ</span>
+                              <div className="mt-1.5 space-y-1.5">
+                              <div className="inline-flex rounded-lg overflow-hidden border border-purple-400/40 text-[10px] font-bold">
+                                {['A', 'B', 'R'].map((t) => (
+                                  <button key={t} onClick={() => handleSetStaffTeam(g, t)} className={`px-2 py-1 ${getStaffTeam(g) === t ? 'bg-purple-600 text-white' : 'bg-[#070b19] text-[#d1c7bd] hover:bg-[#121f38]'}`}>{STAFF_TEAM_LABEL[t]}</button>
+                                ))}
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">ลำดับ {STAFF_TEAM_LABEL[getStaffTeam(g)]}</span>
                                 <input
                                   key={`${g.id}-${pos}-${sl.length}`}
                                   type="text"
@@ -2838,6 +2920,7 @@ export default function App() {
                                   aria-label="พิมพ์ลำดับสตาฟแล้วกด Enter"
                                 />
                                 <span className="text-[10px] font-bold text-purple-300 whitespace-nowrap">/ {sl.length}</span>
+                              </div>
                               </div>
                             );
                           })()}
