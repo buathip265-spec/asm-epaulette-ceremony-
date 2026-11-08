@@ -148,13 +148,23 @@ const STAFF_TEAM_LABEL = { A: 'Team A', B: 'Team B', R: 'สตาฟที่�
 // ใช้เทียบรายชื่อซ้ำตอนนำเข้า Excel (ตัดช่องว่างส่วนเกิน ไม่สนตัวพิมพ์เล็ก/ใหญ่)
 const normKey = (v) => String(v === undefined || v === null ? '' : v).trim().toLowerCase().replace(/\s+/g, ' ');
 
-// 0 = ปกติ, 1 = Staff (ท้ายกลุ่มปกติของชั้นปี), 2 = มาสาย (ท้ายสุดของชั้นปี), 3 = ไม่ขึ้นรับบ่า
-const getQueueRank = (g) => {
-  if (isDisqualifiedStatus(g.status)) return 3;
-  if (isLateGuest(g)) return 2;
-  if (isStaffGuest(g)) { const t = getStaffTeam(g); return t === 'A' ? -1 : t === 'B' ? 1 : 1.5; }
-  return 0;
+// ลำดับในชั้นปีเดียวกัน (ไม่ขึ้นกับสถานะเช็กชื่อ): Team A → นักศึกษาหญิง → Team B → สตาฟหญิง → นักศึกษาชาย → สตาฟชาย
+// (สตาฟที่เหลือแยกตามเพศ; Team A/B เรียง ก-ฮ รวมกันไม่แยกเพศ) / 8 = มาสาย (ท้ายสุดของชั้นปี) / 9 = ไม่ขึ้นรับบ่า
+const getBaseRank = (g) => {
+  const male = getGenderOrderWeight(g.name) === 1;
+  if (isStaffGuest(g)) {
+    const t = getStaffTeam(g);
+    return t === 'A' ? 0 : t === 'B' ? 2 : male ? 5 : 3;
+  }
+  return male ? 4 : 1;
 };
+const getQueueRank = (g) => {
+  if (isDisqualifiedStatus(g.status)) return 9;
+  if (isLateGuest(g)) return 8;
+  return getBaseRank(g);
+};
+// กลุ่มสตาฟที่ลำดับ (จัดเอง/พิมพ์เลข) ใช้ร่วมกัน: ชั้นปี + ทีม (+ เพศ สำหรับสตาฟที่เหลือ)
+const staffGroupKey = (g) => `${g.year || ''}|${getBaseRank(g)}`;
 
 // ลำดับที่นั่ง: ชั้นปี → เพศ(หญิงก่อน) → ชื่อ  (ไม่ขึ้นกับสถานะเช็กชื่อ เพื่อให้ที่นั่งไม่เปลี่ยน)
 const compareSeating = (a, b) => {
@@ -178,8 +188,9 @@ const compareCustomCriteria = (a, b) => {
     const rankB = getQueueRank(b);
     if (rankA !== rankB) return rankA - rankB;
 
-    const genderA = getGenderOrderWeight(a.name);
-    const genderB = getGenderOrderWeight(b.name);
+    const teamRank = rankA === 0 || rankA === 2; // Team A / Team B: เรียง ก-ฮ ไม่แยกเพศ
+    const genderA = teamRank ? 0 : getGenderOrderWeight(a.name);
+    const genderB = teamRank ? 0 : getGenderOrderWeight(b.name);
     if (genderA !== genderB) return genderA - genderB;
 
     const cleanNameA = getSortableCleanName(a.name);
@@ -204,7 +215,7 @@ const compareStandbyDefault = (a, b) => {
   const yearA = getYearOrderWeight(a.year);
   const yearB = getYearOrderWeight(b.year);
   if (yearA !== yearB) return yearA - yearB;
-  const rankOf = (g) => (isLateGuest(g) ? 2 : isStaffGuest(g) ? (getStaffTeam(g) === 'A' ? -1 : getStaffTeam(g) === 'B' ? 1 : 1.5) : 0);
+  const rankOf = (g) => (isLateGuest(g) ? 8 : getBaseRank(g));
   const rankA = rankOf(a);
   const rankB = rankOf(b);
   if (rankA !== rankB) return rankA - rankB;
@@ -216,7 +227,7 @@ const reorderStaffSlots = (sorted) => {
   const slotsByYear = new Map();
   sorted.forEach((g, i) => {
     if (!isStaffGuest(g)) return;
-    const k = `${g.year || ''}|${getStaffTeam(g)}`;
+    const k = staffGroupKey(g);
     if (!slotsByYear.has(k)) slotsByYear.set(k, []);
     slotsByYear.get(k).push(i);
   });
@@ -928,7 +939,7 @@ export default function App() {
   // ---------- จัดลำดับคิวเรียกชื่อเอง (ขึ้น/ลง/บนสุด/ท้ายสุด) ----------
   // ใช้ฟิลด์ queueOrder (ตัวเลข) — เขียนเพียง 1 เอกสารต่อการย้าย 1 ครั้ง (ครั้งแรกของแต่ละแถวจะกำหนดเลขให้ทั้งแถวหนึ่งรอบ)
   const handleMoveInQueue = async (fullList, guest, dir) => {
-    const list = fullList.filter((x) => isStaffGuest(x) && x.year === guest.year && getStaffTeam(x) === getStaffTeam(guest)); // จัดลำดับในหมู่สตาฟชั้นปีและทีมเดียวกันเท่านั้น
+    const list = fullList.filter((x) => isStaffGuest(x) && staffGroupKey(x) === staffGroupKey(guest)); // จัดลำดับในหมู่สตาฟกลุ่มเดียวกันเท่านั้น
     const idx = list.findIndex((g) => g.id === guest.id);
     if (idx < 0) return;
     const target = typeof dir === 'number' ? Math.min(Math.max(dir, 1), list.length) - 1 : dir === 'up' ? idx - 1 : dir === 'down' ? idx + 1 : dir === 'top' ? 0 : list.length - 1;
@@ -1776,9 +1787,14 @@ export default function App() {
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
-      // เรียงตามคิวขึ้นเวที: Team A → นักศึกษาปกติ → Team B → สตาฟที่เหลือ (ลำดับที่จัดเองในแต่ละทีมใช้ด้วย) — ไม่ขึ้นกับสถานะเช็กชื่อ รายชื่อจึงไม่ขยับตอนมีคนมาสาย
-      const staticRank = (g) => (isStaffGuest(g) ? (getStaffTeam(g) === 'A' ? -1 : getStaffTeam(g) === 'B' ? 1 : 1.5) : 0);
-      const list = reorderStaffSlots(guestsWithComputedBadges.filter((g) => g.year === y).sort((a, b) => staticRank(a) - staticRank(b) || compareSeating(a, b)));
+      // เรียงตามคิวขึ้นเวที: Team A → นักศึกษาหญิง → Team B → สตาฟหญิง → นักศึกษาชาย → สตาฟชาย (ลำดับที่จัดเองในแต่ละกลุ่มใช้ด้วย) — ไม่ขึ้นกับสถานะเช็กชื่อ รายชื่อจึงไม่ขยับตอนมีคนมาสาย
+      const mcCmp = (a, b) => {
+        const ra = getBaseRank(a), rb = getBaseRank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0 || ra === 2) return getSortableCleanName(a.name).localeCompare(getSortableCleanName(b.name), 'th') || String(a.id).localeCompare(String(b.id)); // Team A/B เรียง ก-ฮ
+        return compareSeating(a, b);
+      };
+      const list = reorderStaffSlots(guestsWithComputedBadges.filter((g) => g.year === y).sort(mcCmp));
       if (list.length === 0) return;
       const totalPages = Math.ceil(list.length / MC_ROWS_PER_PAGE);
       for (let i = 0; i < totalPages; i++) {
@@ -2894,7 +2910,7 @@ export default function App() {
                             >Staff</button>
                           </div>
                           {isStaffGuest(g) && callOrderList.some((x) => x.id === g.id) && (() => {
-                            const sl = callOrderList.filter((x) => isStaffGuest(x) && x.year === g.year && getStaffTeam(x) === getStaffTeam(g));
+                            const sl = callOrderList.filter((x) => isStaffGuest(x) && staffGroupKey(x) === staffGroupKey(g));
                             const pos = sl.findIndex((x) => x.id === g.id) + 1;
                             return (
                               <div className="mt-1.5 space-y-1.5">
