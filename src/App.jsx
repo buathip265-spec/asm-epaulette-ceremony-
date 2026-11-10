@@ -519,6 +519,7 @@ export default function App() {
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
   const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   // ระบบรับสินค้า (ข้อมูลฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษา)
   const [ordersList, setOrdersList] = useState([]);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
@@ -1346,6 +1347,7 @@ export default function App() {
   };
 
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
+  const handleSaveBackupPdf = () => savePagesPdf('#backup-print-root .backup-page', 'ใบเช็กชื่อสำรอง.pdf', backupPages.length);
   const handleSaveMcPdf = () => savePagesPdf('#mc-print-root .mc-page', 'รายชื่อพิธีกร.pdf', mcPages.length);
   const handleSaveGoodsPdf = () => savePagesPdf('#goods-print-root .goods-page', 'รายชื่อรับสินค้า.pdf', goodsPages.length);
   // ---------- ระบบรับสินค้า: นำเข้า / ติ๊กรับ / แก้ไข / ลบ ----------
@@ -1963,6 +1965,22 @@ export default function App() {
   const qrSuggestions = useMemo(() => suggestGuests(guestsWithComputedBadges, manualCodeInput), [guestsWithComputedBadges, manualCodeInput]);
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
+
+  // ใบเช็กชื่อสำรอง (กรณีระบบล่ม): แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ เพื่อให้หาชื่อหน้างานง่าย มีช่องติ๊ก มา / มาสาย / ผิดระเบียบ + ท้ายเล่มมีหน้าเพิ่มชื่อเอง
+  const BACKUP_ROWS_PER_PAGE = 25;
+  const backupPages = useMemo(() => {
+    const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
+    const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
+    const pages = [];
+    [...knownYears, ...otherYears].forEach((y) => {
+      const list = guestsWithComputedBadges.filter((g) => g.year === y)
+        .sort((a, b) => getSortableCleanName(a.name).localeCompare(getSortableCleanName(b.name), 'th') || String(a.id).localeCompare(String(b.id)));
+      const totalPages = Math.ceil(list.length / BACKUP_ROWS_PER_PAGE);
+      for (let i = 0; i < totalPages; i++) pages.push({ blank: false, year: y, page: i + 1, totalPages, total: list.length, startIndex: i * BACKUP_ROWS_PER_PAGE, rows: list.slice(i * BACKUP_ROWS_PER_PAGE, (i + 1) * BACKUP_ROWS_PER_PAGE) });
+    });
+    if (pages.length) pages.push({ blank: true, year: '', page: 1, totalPages: 1, total: 0, startIndex: 0, rows: [] });
+    return pages;
+  }, [guestsWithComputedBadges]);
 
   // หน้าเอกสารใบรายชื่อพิธีกร: แยกชั้นปีกันเด็ดขาด (ขึ้นหน้าใหม่ทุกครั้งที่เปลี่ยนชั้นปี) เรียงตามคิวขึ้นเวที (Team A → ปกติ → Team B → สตาฟที่เหลือ)
   const MC_ROWS_PER_PAGE = 20;
@@ -2982,6 +3000,7 @@ export default function App() {
                     <button onClick={() => setIsSummaryModalOpen(true)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Award className="w-3.5 h-3.5" /> สรุปรายงานหลังจบงาน</button>
                     <button onClick={() => setIsMcModalOpen(true)} className="px-3 py-2 bg-blue-900/40 hover:bg-blue-800/60 text-blue-200 border border-blue-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อพิธีกร (PDF)</button>
                     <button onClick={() => setIsGoodsModalOpen(true)} className="px-3 py-2 bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรายชื่อรับสินค้า (PDF)</button>
+                    <button onClick={() => setIsBackupModalOpen(true)} className="px-3 py-2 bg-violet-900/40 hover:bg-violet-800/60 text-violet-200 border border-violet-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบเช็กชื่อสำรอง (PDF)</button>
                     <button onClick={() => setIsExcelModalOpen(true)} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2d52] text-[#fdfbf7] border border-[#d4af37]/30 rounded-xl text-xs font-bold flex items-center gap-1.5"><Upload className="w-3.5 h-3.5 text-[#d4af37]" /> นำเข้า Excel</button>
                     <button onClick={() => setIsResetModalOpen(true)} className="px-3 py-2 bg-red-950/40 text-red-300 border border-red-800 rounded-xl text-xs font-bold"><RotateCcw className="w-3.5 h-3.5 inline mr-1" /> รีเซ็ตทั้งหมด</button>
                   </div>
@@ -3613,6 +3632,84 @@ export default function App() {
                     </table>
                     <div style={{ position: 'absolute', bottom: 30, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: '#000' }}>
                       หน้า {pg.page} / {pg.totalPages}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBackupModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-300 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Printer className="w-5 h-5 text-violet-600" /> ใบเช็กชื่อสำรอง (กรณีระบบขัดข้อง)</h2>
+                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ • 25 คนต่อหน้า • ทั้งหมด {backupPages.length} หน้า (รวมหน้าเพิ่มชื่อเอง 1 หน้า) • ข้อมูล ณ ตอนกดสร้าง ควรสร้างใหม่ก่อนพิมพ์</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center justify-end">
+                <button disabled={isPdfGenerating} onClick={handleSaveBackupPdf} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
+                  {isPdfGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} บันทึกเป็น PDF
+                </button>
+                <button onClick={() => setIsBackupModalOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold">ปิด</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <div id="backup-print-root" className="flex flex-col items-center gap-4">
+                {backupPages.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-10">ยังไม่มีรายชื่อในระบบ</p>
+                ) : backupPages.map((pg, pIdx) => (
+                  <div key={pIdx} className="backup-page" style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 44px', fontFamily: "'Sarabun', 'Prompt', system-ui, sans-serif", background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.6 }}>ใบเช็กชื่อสำรอง — พิธีมอบประดับบ่าเกียรติยศ</div>
+                      <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+                        {pg.blank ? 'รายชื่อเพิ่มเติม (กรอกเอง) • คนที่ไม่อยู่ในรายชื่อด้านหน้า' : `นักศึกษา${pg.year.replace('ปี ', 'ชั้นปีที่ ')} • หน้า ${pg.page} / ${pg.totalPages} • ทั้งหมด ${pg.total} คน${pg.rows.some((r) => isStaffGuest(r)) ? ' • แถวแรเงา = Staff' : ''}`}
+                      </div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 14, color: '#000' }}>
+                      <colgroup>
+                        {pg.blank
+                          ? <><col style={{ width: 40 }} /><col style={{ width: 100 }} /><col style={{ width: 250 }} /><col style={{ width: 50 }} /><col style={{ width: 60 }} /><col style={{ width: 46 }} /><col style={{ width: 52 }} /><col /></>
+                          : <><col style={{ width: 40 }} /><col style={{ width: 62 }} /><col style={{ width: 94 }} /><col style={{ width: 218 }} /><col style={{ width: 46 }} /><col style={{ width: 52 }} /><col style={{ width: 76 }} /><col /></>}
+                      </colgroup>
+                      <thead>
+                        <tr style={{ background: '#e5e7eb', height: 34 }}>
+                          {(pg.blank ? ['ที่', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'ปี', 'ที่นั่ง', 'มา', 'มาสาย', 'หมายเหตุ'] : ['ที่', 'ที่นั่ง', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'มา', 'มาสาย', 'ผิดระเบียบ', 'หมายเหตุ']).map((h) => (
+                            <th key={h} style={{ border: '1px solid #000', padding: '0 2px', textAlign: 'center', fontSize: 12, fontWeight: 700 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: BACKUP_ROWS_PER_PAGE }).map((_, i) => {
+                          const g = pg.rows[i];
+                          const isStaffRow = !!g && isStaffGuest(g);
+                          const td = { border: '1px solid #000', padding: '0 5px', height: 35, lineHeight: '35px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle', background: isStaffRow ? '#e5e7eb' : 'transparent' };
+                          const ctr = { ...td, textAlign: 'center', padding: 0 };
+                          if (pg.blank) {
+                            return (
+                              <tr key={i}>
+                                <td style={ctr}>{i + 1}</td><td style={td} /><td style={td} /><td style={td} /><td style={td} /><td style={td} /><td style={td} /><td style={td} />
+                              </tr>
+                            );
+                          }
+                          return (
+                            <tr key={i}>
+                              <td style={ctr}>{g ? pg.startIndex + i + 1 : ''}</td>
+                              <td style={{ ...ctr, fontWeight: 700 }}>{g ? (g.badgeNumber || '') : ''}</td>
+                              <td style={ctr}>{g ? (g.studentId || '') : ''}</td>
+                              <td style={td}>{g ? g.name : ''}</td>
+                              <td style={td} /><td style={td} /><td style={td} />
+                              <td style={{ ...td, fontSize: 12, fontWeight: 700 }}>{isStaffRow ? `Staff${getStaffTeam(g) === 'R' ? '' : ' ' + STAFF_TEAM_LABEL[getStaffTeam(g)]}` : ''}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div style={{ position: 'absolute', bottom: 26, left: 44, right: 44, display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#000' }}>
+                      <span>ติ๊ก ✓ ในช่องที่ตรงกับสถานะ ขีดฆ่าถ้าผิด และจดเวลาในหมายเหตุ</span>
+                      <span>พิมพ์เมื่อ {new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}</span>
                     </div>
                   </div>
                 ))}
