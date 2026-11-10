@@ -520,6 +520,11 @@ export default function App() {
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
   const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  // แท็บตรวจเครื่องแบบ (เช็กชื่อแล้วเดินมาตรวจ)
+  const [uniformFilter, setUniformFilter] = useState('pending'); // pending | pass | fail | all
+  const [uniformSearch, setUniformSearch] = useState('');
+  const [uniformLimit, setUniformLimit] = useState(60);
+  const [uniformModal, setUniformModal] = useState(null); // { guest, note } บันทึกผิดระเบียบ
   const [noOrderModal, setNoOrderModal] = useState(null); // { guest, note } ยืนยันเข้าร่วมแต่ไม่ได้สั่งสินค้า
   // ระบบรับสินค้า (ข้อมูลฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษา)
   const [ordersList, setOrdersList] = useState([]);
@@ -1348,6 +1353,36 @@ export default function App() {
   };
 
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
+  // ตรวจเครื่องแบบ: ผ่าน / ผิดระเบียบ (ผิดระเบียบ = เข้าร่วมพิธีแต่ไม่ขึ้นรับบ่า เหมือนปุ่มผิดระเบียบเดิม) / ยกเลิก
+  const uniformNowStr = () => new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+  const handleUniformPass = async (g) => {
+    try {
+      await updateDoc(getGuestDocRef(g.id), { uniformChecked: 'pass', uniformNote: null, uniformTime: uniformNowStr() });
+      showToast('success', `${g.name}: ผ่านการตรวจเครื่องแบบ`, 1800);
+    } catch (e) { console.error(e); showToast('error', 'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง'); }
+  };
+  const handleUniformFail = async () => {
+    if (!uniformModal) return;
+    const { guest: g, note } = uniformModal;
+    try {
+      const upd = { uniformChecked: 'fail', uniformNote: String(note || '').trim(), uniformTime: uniformNowStr() };
+      if (g.status !== 'dress_violation_receive_after') Object.assign(upd, { status: 'dress_violation_receive_after', prevStatus: g.status, isLate: false, skipped: false });
+      await updateDoc(getGuestDocRef(g.id), upd);
+      showToast('warning', `${g.name}: ผิดระเบียบ (เข้าร่วมพิธี ไม่ขึ้นรับบ่า)`);
+      setUniformModal(null);
+    } catch (e) { console.error(e); showToast('error', 'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง'); }
+  };
+  const handleUniformReset = async (g) => {
+    try {
+      const upd = { uniformChecked: null, uniformNote: null, uniformTime: null };
+      if (g.uniformChecked === 'fail' && g.status === 'dress_violation_receive_after' && g.prevStatus) {
+        Object.assign(upd, { status: g.prevStatus, prevStatus: null, isLate: g.prevStatus === 'late_receive_after' });
+      }
+      await updateDoc(getGuestDocRef(g.id), upd);
+      showToast('info', `ยกเลิกผลตรวจของ ${g.name} แล้ว`, 1800);
+    } catch (e) { console.error(e); showToast('error', 'ยกเลิกไม่สำเร็จ กรุณาลองอีกครั้ง'); }
+  };
+
   // ยืนยันเข้าร่วมงานแต่ไม่ได้สั่งสินค้า (พร้อมหมายเหตุเหตุผลจริง) — ตอนสแกนเช็กชื่อจะขึ้นให้ติดต่อเจ้าหน้าที่
   const saveNoOrder = async () => {
     if (!noOrderModal) return;
@@ -2107,6 +2142,21 @@ export default function App() {
     return pages.map((pg, i) => ({ ...pg, sheet: i + 1, totalSheets: pages.length, total: ordersRehearsal.length }));
   }, [ordersRehearsal]);
 
+  // ---------- ตรวจเครื่องแบบ: คนที่เช็กชื่อแล้ว แยกเป็น รอตรวจ / ผ่าน / ผิดระเบียบ ----------
+  const uniformInfo = useMemo(() => {
+    const isFail = (g) => g.status === 'dress_violation_receive_after' || g.uniformChecked === 'fail';
+    const isPass = (g) => !isFail(g) && g.uniformChecked === 'pass';
+    const isWait = (g) => !isFail(g) && !isPass(g) && ['checked_in', 'late_receive_after'].includes(g.status);
+    const base = guestsWithComputedBadges.filter((g) => g.status !== 'pending' && g.status !== 'no_item_ordered');
+    const q = uniformSearch.trim().toLowerCase().replace('#', '');
+    const byTime = (a, b) => String(a.checkInTime || '').localeCompare(String(b.checkInTime || '')) || compareSeating(a, b);
+    const counts = { pending: base.filter(isWait).length, pass: base.filter(isPass).length, fail: base.filter(isFail).length, all: base.length };
+    const pick = uniformFilter === 'pending' ? isWait : uniformFilter === 'pass' ? isPass : uniformFilter === 'fail' ? isFail : () => true;
+    const list = base.filter(pick).filter((g) => !q || (g.name || '').toLowerCase().includes(q) || String(g.studentId || '').includes(q) || String(g.badgeNumber || '').toLowerCase() === q)
+      .sort(uniformFilter === 'pending' ? byTime : (a, b) => String(b.uniformTime || b.checkInTime || '').localeCompare(String(a.uniformTime || a.checkInTime || '')));
+    return { counts, list, isFail, isPass };
+  }, [guestsWithComputedBadges, uniformFilter, uniformSearch]);
+
   const filteredDashboardGuests = useMemo(() => {
     const filtered = guestsWithComputedBadges.filter((g) => {
       if (filterStatus !== 'all' && g.status !== filterStatus) return false;
@@ -2586,6 +2636,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <nav className="hidden md:flex items-center bg-[#070b19] p-1 rounded-2xl border border-[#d4af37]/30 gap-1">
               <button onClick={() => setActiveTab('scan')} className={navBtnClass('scan')}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
+              <button onClick={() => setActiveTab('uniform')} className={navBtnClass('uniform')}><CheckCircle2 className="w-4 h-4" /> ตรวจเครื่องแบบ</button>
               <button onClick={() => setActiveTab('queue')} className={navBtnClass('queue')}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={navBtnClass('dashboard')}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
               <button onClick={() => setActiveTab('orders')} className={navBtnClass('orders')}><PackageCheck className="w-4 h-4" /> รับสินค้า</button>
@@ -2806,6 +2857,64 @@ export default function App() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'uniform' && (
+          <div className="space-y-4">
+            <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 p-4 space-y-3 shadow-xl">
+              <div>
+                <h2 className="font-black text-[#f3e5ab] text-base flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> ตรวจเครื่องแบบ</h2>
+                <p className="text-xs text-[#d1c7bd] mt-0.5">คนที่เช็กชื่อแล้วจะขึ้นที่นี่ตามลำดับเวลาที่เช็กชื่อ • ตรวจแล้วกด "ผ่าน" หรือ "ผิดระเบียบ" (ผิดระเบียบ = เข้าร่วมพิธี ไม่ขึ้นรับบ่า)</p>
+              </div>
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
+                {[['pending', 'รอตรวจ', 'bg-[#d4af37] text-[#070b19] border-[#d4af37]'], ['pass', 'ผ่านแล้ว', 'bg-emerald-600 text-white border-emerald-400'], ['fail', 'ผิดระเบียบ', 'bg-rose-600 text-white border-rose-400'], ['all', 'ทั้งหมด', 'bg-slate-600 text-white border-slate-400']].map(([k, label, on]) => (
+                  <button key={k} onClick={() => { setUniformFilter(k); setUniformLimit(60); }} className={`px-3 sm:px-4 py-3 sm:py-2.5 rounded-xl text-sm sm:text-xs font-black border ${uniformFilter === k ? on : 'bg-[#121f38] text-[#d1c7bd] border-[#d4af37]/30'}`}>{label} ({uniformInfo.counts[k]})</button>
+                ))}
+              </div>
+              <div className="relative">
+                <Search className="w-4 h-4 text-[#d1c7bd] absolute left-3 top-1/2 -translate-y-1/2" />
+                <input value={uniformSearch} onChange={(e) => { setUniformSearch(e.target.value); setUniformLimit(60); }} placeholder="ค้นหาชื่อ / รหัส / ที่นั่ง (เช่น A12)" className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl pl-9 pr-3 py-3.5 text-base text-white outline-none focus:border-[#d4af37]" />
+              </div>
+            </div>
+
+            {uniformInfo.list.length === 0 ? (
+              <p className="text-center text-xs text-[#d1c7bd] py-12 bg-[#0e1628] rounded-3xl border border-[#d4af37]/20">{uniformFilter === 'pending' ? 'ไม่มีคนรอตรวจ' : 'ไม่พบรายชื่อ'}</p>
+            ) : (
+              <div className="space-y-2">
+                {uniformInfo.list.slice(0, uniformLimit).map((g) => {
+                  const fail = uniformInfo.isFail(g);
+                  const pass = uniformInfo.isPass(g);
+                  return (
+                    <div key={g.id} className={`bg-[#0e1628] rounded-2xl border p-3 flex flex-wrap items-center gap-x-3 gap-y-3 ${fail ? 'border-rose-500/60' : pass ? 'border-emerald-500/50' : 'border-[#d4af37]/30'}`}>
+                      <div className="min-w-[56px] text-center">
+                        <div className="px-2.5 py-1.5 rounded-lg bg-[#d4af37]/15 border border-[#d4af37]/40 text-[#f3e5ab] font-black text-base">{g.badgeNumber && g.badgeNumber !== '-' ? `#${g.badgeNumber}` : '-'}</div>
+                      </div>
+                      <div className="flex-1 min-w-0 basis-[55%] sm:basis-auto">
+                        <p className="font-black text-[#fdfbf7] text-base sm:text-sm leading-snug break-words">{g.name}</p>
+                        <p className="text-[11px] font-mono text-[#d1c7bd]">{g.studentId || '-'} • {g.year}{g.checkInTime ? ` • เช็กชื่อ ${g.checkInTime}` : ''}{isStaffGuest(g) ? ' • Staff' : ''}</p>
+                        {fail && <p className="text-[11px] font-bold text-rose-300 mt-0.5">ผิดระเบียบ{g.uniformChecked === 'fail' ? '' : ' (บันทึกจากหน้าสแกน)'}{g.uniformNote ? ` • ${g.uniformNote}` : ''}</p>}
+                        {pass && <p className="text-[11px] font-bold text-emerald-300 mt-0.5">ผ่านการตรวจเครื่องแบบ{g.uniformTime ? ` • ${g.uniformTime}` : ''}</p>}
+                      </div>
+                      <div className="grid grid-cols-2 sm:flex gap-2 w-full sm:w-auto">
+                        {!fail && !pass && (
+                          <>
+                            <button onClick={() => handleUniformPass(g)} className="py-4 sm:py-3 sm:px-5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl sm:rounded-xl text-base sm:text-sm active:scale-95">✓ ผ่าน</button>
+                            <button onClick={() => setUniformModal({ guest: g, note: '' })} className="py-4 sm:py-3 sm:px-5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-2xl sm:rounded-xl text-base sm:text-sm active:scale-95">ผิดระเบียบ</button>
+                          </>
+                        )}
+                        {(fail || pass) && g.uniformChecked && (
+                          <button onClick={() => handleUniformReset(g)} className="col-span-2 py-3 sm:py-2.5 sm:px-4 bg-[#121f38] text-[#d1c7bd] border border-[#d4af37]/30 rounded-xl text-sm sm:text-xs font-bold">ยกเลิกผลตรวจ</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {uniformInfo.list.length > uniformLimit && (
+                  <button onClick={() => setUniformLimit(uniformLimit + 60)} className="w-full py-3 bg-[#121f38] text-[#f3e5ab] border border-[#d4af37]/30 rounded-2xl text-xs font-bold">แสดงเพิ่ม (เหลืออีก {uniformInfo.list.length - uniformLimit} คน)</button>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -3674,6 +3783,28 @@ export default function App() {
         </div>
       )}
 
+      {uniformModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#0e1628] border border-rose-400/60 w-full max-w-md p-5 rounded-3xl shadow-2xl space-y-3 my-8">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black text-rose-200 text-sm">บันทึกผิดระเบียบ</h3>
+                <p className="text-xs text-[#d1c7bd] mt-0.5">{uniformModal.guest.name} • {uniformModal.guest.year} • #{uniformModal.guest.badgeNumber}</p>
+              </div>
+              <button onClick={() => setUniformModal(null)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-xs text-[#d1c7bd] space-y-1">ผิดระเบียบเรื่องอะไร (ไม่บังคับ)
+              <textarea rows={3} value={uniformModal.note} onChange={(e) => setUniformModal({ ...uniformModal, note: e.target.value })} placeholder="เช่น รองเท้า / ทรงผม / เครื่องแบบไม่ครบ ..." className="w-full bg-[#070b19] border border-rose-500/40 rounded-xl px-3 py-2.5 text-base text-white outline-none focus:border-rose-300" />
+            </label>
+            <p className="text-[11px] text-[#d1c7bd]">เมื่อบันทึก สถานะจะเป็น "ผิดระเบียบ (เข้าร่วมพิธี - ไม่ขึ้นรับบ่า)" และหลุดจากคิวขึ้นรับบ่า</p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setUniformModal(null)} className="flex-1 py-3.5 bg-[#121f38] text-[#d1c7bd] rounded-xl text-sm font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={handleUniformFail} className="flex-1 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-sm font-black">บันทึกผิดระเบียบ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {noOrderModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
           <div className="bg-[#0e1628] border border-teal-400/60 w-full max-w-md p-5 rounded-3xl shadow-2xl space-y-3 my-8">
@@ -4387,6 +4518,7 @@ export default function App() {
 
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0e1628] border-t border-[#d4af37]/30 px-2 py-2 flex justify-around">
         <button onClick={() => setActiveTab('scan')} className={mobileNavClass('scan')}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
+        <button onClick={() => setActiveTab('uniform')} className={mobileNavClass('uniform')}><CheckCircle2 className="w-5 h-5" /><span className="text-[10px]">ตรวจชุด</span></button>
         <button onClick={() => setActiveTab('queue')} className={mobileNavClass('queue')}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
         <button onClick={() => setActiveTab('dashboard')} className={mobileNavClass('dashboard')}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
         <button onClick={() => setActiveTab('orders')} className={mobileNavClass('orders')}><PackageCheck className="w-5 h-5" /><span className="text-[10px]">รับสินค้า</span></button>
