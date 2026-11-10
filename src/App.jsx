@@ -3367,14 +3367,18 @@ export default function App() {
                         {(() => {
                           const cols = pg.year === 'ปี 1' ? [['b', 'บ่า'], ['n', 'ป้ายชื่อ']] : [['b', 'บ่า'], ['w', 'ปีก'], ['t', 'ตุ้ง'], ['n', 'ป้าย']];
                           const th = { border: '1px solid #000', textAlign: 'center', fontSize: 11, fontWeight: 700, padding: 0 };
+                          const plain = { ...th, borderBottom: 'none' };
+                          const plain2 = { ...th, borderTop: 'none', fontSize: 12 };
                           return (<>
-                            <tr style={{ background: '#D9E1F2', height: 24 }}>
-                              <th rowSpan={2} style={th}>ลำดับ</th><th rowSpan={2} style={th}>รหัสนักศึกษา</th><th rowSpan={2} style={th}>ชื่อ-นามสกุล</th>
-                              <th colSpan={cols.length} style={th}>สินค้าที่สั่ง</th><th colSpan={3} style={th}>เช็กรับ</th><th rowSpan={2} style={th}>ลายเซ็นผู้รับ</th>
+                            <tr style={{ background: '#D9E1F2', height: 22 }}>
+                              <th style={plain} /><th style={plain} /><th style={plain} />
+                              <th colSpan={cols.length} style={th}>สินค้าที่สั่ง</th><th colSpan={3} style={th}>เช็กรับ</th><th style={plain} />
                             </tr>
-                            <tr style={{ background: '#D9E1F2', height: 24 }}>
+                            <tr style={{ background: '#D9E1F2', height: 28 }}>
+                              <th style={plain2}>ลำดับ</th><th style={plain2}>รหัสนักศึกษา</th><th style={plain2}>ชื่อ-นามสกุล</th>
                               {cols.map(([k, l]) => <th key={k} style={th}>{l}</th>)}
                               {['ครั้ง 1', 'ครั้ง 2', 'ครั้ง 3'].map((l) => <th key={l} style={{ ...th, fontSize: 9 }}>{l}</th>)}
+                              <th style={plain2}>ลายเซ็นผู้รับ</th>
                             </tr>
                           </>);
                         })()}
