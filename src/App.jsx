@@ -882,6 +882,7 @@ export default function App() {
       await updateDoc(getGuestDocRef(guest.id), {
         status: finalStatus,
         checkInTime: timeStr,
+        checkInAt: Date.now(),
         prevStatus: guest.status,
         isLate: finalStatus === 'late_receive_after',
         skipped: false
@@ -1860,7 +1861,7 @@ export default function App() {
   }, [readyQueue, seatsPerRow]);
   // แสดงคนที่เพิ่งเช็กชื่อไว้บนสุด (ลำดับการดึงเข้าสแตนด์บายยังใช้ readyQueue เดิม)
   const readyDisplay = useMemo(() => readyQueue.map((g, i) => ({ g, i }))
-    .sort((x, y) => String(y.g.checkInTime || '').localeCompare(String(x.g.checkInTime || '')) || x.i - y.i)
+    .sort((x, y) => ((y.g.checkInAt || 0) - (x.g.checkInAt || 0)) || String(y.g.checkInTime || '').localeCompare(String(x.g.checkInTime || '')) || x.i - y.i)
     .map((x) => x.g), [readyQueue]);
   const readyStaff = useMemo(() => readyQueue.filter((g) => isStaffGuest(g)), [readyQueue]);
   // สตาฟที่รอเรียกแยกตามทีม (ดึงทีละทีม ทีละชั้นปี)
