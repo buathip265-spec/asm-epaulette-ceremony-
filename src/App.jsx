@@ -2044,16 +2044,23 @@ export default function App() {
     });
     return st;
   }, [ordersList, orderSystemIds]);
+  // ใบรับสินค้า: ป้ายชื่อทุกชั้นปี + ตุ้งติ้ง/ปีกของปี 3-4 (บ่าทุกปี และตุ้งติ้ง/ปีกของปี 2 รับวันจริง ไม่ใส่)
+  // เรียงตามชื่ออังกฤษบนป้าย A-Z (ชื่อซ้ำเรียงต่อด้วยชื่อไทย) คนที่ไม่มีป้ายชื่อไว้ท้ายใบ เรียงชื่อไทย ก-ฮ
   const ORDERS_ROWS_PER_PAGE = 25;
+  const isUpperYear = (o) => o.year === 'ปี 3' || o.year === 'ปี 4';
+  const ordersRehearsal = useMemo(() => {
+    const thai = (o) => getSortableCleanName(o.name);
+    const rows = ordersList.filter((o) => o.tag || (isUpperYear(o) && (o.tung || o.wing)));
+    const withTag = rows.filter((o) => o.tag).sort((a, b) =>
+      String(a.tagText || '').toUpperCase().localeCompare(String(b.tagText || '').toUpperCase(), 'en') || thai(a).localeCompare(thai(b), 'th'));
+    const noTag = rows.filter((o) => !o.tag).sort((a, b) => thai(a).localeCompare(thai(b), 'th'));
+    return [...withTag, ...noTag];
+  }, [ordersList]);
   const ordersPrintPages = useMemo(() => {
-    const byYear = new Map();
-    ordersFiltered.forEach((o) => { const k = o.year || 'อื่น ๆ'; if (!byYear.has(k)) byYear.set(k, []); byYear.get(k).push(o); });
     const pages = [];
-    [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0], 'th')).forEach(([year, rows]) => {
-      for (let i = 0; i < rows.length; i += ORDERS_ROWS_PER_PAGE) pages.push({ year, total: rows.length, start: i, rows: rows.slice(i, i + ORDERS_ROWS_PER_PAGE) });
-    });
-    return pages.map((pg, i) => ({ ...pg, sheet: i + 1, totalSheets: pages.length }));
-  }, [ordersFiltered]);
+    for (let i = 0; i < ordersRehearsal.length; i += ORDERS_ROWS_PER_PAGE) pages.push({ start: i, rows: ordersRehearsal.slice(i, i + ORDERS_ROWS_PER_PAGE) });
+    return pages.map((pg, i) => ({ ...pg, sheet: i + 1, totalSheets: pages.length, total: ordersRehearsal.length }));
+  }, [ordersRehearsal]);
 
   const filteredDashboardGuests = useMemo(() => {
     const filtered = guestsWithComputedBadges.filter((g) => {
@@ -3457,14 +3464,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal ใบรับสินค้า (PDF) จากรายชื่อสั่งสินค้า ตามตัวกรองปัจจุบัน */}
+      {/* Modal ใบรับสินค้า (PDF) */}
       {isOrdersPrintOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
           <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-gray-300 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Printer className="w-5 h-5 text-amber-600" /> ใบรับสินค้า</h2>
-                <p className="text-xs text-gray-600 mt-0.5">ตามตัวกรองปัจจุบันของหน้ารับสินค้า ({ordersFiltered.length} คน) • แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ • ทั้งหมด {ordersPrintPages.length} ใบ • มีช่องลงชื่อรับสินค้า</p>
+                <p className="text-xs text-gray-600 mt-0.5">{ordersRehearsal.length} คน • เรียงตามชื่อบนป้าย A-Z • ป้ายชื่อทุกชั้นปี + ตุ้งติ้ง/ปีกของปี 3-4 (บ่า และตุ้งติ้ง/ปีกของปี 2 รับวันจริง ไม่รวม) • ทั้งหมด {ordersPrintPages.length} ใบ</p>
               </div>
               <div className="flex flex-wrap gap-2 items-center justify-end">
                 <button disabled={isPdfGenerating} onClick={handleSaveOrdersPdf} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
@@ -3476,36 +3483,41 @@ export default function App() {
             <div className="overflow-x-auto">
               <div id="orders-print-root" className="flex flex-col items-center gap-4">
                 {ordersPrintPages.length === 0 ? (
-                  <p className="text-sm text-gray-500 py-10">ไม่มีรายชื่อตามตัวกรองนี้</p>
+                  <p className="text-sm text-gray-500 py-10">ยังไม่มีข้อมูลสั่งสินค้า กรุณานำเข้าจากฟอร์มสั่งสินค้าก่อน</p>
                 ) : ordersPrintPages.map((pg, pIdx) => (
                   <div key={pIdx} className="orders-page" style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 44px', fontFamily: "'Sarabun', 'Prompt', system-ui, sans-serif", background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
                     <div style={{ textAlign: 'center', marginBottom: 12 }}>
                       <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.6 }}>ใบรับสินค้า — พิธีมอบประดับบ่าเกียรติยศ</div>
-                      <div style={{ fontSize: 15, lineHeight: 1.6 }}>{pg.year} • ใบที่ {pg.sheet} / {pg.totalSheets} • ลำดับ {pg.start + 1}–{pg.start + pg.rows.length} จาก {pg.total} คน</div>
+                      <div style={{ fontSize: 15, lineHeight: 1.6 }}>ใบที่ {pg.sheet} / {pg.totalSheets} • ลำดับ {pg.start + 1}–{pg.start + pg.rows.length} จาก {pg.total} คน</div>
                     </div>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 15, color: '#000' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 13, color: '#000' }}>
                       <colgroup>
-                        <col style={{ width: 46 }} /><col style={{ width: 100 }} /><col style={{ width: 222 }} />
-                        <col style={{ width: 42 }} /><col style={{ width: 58 }} /><col style={{ width: 38 }} /><col style={{ width: 52 }} /><col />
+                        <col style={{ width: 32 }} /><col style={{ width: 36 }} /><col style={{ width: 78 }} /><col style={{ width: 188 }} /><col style={{ width: 118 }} />
+                        <col style={{ width: 46 }} /><col style={{ width: 50 }} /><col style={{ width: 34 }} /><col />
                       </colgroup>
                       <thead>
                         <tr style={{ background: '#e5e7eb', height: 34 }}>
-                          {['ที่', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'บ่า', 'ตุ้งติ้ง', 'ปีก', 'ป้ายชื่อ', 'ลายเซ็นรับสินค้า'].map((h) => (
-                            <th key={h} style={{ border: '1px solid #000', padding: '0 2px', textAlign: 'center', fontSize: 13, fontWeight: 700 }}>{h}</th>
+                          {['ที่', 'ปี', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล (ไทย)', 'ชื่อบนป้าย', 'ป้ายชื่อ', 'ตุ้งติ้ง', 'ปีก', 'ลายเซ็นรับสินค้า'].map((h) => (
+                            <th key={h} style={{ border: '1px solid #000', padding: '0 2px', textAlign: 'center', fontSize: 12, fontWeight: 700 }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {Array.from({ length: ORDERS_ROWS_PER_PAGE }).map((_, i) => {
                           const o = pg.rows[i];
-                          const td = { border: '1px solid #000', padding: '0 6px', height: 35, lineHeight: '35px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+                          const td = { border: '1px solid #000', padding: '0 5px', height: 35, lineHeight: '35px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
                           const ctr = { ...td, textAlign: 'center', padding: 0 };
+                          const up = o && isUpperYear(o);
                           return (
                             <tr key={i}>
                               <td style={ctr}>{o ? pg.start + i + 1 : ''}</td>
+                              <td style={ctr}>{o ? String(o.year || '').replace('ปี ', '') : ''}</td>
                               <td style={ctr}>{o ? (o.studentId || '') : ''}</td>
                               <td style={td}>{o ? o.name : ''}</td>
-                              {ORDER_ITEMS.map((it) => <td key={it.key} style={{ ...ctr, fontWeight: 700 }}>{o && o[it.key] ? '✓' : ''}</td>)}
+                              <td style={{ ...td, fontWeight: 700 }}>{o ? (o.tag ? (o.tagText || '') : '-') : ''}</td>
+                              <td style={{ ...ctr, fontWeight: 700 }}>{o && o.tag ? '✓' : ''}</td>
+                              <td style={{ ...ctr, fontWeight: 700 }}>{up && o.tung ? '✓' : ''}</td>
+                              <td style={{ ...ctr, fontWeight: 700 }}>{up && o.wing ? '✓' : ''}</td>
                               <td style={td} />
                             </tr>
                           );
