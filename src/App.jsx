@@ -129,6 +129,77 @@ const getSortableCleanName = (fullName) => {
   return fullName.replace(/^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.|ผศ\.|รศ\.|ดร\.)\s*/, '').trim();
 };
 
+// ---------- ระบบรับสินค้า (ข้อมูลจากฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษา) ----------
+const ORDERS_COLLECTION = 'spu_goods_orders';
+const ORDER_ITEMS = [
+  { key: 'sash', label: 'บ่า', short: 'บ่า' },
+  { key: 'tung', label: 'ตุ้งติ้ง', short: 'ตุ้งติ้ง' },
+  { key: 'wing', label: 'ปีก', short: 'ปีก' },
+  { key: 'tag', label: 'ป้ายชื่อ', short: 'ป้ายชื่อ' },
+];
+const normStudentId = (v) => String(v === undefined || v === null ? '' : v).replace(/\.0+$/, '').replace(/[^0-9A-Za-z]/g, '').trim();
+const ORDER_NAME_PREFIX_RE = /^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.)\s*/;
+const orderCellText = (v) => (v === undefined || v === null ? '' : String(v)).replace(/[​-‍﻿]/g, '').replace(/\s+/g, ' ').trim();
+
+// แปลงชีต (อาร์เรย์ของแถว) จากไฟล์ตรวจข้อมูลสั่งสินค้าแต่ละชั้นปี → รายการสั่ง
+const parseOrderSheet = (rows, sheetName) => {
+  const hIdx = rows.findIndex((r) => r && r.some((c) => orderCellText(c) === 'ลำดับ') && r.some((c) => orderCellText(c) === 'รหัสนักศึกษา'));
+  if (hIdx < 0) return [];
+  const hdr = rows[hIdx].map(orderCellText);
+  const col = (pred) => hdr.findIndex(pred);
+  const idC = col((h) => h === 'รหัสนักศึกษา');
+  const preC = col((h) => h === 'คำนำหน้า');
+  const nameC = col((h) => h === 'ชื่อ-นามสกุล' || h === 'ชื่อ - นามสกุล');
+  const seqC = col((h) => h === 'ลำดับ');
+  const itemCols = {
+    sash: col((h) => h.startsWith('บ่า')),
+    tung: col((h) => h.startsWith('ตุ้งติ้ง')),
+    wing: col((h) => h.startsWith('ปีก')),
+    tag: col((h) => h.startsWith('ป้ายชื่อ')),
+  };
+  const tagTextCols = hdr.map((h, i) => (h.includes('ตรวจสอบความถูกต้องป้ายชื่อ') ? i : -1)).filter((i) => i >= 0);
+  const amtC = col((h) => h.startsWith('ยอด'));
+  const sheetYear = (String(sheetName || '').match(/ปี\s*([1-4])/) || [])[1];
+  const out = [];
+  for (let i = hIdx + 1; i < rows.length; i++) {
+    const r = rows[i] || [];
+    let name = orderCellText(r[nameC]);
+    const sid = normStudentId(r[idC]);
+    if (!name) continue;
+    if (/^น\.ส\./.test(name)) name = name.replace(/^น\.ส\.\s*/, 'นางสาว');
+    if (!ORDER_NAME_PREFIX_RE.test(name)) name = orderCellText(r[preC]) + name;
+    const year = sheetYear ? `ปี ${sheetYear}` : detectYearFromStudentId(sid);
+    const has = (c) => c >= 0 && orderCellText(r[c]) !== '';
+    const tagText = tagTextCols.map((c) => orderCellText(r[c])).find((t) => t && t !== '✓') || '';
+    const notes = [];
+    if (amtC >= 0) for (let c = amtC + 1; c < r.length; c++) { const t = orderCellText(r[c]); if (t && t !== '✓' && isNaN(Number(t))) notes.push(t); }
+    const amount = amtC >= 0 && !isNaN(parseFloat(r[amtC])) ? parseFloat(r[amtC]) : null;
+    const seq = orderCellText(r[seqC]);
+    out.push({
+      id: sid ? `o_${sid}` : `o_y${sheetYear || 'x'}_${seq || i}`,
+      studentId: sid, name, year,
+      sash: has(itemCols.sash), tung: has(itemCols.tung), wing: has(itemCols.wing), tag: has(itemCols.tag),
+      tagText, note: notes.join(' • '), amount,
+    });
+  }
+  return out;
+};
+
+// รวมรายการที่รหัสนักศึกษาซ้ำ (เช่น สั่งล่าช้าแยกอีกแถว) เข้าเป็นรายการเดียว
+const mergeOrders = (list) => {
+  const map = new Map();
+  list.forEach((o) => {
+    const p = map.get(o.id);
+    if (!p) { map.set(o.id, { ...o }); return; }
+    const same = ORDER_ITEMS.every((it) => !!p[it.key] === !!o[it.key]);
+    ORDER_ITEMS.forEach((it) => { p[it.key] = !!p[it.key] || !!o[it.key]; });
+    if (!p.tagText && o.tagText) p.tagText = o.tagText;
+    if (!same) p.amount = (p.amount || 0) + (o.amount || 0);
+    p.note = [p.note, o.note, same ? `พบซ้ำในฟอร์ม (${p.year}/${o.year})` : ''].filter(Boolean).join(' • ');
+  });
+  return [...map.values()];
+};
+
 // ไม่ขึ้นรับบ่า (ร่วมพิธีเฉยๆ): ผิดระเบียบ / ของไม่พร้อม
 const isDisqualifiedStatus = (status) =>
   status === 'no_item_ordered' || status === 'dress_violation_receive_after' || status === 'late_receive_after';
@@ -448,6 +519,20 @@ export default function App() {
   const [duplicateAlertModal, setDuplicateAlertModal] = useState({ isOpen: false, guest: null });
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
   const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
+  // ระบบรับสินค้า (ข้อมูลฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษา)
+  const [ordersList, setOrdersList] = useState([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [ordersError, setOrdersError] = useState('');
+  const [ordersImporting, setOrdersImporting] = useState(false);
+  const [ordersYear, setOrdersYear] = useState('all');
+  const [ordersStatus, setOrdersStatus] = useState('all');
+  const [ordersSystem, setOrdersSystem] = useState('all');
+  const [ordersItem, setOrdersItem] = useState('all');
+  const [ordersSearch, setOrdersSearch] = useState('');
+  const [ordersPage, setOrdersPage] = useState(0);
+  const [isOrdersPrintOpen, setIsOrdersPrintOpen] = useState(false);
+  const [orderEdit, setOrderEdit] = useState(null);
+  const ordersFileRef = useRef(null);
   const [pdfResult, setPdfResult] = useState(null); // { url, fileName, blob } ไฟล์ PDF ที่สร้างเสร็จ รอผู้ใช้กดเปิด/บันทึก (กันหน้าเว็บถูกแทนที่บน Safari iPad)
   const [isPdfGenerating, setIsPdfGenerating] = useState(false);
 
@@ -545,6 +630,21 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // รายการสั่งสินค้า: ฟังข้อมูลสดเฉพาะตอนเปิดแท็บ "รับสินค้า" (ไม่กินโควตาอ่านของเครื่องอื่น)
+  useEffect(() => {
+    if (!(isAuthorized && activeTab === 'orders')) return undefined;
+    const unsub = onSnapshot(collection(db, ORDERS_COLLECTION), (snap) => {
+      setOrdersList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setOrdersLoaded(true);
+      setOrdersError('');
+    }, (err) => {
+      console.error(err);
+      setOrdersError(err && err.code === 'permission-denied' ? 'permission-denied' : 'โหลดข้อมูลรับสินค้าไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
+      setOrdersLoaded(true);
+    });
+    return () => unsub();
+  }, [isAuthorized, activeTab]);
 
   // เลขที่นั่งคำนวณจากรายชื่อปัจจุบัน เรียง ชั้นปี → เพศ (หญิงก่อน) → ชื่อ โดยไม่ขึ้นกับสถานะเช็กชื่อ
   // - นักศึกษา Normal: จัดที่นั่งตามแถว A, B, C... (ข้ามตัวอักษร L เพราะสงวนไว้ให้ Staff)
@@ -1248,6 +1348,90 @@ export default function App() {
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
   const handleSaveMcPdf = () => savePagesPdf('#mc-print-root .mc-page', 'รายชื่อพิธีกร.pdf', mcPages.length);
   const handleSaveGoodsPdf = () => savePagesPdf('#goods-print-root .goods-page', 'รายชื่อรับสินค้า.pdf', goodsPages.length);
+  // ---------- ระบบรับสินค้า: นำเข้า / ติ๊กรับ / แก้ไข / ลบ ----------
+  const handleOrdersImport = async (e) => {
+    const files = Array.from((e.target && e.target.files) || []);
+    if (e.target) e.target.value = '';
+    if (!files.length) return;
+    setOrdersImporting(true);
+    try {
+      let all = [];
+      for (const f of files) {
+        const buf = await f.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        wb.SheetNames.forEach((sn) => {
+          all = all.concat(parseOrderSheet(XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' }), sn));
+        });
+      }
+      // รวมกับข้อมูลเดิมในระบบ: สินค้าที่เคยสั่งไม่หาย (นำเข้าไฟล์สั่งเพิ่ม/สั่งล่าช้าต่อได้ ไม่ทับของเก่า)
+      const byId = new Map(ordersList.map((x) => [x.id, x]));
+      const merged = mergeOrders(all).map((o) => {
+        const ex = byId.get(o.id);
+        if (!ex) return o;
+        const r = { ...o };
+        ORDER_ITEMS.forEach((it) => { r[it.key] = !!ex[it.key] || !!o[it.key]; });
+        if (!r.tagText && ex.tagText) r.tagText = ex.tagText;
+        r.note = [...new Set([ex.note, o.note].filter(Boolean).join(' • ').split(' • ').filter(Boolean))].join(' • ');
+        r.amount = Math.max(ex.amount || 0, o.amount || 0) || null;
+        return r;
+      });
+      if (!merged.length) { showToast('warning', 'ไม่พบรายชื่อในไฟล์ (ต้องเป็นไฟล์ตรวจข้อมูลสั่งสินค้าที่มีหัวคอลัมน์ ลำดับ / รหัสนักศึกษา / ชื่อ-นามสกุล)'); return; }
+      for (let i = 0; i < merged.length; i += 400) {
+        const batch = writeBatch(db);
+        merged.slice(i, i + 400).forEach((o) => { const { id, ...data } = o; batch.set(doc(db, ORDERS_COLLECTION, id), { ...data, updatedAt: Date.now() }, { merge: true }); });
+        await batch.commit();
+      }
+      showToast('success', `นำเข้ารายชื่อสั่งสินค้า ${merged.length} คน จาก ${files.length} ไฟล์ แล้ว (สถานะรับของและสินค้าเดิมไม่หาย)`);
+    } catch (err) {
+      console.error(err);
+      if (err && err.code === 'permission-denied') setOrdersError('permission-denied');
+      showToast('error', err && err.code === 'permission-denied' ? 'ฐานข้อมูลไม่อนุญาตให้เขียน (ดูคำอธิบายสีแดงในหน้านี้)' : 'นำเข้าไม่สำเร็จ: ' + (err && err.message ? err.message : 'ไฟล์ไม่ถูกต้อง'));
+    } finally {
+      setOrdersImporting(false);
+    }
+  };
+
+  const toggleOrderReceived = async (o) => {
+    try {
+      await updateDoc(doc(db, ORDERS_COLLECTION, o.id), { received: !o.received, receivedAt: !o.received ? Date.now() : null });
+    } catch (err) {
+      showToast('error', 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  };
+
+  const saveOrderEdit = async () => {
+    const o = orderEdit;
+    if (!o) return;
+    const name = orderCellText(o.name);
+    if (!name) { showToast('warning', 'กรุณากรอกชื่อ-นามสกุล'); return; }
+    const sid = normStudentId(o.studentId);
+    const id = o.id || (sid ? `o_${sid}` : `o_m${Date.now()}`);
+    try {
+      await setDoc(doc(db, ORDERS_COLLECTION, id), {
+        studentId: sid, name, year: o.year || 'อื่น ๆ',
+        sash: !!o.sash, tung: !!o.tung, wing: !!o.wing, tag: !!o.tag,
+        tagText: orderCellText(o.tagText), note: orderCellText(o.note), updatedAt: Date.now(),
+      }, { merge: true });
+      setOrderEdit(null);
+      showToast('success', 'บันทึกแล้ว');
+    } catch (err) {
+      showToast('error', 'บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง');
+    }
+  };
+
+  const askDeleteOrder = (o) => {
+    setConfirmModal({
+      isOpen: true, title: 'ลบรายชื่อสั่งสินค้า', message: `ลบ "${o.name}" ออกจากระบบรับสินค้า? (ไม่กระทบรายชื่อนักศึกษาในพิธี)`,
+      confirmText: 'ลบ', confirmColor: 'bg-red-700 hover:bg-red-800',
+      onConfirm: async () => {
+        setConfirmModal((p) => ({ ...p, isOpen: false }));
+        try { await deleteDoc(doc(db, ORDERS_COLLECTION, o.id)); } catch (err) { showToast('error', 'ลบไม่สำเร็จ'); }
+      },
+    });
+  };
+
+  const handleSaveOrdersPdf = () => savePagesPdf('#orders-print-root .orders-page', 'ใบรับสินค้า.pdf', ordersPrintPages.length);
+
   const savePagesPdf = async (pageSelector, fileName, pageCount) => {
     if (pageCount === 0) {
       showToast('warning', 'ไม่มีรายชื่อให้สร้างเอกสาร');
@@ -1831,6 +2015,46 @@ export default function App() {
     });
   }, [guestsWithComputedBadges, seatsPerRow]);
 
+  // ---------- ระบบรับสินค้า: รายการที่กรองแล้ว / สถิติ / หน้าพิมพ์ ----------
+  const orderSystemIds = useMemo(() => new Set(guests.map((g) => normStudentId(g.studentId)).filter(Boolean)), [guests]);
+  const isOrderInSystem = (o) => !!o.studentId && orderSystemIds.has(normStudentId(o.studentId));
+  const ordersSorted = useMemo(() => [...ordersList].sort((a, b) =>
+    String(a.year || '').localeCompare(String(b.year || ''), 'th') ||
+    getSortableCleanName(a.name).localeCompare(getSortableCleanName(b.name), 'th')), [ordersList]);
+  const ordersFiltered = useMemo(() => {
+    const q = ordersSearch.trim().toLowerCase();
+    return ordersSorted.filter((o) => {
+      if (ordersYear !== 'all' && o.year !== ordersYear) return false;
+      if (ordersStatus === 'received' && !o.received) return false;
+      if (ordersStatus === 'pending' && o.received) return false;
+      const inSys = !!o.studentId && orderSystemIds.has(normStudentId(o.studentId));
+      if (ordersSystem === 'in' && !inSys) return false;
+      if (ordersSystem === 'out' && inSys) return false;
+      if (ordersItem !== 'all' && !o[ordersItem]) return false;
+      if (q && !((o.name || '').toLowerCase().includes(q) || String(o.studentId || '').includes(q) || (o.tagText || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [ordersSorted, ordersYear, ordersStatus, ordersSystem, ordersItem, ordersSearch, orderSystemIds]);
+  const ordersStats = useMemo(() => {
+    const st = { total: ordersList.length, received: 0, outSystem: 0, items: { sash: 0, tung: 0, wing: 0, tag: 0 } };
+    ordersList.forEach((o) => {
+      if (o.received) st.received++;
+      if (!(o.studentId && orderSystemIds.has(normStudentId(o.studentId)))) st.outSystem++;
+      ORDER_ITEMS.forEach((it) => { if (o[it.key]) st.items[it.key]++; });
+    });
+    return st;
+  }, [ordersList, orderSystemIds]);
+  const ORDERS_ROWS_PER_PAGE = 25;
+  const ordersPrintPages = useMemo(() => {
+    const byYear = new Map();
+    ordersFiltered.forEach((o) => { const k = o.year || 'อื่น ๆ'; if (!byYear.has(k)) byYear.set(k, []); byYear.get(k).push(o); });
+    const pages = [];
+    [...byYear.entries()].sort((a, b) => a[0].localeCompare(b[0], 'th')).forEach(([year, rows]) => {
+      for (let i = 0; i < rows.length; i += ORDERS_ROWS_PER_PAGE) pages.push({ year, total: rows.length, start: i, rows: rows.slice(i, i + ORDERS_ROWS_PER_PAGE) });
+    });
+    return pages.map((pg, i) => ({ ...pg, sheet: i + 1, totalSheets: pages.length }));
+  }, [ordersFiltered]);
+
   const filteredDashboardGuests = useMemo(() => {
     const filtered = guestsWithComputedBadges.filter((g) => {
       if (filterStatus !== 'all' && g.status !== filterStatus) return false;
@@ -2312,6 +2536,7 @@ export default function App() {
               <button onClick={() => setActiveTab('scan')} className={navBtnClass('scan')}><ScanLine className="w-4 h-4" /> เช็กชื่อหน้างาน</button>
               <button onClick={() => setActiveTab('queue')} className={navBtnClass('queue')}><Layers className="w-4 h-4" /> จัดคิวเวที</button>
               <button onClick={() => setActiveTab('dashboard')} className={navBtnClass('dashboard')}><Settings className="w-4 h-4" /> แดชบอร์ด</button>
+              <button onClick={() => setActiveTab('orders')} className={navBtnClass('orders')}><PackageCheck className="w-4 h-4" /> รับสินค้า</button>
               <button onClick={() => { setIsAuthorized(false); window.scrollTo(0, 0); }} className="px-4 py-2 rounded-xl text-xs font-bold text-[#d1c7bd] hover:text-white transition-all flex items-center gap-1.5"><Maximize2 className="w-4 h-4" /> กลับสู่หน้าแรก</button>
             </nav>
             <button onClick={handleLogout} className="px-3 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white text-xs font-bold rounded-xl border border-red-500/30 transition-all">ออกจากระบบ</button>
@@ -2528,6 +2753,133 @@ export default function App() {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="space-y-4">
+            <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 p-4 space-y-3 shadow-xl">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-black text-[#f3e5ab] text-base flex items-center gap-2"><PackageCheck className="w-5 h-5" /> ระบบรับสินค้า</h2>
+                  <p className="text-xs text-[#d1c7bd] mt-0.5">ข้อมูลจากฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษาในพิธี • กดติ๊กเมื่อผู้สั่งมารับของแล้ว</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <input ref={ordersFileRef} type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" onChange={handleOrdersImport} />
+                  <button disabled={ordersImporting} onClick={() => ordersFileRef.current && ordersFileRef.current.click()} className="px-3 py-2 bg-blue-700 hover:bg-blue-600 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md">
+                    {ordersImporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} นำเข้าจากฟอร์มสั่งสินค้า (Excel)
+                  </button>
+                  <button onClick={() => setOrderEdit({ name: '', studentId: '', year: 'อื่น ๆ', sash: false, tung: false, wing: false, tag: false, tagText: '', note: '' })} className="px-3 py-2 bg-[#121f38] hover:bg-[#1a2b4d] text-[#f3e5ab] border border-[#d4af37]/40 rounded-xl text-xs font-bold flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> เพิ่มรายชื่อ</button>
+                  <button onClick={() => setIsOrdersPrintOpen(true)} className="px-3 py-2 bg-amber-900/40 hover:bg-amber-800/60 text-amber-200 border border-amber-500/40 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md"><Printer className="w-3.5 h-3.5" /> สร้างใบรับสินค้า (PDF)</button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs font-bold">
+                <span className="px-3 py-1.5 rounded-xl bg-[#121f38] border border-[#d4af37]/30 text-[#f3e5ab]">ผู้สั่งทั้งหมด {ordersStats.total} คน</span>
+                <span className="px-3 py-1.5 rounded-xl bg-emerald-900/40 border border-emerald-500/40 text-emerald-300">รับแล้ว {ordersStats.received}</span>
+                <span className="px-3 py-1.5 rounded-xl bg-[#121f38] border border-[#d4af37]/30 text-[#d1c7bd]">ยังไม่รับ {ordersStats.total - ordersStats.received}</span>
+                <span className="px-3 py-1.5 rounded-xl bg-rose-900/30 border border-rose-500/40 text-rose-300">ไม่อยู่ในระบบพิธี {ordersStats.outSystem}</span>
+                {ORDER_ITEMS.map((it) => (
+                  <span key={it.key} className="px-3 py-1.5 rounded-xl bg-[#121f38] border border-[#d4af37]/20 text-[#d1c7bd]">{it.label} {ordersStats.items[it.key]}</span>
+                ))}
+              </div>
+            </div>
+
+            {ordersError === 'permission-denied' ? (
+              <div className="bg-red-950/60 border border-red-500/50 rounded-2xl p-4 text-xs text-red-100 space-y-2">
+                <p className="font-black">ฐานข้อมูลยังไม่อนุญาตให้ใช้ชุดข้อมูลรับสินค้า</p>
+                <p>ใน Firebase Console &gt; Firestore Database &gt; Rules ให้เพิ่มกฎนี้ไว้ในส่วน <span className="font-mono">match /databases/{'{database}'}/documents</span> แล้วกด Publish:</p>
+                <pre className="bg-black/40 rounded-xl p-3 overflow-x-auto font-mono text-[11px] text-amber-200">{`match /spu_goods_orders/{docId} {\n  allow read, write: if request.auth != null;\n}`}</pre>
+              </div>
+            ) : ordersError ? (
+              <div className="bg-red-950/60 border border-red-500/50 rounded-2xl p-3 text-xs text-red-100">{ordersError}</div>
+            ) : null}
+
+            <div className="bg-[#0e1628] rounded-3xl border border-[#d4af37]/30 p-4 space-y-3 shadow-xl">
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-4 h-4 text-[#d1c7bd] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input value={ordersSearch} onChange={(e) => { setOrdersSearch(e.target.value); setOrdersPage(0); }} placeholder="ค้นหาชื่อ / รหัสนักศึกษา / ข้อความบนป้าย" className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white outline-none focus:border-[#d4af37]" />
+                </div>
+                <select value={ordersYear} onChange={(e) => { setOrdersYear(e.target.value); setOrdersPage(0); }} className="bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-xs text-white">
+                  <option value="all">ทุกชั้นปี</option>
+                  {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'อื่น ๆ'].map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <select value={ordersStatus} onChange={(e) => { setOrdersStatus(e.target.value); setOrdersPage(0); }} className="bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-xs text-white">
+                  <option value="all">รับ/ยังไม่รับ ทั้งหมด</option>
+                  <option value="pending">ยังไม่รับ</option>
+                  <option value="received">รับแล้ว</option>
+                </select>
+                <select value={ordersSystem} onChange={(e) => { setOrdersSystem(e.target.value); setOrdersPage(0); }} className="bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-xs text-white">
+                  <option value="all">อยู่ในระบบพิธี/ไม่อยู่ ทั้งหมด</option>
+                  <option value="in">อยู่ในระบบพิธี</option>
+                  <option value="out">ไม่อยู่ในระบบพิธี</option>
+                </select>
+                <select value={ordersItem} onChange={(e) => { setOrdersItem(e.target.value); setOrdersPage(0); }} className="bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-xs text-white">
+                  <option value="all">ทุกรายการสินค้า</option>
+                  {ORDER_ITEMS.map((it) => <option key={it.key} value={it.key}>เฉพาะที่สั่ง{it.label}</option>)}
+                </select>
+              </div>
+              <p className="text-xs text-[#d1c7bd]">แสดง {ordersFiltered.length} จาก {ordersList.length} คน</p>
+
+              {!ordersLoaded ? (
+                <p className="text-center text-xs text-[#d1c7bd] py-12 flex items-center justify-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> กำลังโหลด...</p>
+              ) : ordersList.length === 0 && !ordersError ? (
+                <p className="text-center text-xs text-[#d1c7bd] py-12">ยังไม่มีข้อมูล กด "นำเข้าจากฟอร์มสั่งสินค้า (Excel)" แล้วเลือกไฟล์ตรวจข้อมูลสั่งสินค้าของแต่ละชั้นปี (เลือกได้หลายไฟล์พร้อมกัน)</p>
+              ) : (() => {
+                const pageCount = Math.max(1, Math.ceil(ordersFiltered.length / 50));
+                const pg = Math.min(ordersPage, pageCount - 1);
+                const pageRows = ordersFiltered.slice(pg * 50, pg * 50 + 50);
+                return (
+                  <>
+                    <div className="overflow-x-auto rounded-2xl border border-[#d4af37]/20">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[#121f38] text-[#f3e5ab] font-bold border-b border-[#d4af37]/20">
+                          <tr><th className="p-3">รับของ</th><th className="p-3">ปี</th><th className="p-3">รหัสนักศึกษา</th><th className="p-3">ชื่อ-นามสกุล</th><th className="p-3">สินค้าที่สั่ง</th><th className="p-3">ข้อความบนป้ายชื่อ</th><th className="p-3">หมายเหตุ</th><th className="p-3 text-right">จัดการ</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#d4af37]/10 text-[#fdfbf7]">
+                          {pageRows.map((o) => {
+                            const inSys = isOrderInSystem(o);
+                            return (
+                              <tr key={o.id} className={o.received ? 'bg-emerald-900/10' : 'hover:bg-[#121f38]/50'}>
+                                <td className="p-3">
+                                  <button onClick={() => toggleOrderReceived(o)} className={`px-3 py-1.5 rounded-xl font-bold border flex items-center gap-1 ${o.received ? 'bg-emerald-600 text-white border-emerald-400' : 'bg-[#070b19] text-[#d1c7bd] border-[#d4af37]/40'}`}>
+                                    {o.received ? <><Check className="w-3.5 h-3.5" /> รับแล้ว</> : 'ยังไม่รับ'}
+                                  </button>
+                                </td>
+                                <td className="p-3 whitespace-nowrap">{o.year}</td>
+                                <td className="p-3 font-mono">{o.studentId || '-'}</td>
+                                <td className="p-3 font-bold">
+                                  {o.name}
+                                  {!inSys && <span className="ml-2 px-1.5 py-0.5 rounded-md bg-rose-900/40 border border-rose-500/40 text-rose-300 text-[10px] font-bold whitespace-nowrap">ไม่อยู่ในระบบพิธี</span>}
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex flex-wrap gap-1">
+                                    {ORDER_ITEMS.filter((it) => o[it.key]).map((it) => <span key={it.key} className="px-1.5 py-0.5 rounded-md bg-[#d4af37]/15 border border-[#d4af37]/40 text-[#f3e5ab] text-[10px] font-bold">{it.short}</span>)}
+                                  </div>
+                                </td>
+                                <td className="p-3 font-mono">{o.tagText || ''}</td>
+                                <td className="p-3 text-[#d1c7bd]">{o.note || ''}</td>
+                                <td className="p-3 text-right whitespace-nowrap">
+                                  <button onClick={() => setOrderEdit({ ...o })} className="p-2 text-[#d1c7bd] hover:text-white"><Edit2 className="w-4 h-4" /></button>
+                                  <button onClick={() => askDeleteOrder(o)} className="p-2 text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {pageCount > 1 && (
+                      <div className="flex items-center justify-center gap-3 text-xs font-bold">
+                        <button disabled={pg === 0} onClick={() => setOrdersPage(pg - 1)} className="px-4 py-2 rounded-xl bg-[#121f38] border border-[#d4af37]/30 disabled:opacity-40">ก่อนหน้า</button>
+                        <span className="text-[#d1c7bd]">หน้า {pg + 1} / {pageCount}</span>
+                        <button disabled={pg >= pageCount - 1} onClick={() => setOrdersPage(pg + 1)} className="px-4 py-2 rounded-xl bg-[#121f38] border border-[#d4af37]/30 disabled:opacity-40">ถัดไป</button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -3048,6 +3400,112 @@ export default function App() {
                               <td style={{ ...td, textAlign: 'center', padding: 0, fontWeight: 700 }}>{g ? g.badgeNumber : ''}</td>
                               <td style={{ ...td, textAlign: 'center', padding: 0 }}>{g ? (g.studentId || '') : ''}</td>
                               <td style={td}>{g ? g.name : ''}</td>
+                              <td style={td} />
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal แก้ไข/เพิ่มรายชื่อสั่งสินค้า */}
+      {orderEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#0e1628] border border-[#d4af37]/40 w-full max-w-md p-5 rounded-3xl shadow-2xl space-y-3 my-8">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-[#f3e5ab] text-sm">{orderEdit.id ? 'แก้ไขรายชื่อสั่งสินค้า' : 'เพิ่มรายชื่อสั่งสินค้า'}</h3>
+              <button onClick={() => setOrderEdit(null)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-xs text-[#d1c7bd] space-y-1">ชื่อ-นามสกุล (รวมคำนำหน้า)
+              <input value={orderEdit.name || ''} onChange={(e) => setOrderEdit({ ...orderEdit, name: e.target.value })} className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#d4af37]" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs text-[#d1c7bd] space-y-1">รหัสนักศึกษา (ถ้ามี)
+                <input inputMode="numeric" value={orderEdit.studentId || ''} onChange={(e) => setOrderEdit({ ...orderEdit, studentId: e.target.value })} className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-[#d4af37]" />
+              </label>
+              <label className="block text-xs text-[#d1c7bd] space-y-1">ชั้นปี
+                <select value={orderEdit.year || 'อื่น ๆ'} onChange={(e) => setOrderEdit({ ...orderEdit, year: e.target.value })} className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-sm text-white">
+                  {['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4', 'อื่น ๆ'].map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </label>
+            </div>
+            <div>
+              <p className="text-xs text-[#d1c7bd] mb-1.5">สินค้าที่สั่ง</p>
+              <div className="flex flex-wrap gap-2">
+                {ORDER_ITEMS.map((it) => (
+                  <button key={it.key} type="button" onClick={() => setOrderEdit({ ...orderEdit, [it.key]: !orderEdit[it.key] })} className={`px-3 py-2 rounded-xl text-xs font-bold border ${orderEdit[it.key] ? 'bg-[#d4af37] text-[#070b19] border-[#d4af37]' : 'bg-[#070b19] text-[#d1c7bd] border-[#d4af37]/30'}`}>{orderEdit[it.key] ? '✓ ' : ''}{it.label}</button>
+                ))}
+              </div>
+            </div>
+            <label className="block text-xs text-[#d1c7bd] space-y-1">ข้อความบนป้ายชื่อ
+              <input value={orderEdit.tagText || ''} onChange={(e) => setOrderEdit({ ...orderEdit, tagText: e.target.value })} className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-sm text-white font-mono outline-none focus:border-[#d4af37]" />
+            </label>
+            <label className="block text-xs text-[#d1c7bd] space-y-1">หมายเหตุ
+              <input value={orderEdit.note || ''} onChange={(e) => setOrderEdit({ ...orderEdit, note: e.target.value })} className="w-full bg-[#070b19] border border-[#d4af37]/30 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-[#d4af37]" />
+            </label>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setOrderEdit(null)} className="flex-1 py-2.5 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ยกเลิก</button>
+              <button onClick={saveOrderEdit} className="flex-1 py-2.5 bg-[#d4af37] text-[#070b19] rounded-xl text-xs font-black">บันทึก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal ใบรับสินค้า (PDF) จากรายชื่อสั่งสินค้า ตามตัวกรองปัจจุบัน */}
+      {isOrdersPrintOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center border-b border-gray-300 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Printer className="w-5 h-5 text-amber-600" /> ใบรับสินค้า</h2>
+                <p className="text-xs text-gray-600 mt-0.5">ตามตัวกรองปัจจุบันของหน้ารับสินค้า ({ordersFiltered.length} คน) • แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ • ทั้งหมด {ordersPrintPages.length} ใบ • มีช่องลงชื่อรับสินค้า</p>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center justify-end">
+                <button disabled={isPdfGenerating} onClick={handleSaveOrdersPdf} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
+                  {isPdfGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} บันทึกเป็น PDF
+                </button>
+                <button onClick={() => setIsOrdersPrintOpen(false)} className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-xs font-bold">ปิด</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <div id="orders-print-root" className="flex flex-col items-center gap-4">
+                {ordersPrintPages.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-10">ไม่มีรายชื่อตามตัวกรองนี้</p>
+                ) : ordersPrintPages.map((pg, pIdx) => (
+                  <div key={pIdx} className="orders-page" style={{ width: 794, height: 1123, minWidth: 794, boxSizing: 'border-box', padding: '48px 44px', fontFamily: "'Sarabun', 'Prompt', system-ui, sans-serif", background: '#ffffff', color: '#111827', position: 'relative', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.18)' }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 19, fontWeight: 700, lineHeight: 1.6 }}>ใบรับสินค้า — พิธีมอบประดับบ่าเกียรติยศ</div>
+                      <div style={{ fontSize: 15, lineHeight: 1.6 }}>{pg.year} • ใบที่ {pg.sheet} / {pg.totalSheets} • ลำดับ {pg.start + 1}–{pg.start + pg.rows.length} จาก {pg.total} คน</div>
+                    </div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 15, color: '#000' }}>
+                      <colgroup>
+                        <col style={{ width: 46 }} /><col style={{ width: 100 }} /><col style={{ width: 222 }} />
+                        <col style={{ width: 42 }} /><col style={{ width: 58 }} /><col style={{ width: 38 }} /><col style={{ width: 52 }} /><col />
+                      </colgroup>
+                      <thead>
+                        <tr style={{ background: '#e5e7eb', height: 34 }}>
+                          {['ที่', 'รหัสนักศึกษา', 'ชื่อ-นามสกุล', 'บ่า', 'ตุ้งติ้ง', 'ปีก', 'ป้ายชื่อ', 'ลายเซ็นรับสินค้า'].map((h) => (
+                            <th key={h} style={{ border: '1px solid #000', padding: '0 2px', textAlign: 'center', fontSize: 13, fontWeight: 700 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: ORDERS_ROWS_PER_PAGE }).map((_, i) => {
+                          const o = pg.rows[i];
+                          const td = { border: '1px solid #000', padding: '0 6px', height: 35, lineHeight: '35px', overflow: 'hidden', whiteSpace: 'nowrap', verticalAlign: 'middle' };
+                          const ctr = { ...td, textAlign: 'center', padding: 0 };
+                          return (
+                            <tr key={i}>
+                              <td style={ctr}>{o ? pg.start + i + 1 : ''}</td>
+                              <td style={ctr}>{o ? (o.studentId || '') : ''}</td>
+                              <td style={td}>{o ? o.name : ''}</td>
+                              {ORDER_ITEMS.map((it) => <td key={it.key} style={{ ...ctr, fontWeight: 700 }}>{o && o[it.key] ? '✓' : ''}</td>)}
                               <td style={td} />
                             </tr>
                           );
@@ -3745,6 +4203,7 @@ export default function App() {
         <button onClick={() => setActiveTab('scan')} className={mobileNavClass('scan')}><ScanLine className="w-5 h-5" /><span className="text-[10px]">เช็กชื่อ</span></button>
         <button onClick={() => setActiveTab('queue')} className={mobileNavClass('queue')}><Layers className="w-5 h-5" /><span className="text-[10px]">จัดคิว</span></button>
         <button onClick={() => setActiveTab('dashboard')} className={mobileNavClass('dashboard')}><Settings className="w-5 h-5" /><span className="text-[10px]">จัดการ</span></button>
+        <button onClick={() => setActiveTab('orders')} className={mobileNavClass('orders')}><PackageCheck className="w-5 h-5" /><span className="text-[10px]">รับสินค้า</span></button>
       </nav>
     </div>
   );
