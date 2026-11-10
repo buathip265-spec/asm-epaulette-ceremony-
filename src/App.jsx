@@ -520,6 +520,7 @@ export default function App() {
   const [isMcModalOpen, setIsMcModalOpen] = useState(false);
   const [isGoodsModalOpen, setIsGoodsModalOpen] = useState(false);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [noOrderModal, setNoOrderModal] = useState(null); // { guest, note } ยืนยันเข้าร่วมแต่ไม่ได้สั่งสินค้า
   // ระบบรับสินค้า (ข้อมูลฟอร์มสั่งสินค้า แยกจากรายชื่อนักศึกษา)
   const [ordersList, setOrdersList] = useState([]);
   const [ordersLoaded, setOrdersLoaded] = useState(false);
@@ -1347,6 +1348,31 @@ export default function App() {
   };
 
   // สร้างไฟล์ PDF ของใบรายชื่อพิธีกร (ทีละหน้า แยกชั้นปี) แล้วดาวน์โหลด
+  // ยืนยันเข้าร่วมงานแต่ไม่ได้สั่งสินค้า (พร้อมหมายเหตุเหตุผลจริง) — ตอนสแกนเช็กชื่อจะขึ้นให้ติดต่อเจ้าหน้าที่
+  const saveNoOrder = async () => {
+    if (!noOrderModal) return;
+    const { guest, note } = noOrderModal;
+    try {
+      await updateDoc(getGuestDocRef(guest.id), { confirmedNoOrder: true, confirmedNoOrderNote: String(note || '').trim() });
+      showToast('success', `บันทึกแล้ว: ${guest.name} ยืนยันเข้าร่วม ไม่ได้สั่งสินค้า`);
+      setNoOrderModal(null);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'บันทึกไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
+  };
+  const clearNoOrder = async () => {
+    if (!noOrderModal) return;
+    const { guest } = noOrderModal;
+    try {
+      await updateDoc(getGuestDocRef(guest.id), { confirmedNoOrder: false, confirmedNoOrderNote: null });
+      showToast('info', `ยกเลิกสถานะ "ไม่ได้สั่งสินค้า" ของ ${guest.name} แล้ว`);
+      setNoOrderModal(null);
+    } catch (e) {
+      console.error(e);
+      showToast('error', 'ยกเลิกไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
+  };
   const handleSaveBackupPdf = () => savePagesPdf('#backup-print-root .backup-page', 'ใบเช็กชื่อสำรอง.pdf', backupPages.length);
   const handleSaveMcPdf = () => savePagesPdf('#mc-print-root .mc-page', 'รายชื่อพิธีกร.pdf', mcPages.length);
   const handleSaveGoodsPdf = () => savePagesPdf('#goods-print-root .goods-page', 'รายชื่อรับสินค้า.pdf', goodsPages.length);
@@ -1966,15 +1992,16 @@ export default function App() {
   // ลำดับการเรียกรวมของคนที่ยังไม่ขึ้นเวที (ยังไม่มา/เช็กชื่อแล้ว) — ใช้ให้ Staff แทรกคิวได้จากหน้าแดชบอร์ดรายชื่อ
   const callOrderList = useMemo(() => sortReady(guestsWithComputedBadges.filter((g) => ['pending', 'checked_in'].includes(g.status) && !g.skipped)), [guestsWithComputedBadges]);
 
-  // ใบเช็กชื่อสำรอง (กรณีระบบล่ม): แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ เพื่อให้หาชื่อหน้างานง่าย มีช่องติ๊ก มา / มาสาย / ผิดระเบียบ + ท้ายเล่มมีหน้าเพิ่มชื่อเอง
+  // ใบเช็กชื่อสำรอง (กรณีระบบล่ม): แยกหน้าตามชั้นปี เรียงตามลำดับที่นั่ง มีช่องติ๊ก มา / มาสาย / ผิดระเบียบ + ท้ายเล่มมีหน้าเพิ่มชื่อเอง
   const BACKUP_ROWS_PER_PAGE = 25;
   const backupPages = useMemo(() => {
     const knownYears = ['ปี 1', 'ปี 2', 'ปี 3', 'ปี 4'];
     const otherYears = Array.from(new Set(guestsWithComputedBadges.map((g) => g.year).filter((y) => y && !knownYears.includes(y))));
     const pages = [];
     [...knownYears, ...otherYears].forEach((y) => {
-      const list = guestsWithComputedBadges.filter((g) => g.year === y)
-        .sort((a, b) => getSortableCleanName(a.name).localeCompare(getSortableCleanName(b.name), 'th') || String(a.id).localeCompare(String(b.id)));
+      const inYear = guestsWithComputedBadges.filter((g) => g.year === y);
+      // เรียงตามลำดับที่นั่ง (A1, A2, ...) สตาฟ (ที่นั่ง L) ไว้ท้ายของแต่ละชั้นปี
+      const list = [...inYear.filter((g) => !isStaffGuest(g)).sort(compareSeating), ...inYear.filter((g) => isStaffGuest(g)).sort(compareSeating)];
       const totalPages = Math.ceil(list.length / BACKUP_ROWS_PER_PAGE);
       for (let i = 0; i < totalPages; i++) pages.push({ blank: false, year: y, page: i + 1, totalPages, total: list.length, startIndex: i * BACKUP_ROWS_PER_PAGE, rows: list.slice(i * BACKUP_ROWS_PER_PAGE, (i + 1) * BACKUP_ROWS_PER_PAGE) });
     });
@@ -3273,6 +3300,11 @@ export default function App() {
                         <td className="p-3.5 font-mono text-[#d1c7bd]">{g.studentId || '-'}</td>
                         <td className="p-3.5 font-bold text-[#fdfbf7]">
                           {g.name}
+                          {g.confirmedNoOrder && (
+                            <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-900/40 border border-teal-500/50 text-teal-200 text-[10px] font-bold whitespace-normal">
+                              ✓ ยืนยันเข้าร่วม ไม่ได้สั่งสินค้า{g.confirmedNoOrderNote ? ` • ${g.confirmedNoOrderNote}` : ''}
+                            </div>
+                          )}
                           <div className={`text-[10px] font-mono font-normal mt-0.5 ${isValidEmail(g.email) ? 'text-[#d1c7bd]' : 'text-rose-300'}`}>{g.email ? (isValidEmail(g.email) ? g.email : `⚠ ${g.email}`) : '⚠ ยังไม่มีอีเมล'}</div>
                         </td>
                         <td className="p-3.5 text-[#d1c7bd]">{g.year}</td>
@@ -3333,6 +3365,7 @@ export default function App() {
                         </td>
                         <td className="p-3.5 text-right space-x-2">
                           {g.prevStatus && <button onClick={() => handleUndoStatus(g)} className="text-[#d4af37] hover:underline"><Undo2 className="w-3.5 h-3.5 inline" /> ย้อน</button>}
+                          <button onClick={() => setNoOrderModal({ guest: g, note: g.confirmedNoOrderNote || '' })} className={`px-2 py-1 rounded text-[11px] font-bold border ${g.confirmedNoOrder ? 'bg-teal-600 text-white border-teal-300' : 'bg-teal-900/30 hover:bg-teal-700 text-teal-200 border-teal-500/40'}`}>{g.confirmedNoOrder ? '✓ ไม่ได้สั่งสินค้า' : 'ยืนยันเข้าร่วม (ไม่ได้สั่งสินค้า)'}</button>
                           <button onClick={() => openEditGuest(g)} className="px-2 py-1 bg-[#d4af37]/15 hover:bg-[#d4af37] text-[#f3e5ab] hover:text-[#070b19] border border-[#d4af37]/40 rounded text-[11px] font-bold inline-flex items-center gap-1"><Edit2 className="w-3 h-3" /> แก้ไข</button>
                           <button onClick={() => handleMarkIneligible(g)} className="text-rose-300 hover:underline text-[11px] font-bold">ตัดสิทธิ์</button>
                           <button onClick={() => handleDeleteGuest(g)} className="text-red-400 hover:bg-[#121f38] p-1.5 rounded-lg" title="ลบรายชื่อนี้"><Trash2 className="w-3.5 h-3.5 inline" /></button>
@@ -3641,13 +3674,42 @@ export default function App() {
         </div>
       )}
 
+      {noOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#0e1628] border border-teal-400/60 w-full max-w-md p-5 rounded-3xl shadow-2xl space-y-3 my-8">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black text-teal-200 text-sm">ยืนยันเข้าร่วมงาน (ไม่ได้สั่งสินค้า)</h3>
+                <p className="text-xs text-[#d1c7bd] mt-0.5">{noOrderModal.guest.name} • รหัส {noOrderModal.guest.studentId || '-'} • {noOrderModal.guest.year}</p>
+              </div>
+              <button onClick={() => setNoOrderModal(null)} className="text-[#d1c7bd] hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-xs text-[#d1c7bd] space-y-1">หมายเหตุ (เหตุผล/รายละเอียดจริง)
+              <textarea
+                rows={4}
+                value={noOrderModal.note}
+                onChange={(e) => setNoOrderModal({ ...noOrderModal, note: e.target.value })}
+                placeholder="เช่น ยังไม่ได้ชำระเงิน / ลืมสั่ง / จะติดต่อรับของเอง ..."
+                className="w-full bg-[#070b19] border border-teal-500/40 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-teal-300"
+              />
+            </label>
+            <p className="text-[11px] text-[#d1c7bd]">เมื่อบันทึก ตอนสแกนเช็กชื่อคนนี้ ระบบจะขึ้นว่า "กรุณาติดต่อเจ้าหน้าที่" พร้อมหมายเหตุนี้</p>
+            <div className="flex gap-2 pt-1">
+              {noOrderModal.guest.confirmedNoOrder && <button onClick={clearNoOrder} className="px-4 py-2.5 bg-red-950/50 text-red-300 border border-red-800 rounded-xl text-xs font-bold">ยกเลิกสถานะนี้</button>}
+              <button onClick={() => setNoOrderModal(null)} className="flex-1 py-2.5 bg-[#121f38] text-[#d1c7bd] rounded-xl text-xs font-bold border border-[#d4af37]/30">ปิด</button>
+              <button onClick={saveNoOrder} className="flex-1 py-2.5 bg-teal-500 hover:bg-teal-400 text-[#04201d] rounded-xl text-xs font-black">บันทึก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isBackupModalOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
           <div className="bg-gray-100 text-gray-900 w-full max-w-4xl p-6 rounded-3xl shadow-2xl space-y-4 my-8">
             <div className="flex justify-between items-center border-b border-gray-300 pb-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Printer className="w-5 h-5 text-violet-600" /> ใบเช็กชื่อสำรอง (กรณีระบบขัดข้อง)</h2>
-                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี เรียงชื่อ ก-ฮ • 25 คนต่อหน้า • ทั้งหมด {backupPages.length} หน้า (รวมหน้าเพิ่มชื่อเอง 1 หน้า) • ข้อมูล ณ ตอนกดสร้าง ควรสร้างใหม่ก่อนพิมพ์</p>
+                <p className="text-xs text-gray-600 mt-0.5">แยกหน้าตามชั้นปี เรียงตามลำดับที่นั่ง (สตาฟท้ายสุดของแต่ละชั้นปี) • 25 คนต่อหน้า • ทั้งหมด {backupPages.length} หน้า (รวมหน้าเพิ่มชื่อเอง 1 หน้า) • ข้อมูล ณ ตอนกดสร้าง ควรสร้างใหม่ก่อนพิมพ์</p>
               </div>
               <div className="flex flex-wrap gap-2 items-center justify-end">
                 <button disabled={isPdfGenerating} onClick={handleSaveBackupPdf} className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md">
@@ -3879,6 +3941,13 @@ export default function App() {
               <p className="text-xs text-amber-300 mt-1 font-bold">
                 บุคคลนี้ได้ทำการเช็กชื่อแล้ว ({getGuestStatusLabel(duplicateAlertModal.guest)})<br />กรุณาสแกน QR Code ใหม่
               </p>
+              {duplicateAlertModal.guest?.confirmedNoOrder && (
+                <div className="mt-3 bg-rose-950/70 border-2 border-rose-400 rounded-2xl p-3 space-y-1">
+                  <p className="text-base font-black text-rose-200">⚠️ กรุณาติดต่อเจ้าหน้าที่</p>
+                  <p className="text-[11px] text-rose-100 font-bold">ยืนยันเข้าร่วมงาน แต่ไม่ได้สั่งสินค้า</p>
+                  {duplicateAlertModal.guest.confirmedNoOrderNote && <p className="text-[11px] text-rose-100">หมายเหตุ: {duplicateAlertModal.guest.confirmedNoOrderNote}</p>}
+                </div>
+              )}
             </div>
             <button
               onClick={() => setDuplicateAlertModal({ isOpen: false, guest: null })}
@@ -3904,6 +3973,14 @@ export default function App() {
               <h3 className="text-xl font-black text-[#fdfbf7]">{scannedPreviewGuest.name}</h3>
               <p className="text-xs font-mono font-bold text-[#d4af37]">รหัส {scannedPreviewGuest.studentId || '-'} • {scannedPreviewGuest.year}</p>
             </div>
+
+            {scannedPreviewGuest.confirmedNoOrder && (
+              <div className="bg-rose-950/70 border-2 border-rose-400 rounded-2xl p-3 text-center space-y-1">
+                <p className="text-base font-black text-rose-200">⚠️ กรุณาติดต่อเจ้าหน้าที่</p>
+                <p className="text-[11px] text-rose-100 font-bold">ยืนยันเข้าร่วมงาน แต่ไม่ได้สั่งสินค้า</p>
+                {scannedPreviewGuest.confirmedNoOrderNote && <p className="text-[11px] text-rose-100">หมายเหตุ: {scannedPreviewGuest.confirmedNoOrderNote}</p>}
+              </div>
+            )}
 
             <div className="pt-2 border-t border-[#d4af37]/30 space-y-2.5">
               {scannedPreviewGuest.status === 'pending' ? (
