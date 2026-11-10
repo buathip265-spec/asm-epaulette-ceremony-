@@ -1856,6 +1856,10 @@ export default function App() {
     const members = readyQueue.filter((g) => seatBlockOf(g)?.key === best.key);
     return { ...best, label: seatBlockLabel(best), members };
   }, [readyQueue, seatsPerRow]);
+  // แสดงคนที่เพิ่งเช็กชื่อไว้บนสุด (ลำดับการดึงเข้าสแตนด์บายยังใช้ readyQueue เดิม)
+  const readyDisplay = useMemo(() => readyQueue.map((g, i) => ({ g, i }))
+    .sort((x, y) => String(y.g.checkInTime || '').localeCompare(String(x.g.checkInTime || '')) || x.i - y.i)
+    .map((x) => x.g), [readyQueue]);
   const readyStaff = useMemo(() => readyQueue.filter((g) => isStaffGuest(g)), [readyQueue]);
   // สตาฟที่รอเรียกแยกตามทีม (ดึงทีละทีม ทีละชั้นปี)
   const readyStaffTeams = useMemo(() => ['A', 'B', 'R'].map((t) => {
@@ -2584,7 +2588,7 @@ export default function App() {
                   </button>
                 ))}
                 <div className="flex-1 space-y-2.5 overflow-y-auto">
-                  {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyQueue.map((g) => (
+                  {readyQueue.length === 0 ? <p className="text-center text-xs text-[#d1c7bd] py-12">ไม่มีผู้เข้าร่วมรอเรียกคิว</p> : readyDisplay.map((g) => (
                     <div key={g.id} className="bg-[#121f38] border border-[#d4af37]/30 rounded-2xl p-3 flex flex-col justify-between gap-2 shadow-sm">
                       <div className="flex items-center justify-between"><span className="text-xs font-black text-[#d4af37]">#{g.badgeNumber}</span><span className="text-[10px] text-[#d1c7bd]">{g.year}{isStaffGuest(g) ? ' • Staff' : ''}</span></div>
                       <div>
